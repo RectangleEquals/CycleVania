@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CycleVania Inspector</title>
+    <style>
+      :root { color-scheme: dark; }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; overflow: hidden; font-family: ui-monospace, "Cascadia Code", Consolas, monospace; background: #0c0e14; color: #d6dae4; }
+      #app { position: fixed; inset: 0; }
+      canvas { display: block; }
+      #panel {
+        position: fixed; top: 0; right: 0; width: 340px; height: 100%; padding: 12px 14px;
+        background: rgba(14,17,24,0.86); border-left: 1px solid #232838; overflow-y: auto; backdrop-filter: blur(4px);
+      }
+      #panel h1 { font-size: 14px; margin: 0 0 8px; letter-spacing: 0.5px; color: #9ec2ff; }
+      #panel h2 { font-size: 11px; margin: 14px 0 6px; text-transform: uppercase; letter-spacing: 1px; color: #6b7488; }
+      .row { display: flex; gap: 6px; align-items: center; margin: 4px 0; }
+      label { font-size: 11px; color: #8b93a7; min-width: 64px; }
+      input, button, select { font: inherit; font-size: 12px; background: #161b26; color: #d6dae4; border: 1px solid #2b3242; border-radius: 4px; padding: 4px 6px; }
+      input { flex: 1; }
+      button { cursor: pointer; }
+      button:hover { border-color: #3d5a8a; }
+      #repl-input { width: 100%; }
+      #log { font-size: 11px; line-height: 1.5; white-space: pre-wrap; max-height: 220px; overflow-y: auto; background: #10141d; border: 1px solid #222838; border-radius: 4px; padding: 6px; margin-top: 6px; }
+      .legend { display: flex; align-items: center; gap: 6px; font-size: 11px; margin: 2px 0; }
+      .swatch { width: 12px; height: 12px; border-radius: 2px; display: inline-block; }
+      #status { font-size: 11px; color: #9aa3b7; margin: 6px 0; }
+      .hint { font-size: 10px; color: #59607a; }
+      .btnrow { display: flex; flex-wrap: wrap; gap: 4px; }
+      .btnrow button { flex: 1 1 auto; }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <div id="panel">
+      <h1>CycleVania · Inspector</h1>
+
+      <h2>Generate</h2>
+      <div class="row"><label>Seed</label><input id="seed" value="cyclevania-demo" /></div>
+      <div class="row"><label>Reach #</label><input id="reachIndex" type="number" value="4" min="0" /></div>
+      <div class="row"><button id="regen" style="flex:1">Regenerate</button></div>
+      <div id="status"></div>
+
+      <h2>Playtest</h2>
+      <div class="btnrow">
+        <button data-cmd="take">/take</button>
+        <button data-cmd="solve">/solve</button>
+        <button data-cmd="reset">/reset</button>
+      </div>
+      <div class="row"><input id="repl-input" placeholder="/goto 3 · /use wan-lantern · /why 7" /></div>
+      <div class="hint">Enter to run. Click an area to /goto it.</div>
+      <div id="log"></div>
+
+      <h2>Legend</h2>
+      <div id="legend"></div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
