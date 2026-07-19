@@ -6,4 +6,5 @@ dist/
 coverage/
 .vite/
 *.tsbuildinfo
-packages/inspector/shot.png
+packages/inspector/shot*.png
+.chrome-tmp*/

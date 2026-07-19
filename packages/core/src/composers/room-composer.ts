@@ -1,23 +1,28 @@
 /**
  * RoomComposer — lays out a room's cells and contents WITHIN the extent envelope
- * the AreaComposer hands it. It does not choose the room's size (that's the
- * AreaComposer's call); it decides how to fill the envelope: per-cell kit
- * assignment (via the GeometryKit grammar + snap policy), socket realization at
- * required connectivity anchors, and content placement at requested anchors.
+ * the AreaComposer hands it. It does not choose the room's size (the AreaComposer
+ * does); it decides HOW to fill the envelope:
+ *   - a FOOTPRINT MASK so the floor plan is organic (hall / round / cavern) with
+ *     air cells shaping the outer border — not a plain rectangle;
+ *   - a guaranteed interior VOID (walkable air between floor and ceiling);
+ *   - per-cell kit assignment (GeometryKit grammar + snap policy);
+ *   - sockets carved-connected to the room core at required connectivity anchors;
+ *   - content on interior floor cells only (never inside ceilings).
  */
 
 import { Rng } from "../math/rng.js";
 import { yawFromDirection } from "../math/trig.js";
 import { add, scale, type Vec3, type WorldBox } from "../math/vec.js";
 import { cellCenter, coordKey, type Coord } from "../spatial/grid.js";
-import { classifyCell, type CellRole } from "../spatial/cell.js";
 import { faceNormal, type Socket } from "../spatial/sockets.js";
 import { snapAngle } from "../spatial/snap.js";
-import { piecesForRole } from "../registries/geometry-kit.js";
+import { piecesForRole, type KitPiece } from "../registries/geometry-kit.js";
 import type { Registry } from "../registries/registry.js";
 import type { CellFace, RoomKind, SocketKind, Traversal } from "../types.js";
 import type { Rule } from "../logic/index.js";
 import type { CellDescriptor, ContentAnchor, RoomDescriptor } from "../descriptors/descriptor.js";
+
+export type RoomShape = "hall" | "round" | "cavern";
 
 export interface SocketRequest {
   id: string;
@@ -40,21 +45,22 @@ export interface RoomComposeParams {
   regionId: string;
   role: string;
   kind: RoomKind;
-  /** World min corner of the room. */
+  shape?: RoomShape;
   origin: Vec3;
-  /** Max extent in fine cells (the AreaComposer's envelope). */
+  /** Extent in fine cells (the AreaComposer's envelope). */
   envelope: Coord;
   requiredSockets: SocketRequest[];
   contents: ContentRequest[];
   styleId: string;
+  /** Mark this room a wave-lockdown arena. */
+  arena?: { waves: number };
 }
 
-/** Boundary cell hosting the `k`-th of `n` sockets on a face (spread along it). */
+/** Representative boundary cell hosting the k-th of n sockets on a face. */
 function faceCellSlot(face: CellFace, e: Coord, k: number, n: number): Coord {
   const mz = Math.min(1, e[2] - 1);
-  const clampIn = (v: number, len: number): number => Math.max(1, Math.min(len - 2, v));
-  // spread offset around centre for the k-th of n sockets
-  const spread = (len: number): number => clampIn(Math.floor(len / 2) + (k - (n - 1) / 2) | 0, len);
+  const clampIn = (v: number, len: number): number => Math.max(0, Math.min(len - 1, v));
+  const spread = (len: number): number => clampIn(Math.round(Math.floor(len / 2) + (k - (n - 1) / 2)), len);
   switch (face) {
     case "px":
       return [e[0] - 1, spread(e[1]), mz];
@@ -73,19 +79,63 @@ function faceCellSlot(face: CellFace, e: Coord, k: number, n: number): Coord {
   }
 }
 
+/** Build a per-column "inside" mask giving the room its footprint silhouette. */
+function buildMask(shape: RoomShape, ex: number, ey: number, rng: Rng): boolean[][] {
+  const cx = (ex - 1) / 2;
+  const cy = (ey - 1) / 2;
+  const rx = Math.max(1, ex / 2);
+  const ry = Math.max(1, ey / 2);
+  const mask: boolean[][] = Array.from({ length: ex }, () => new Array<boolean>(ey).fill(false));
+  for (let x = 0; x < ex; x++) {
+    for (let y = 0; y < ey; y++) {
+      const nx = (x - cx) / rx;
+      const ny = (y - cy) / ry;
+      const d = Math.sqrt(nx * nx + ny * ny); // 0 centre … ~1 edge
+      let inside: boolean;
+      if (shape === "hall") inside = true;
+      else if (shape === "round") inside = d <= 1.02;
+      else inside = d <= 0.75 + 0.3 * rng.next(); // cavern: noisy radius
+      // ragged erosion on the outer band (breaks the box; carves alcoves)
+      if (inside && d > 0.6 && rng.chance(shape === "cavern" ? 0.3 : shape === "hall" ? 0.1 : 0.15)) inside = false;
+      if (d < 0.5) inside = true; // protect a connected core
+      (mask[x] as boolean[])[y] = inside;
+    }
+  }
+  return mask;
+}
+
+/** Carve a straight run of "inside" cells (connects an opening to the core). */
+function carveLine(mask: boolean[][], x0: number, y0: number, x1: number, y1: number): void {
+  const steps = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0));
+  for (let i = 0; i <= steps; i++) {
+    const t = steps === 0 ? 0 : i / steps;
+    const x = Math.round(x0 + (x1 - x0) * t);
+    const y = Math.round(y0 + (y1 - y0) * t);
+    const row = mask[x];
+    if (row && y >= 0 && y < row.length) row[y] = true;
+  }
+}
+
 export function composeRoom(p: RoomComposeParams): RoomDescriptor {
   const rng = new Rng(p.seed);
   const cs = p.registry.grid.roomCellSize;
   const snap = p.registry.grid.snap;
   const kit = p.registry.geometryKit;
+  const shape: RoomShape = p.shape ?? "hall";
 
-  // Settle the used extent within the envelope (may shrink; never below 2).
-  const shrink = (max: number, min = 2): number => Math.max(min, rng.int(Math.max(min, max - 1), Math.max(min, max)));
-  const extent: Coord = [shrink(p.envelope[0]), shrink(p.envelope[1]), shrink(p.envelope[2], 2)];
+  // Extent: honour the envelope but guarantee an interior + a walkable void.
+  const ex = Math.max(4, p.envelope[0]);
+  const ey = Math.max(4, p.envelope[1]);
+  const ez = Math.max(3, p.envelope[2]);
+  const extent: Coord = [ex, ey, ez];
 
-  // Map required sockets to boundary cells, spreading multiples on the same face.
+  const mask = buildMask(shape, ex, ey, rng);
+  const cx = Math.floor(ex / 2);
+  const cy = Math.floor(ey / 2);
+
+  // Sockets → boundary cells, spread per face; carve each to the core so it connects.
   const sockets: Socket[] = [];
-  const openingAt = new Map<string, Socket>(); // coordKey → socket
+  const openingAt = new Map<string, Socket>();
   const byFace = new Map<CellFace, SocketRequest[]>();
   for (const req of p.requiredSockets) {
     const list = byFace.get(req.face) ?? [];
@@ -95,8 +145,9 @@ export function composeRoom(p: RoomComposeParams): RoomDescriptor {
   for (const [face, reqs] of byFace) {
     reqs.forEach((req, k) => {
       const cell = faceCellSlot(face, extent, k, reqs.length);
+      carveLine(mask, cell[0], cell[1], cx, cy);
       const normal = faceNormal(face);
-      const pos = add(cellCenter(cell, cs, p.origin), scale(normal, cs / 2)); // on the face plane
+      const pos = add(cellCenter(cell, cs, p.origin), scale(normal, cs / 2));
       const socket: Socket = {
         id: req.id,
         cell,
@@ -114,13 +165,34 @@ export function composeRoom(p: RoomComposeParams): RoomDescriptor {
     });
   }
 
-  // Candidate content cells: interior/floor cells near the centre.
-  const contentCells: Coord[] = [];
-  for (let y = 1; y < extent[1] - 1; y++) for (let x = 1; x < extent[0] - 1; x++) contentCells.push([x, y, 0]);
-  if (contentCells.length === 0) contentCells.push([Math.floor(extent[0] / 2), Math.floor(extent[1] / 2), 0]);
+  const inside = (x: number, y: number): boolean => x >= 0 && x < ex && y >= 0 && y < ey && (mask[x] as boolean[])[y] === true;
+  const isBorder = (x: number, y: number): boolean => !inside(x - 1, y) || !inside(x + 1, y) || !inside(x, y - 1) || !inside(x, y + 1);
+  const isCorner = (x: number, y: number): boolean =>
+    (!inside(x - 1, y) || !inside(x + 1, y)) && (!inside(x, y - 1) || !inside(x, y + 1));
 
-  // Build every cell.
-  const cells: CellDescriptor[] = [];
+  // --- interior features so rooms of different kinds read distinctly ---
+  const pillar = new Set<string>(); // columns that are solid pillars
+  const dais = new Set<string>(); // columns that carry a raised platform at z=1
+  if ((p.shape === "hall" || p.kind === "hub" || p.kind === "junction") && ex >= 6 && ey >= 6) {
+    for (let y = 2; y < ey - 2; y += 3) for (let x = 2; x < ex - 2; x += 3) if (inside(x, y) && !isBorder(x, y)) pillar.add(`${x},${y}`);
+  }
+  if ((p.kind === "vault" || p.kind === "boss-chamber" || p.kind === "shrine" || p.shape === "round") && ez >= 4) {
+    const r = Math.min(ex, ey) / 4;
+    for (let y = 0; y < ey; y++) for (let x = 0; x < ex; x++) if (inside(x, y) && !isBorder(x, y) && Math.hypot(x - cx, y - cy) <= r) dais.add(`${x},${y}`);
+  }
+  // multi-level: a mezzanine (raised partial floor) over one half of a tall room
+  const mezz = new Set<string>();
+  const mezZ = Math.floor(ez / 2);
+  if (ez >= 5 && ex >= 7 && (p.kind === "hub" || p.kind === "boss-chamber" || p.kind === "indoor")) {
+    const half = Math.floor(ex / 2);
+    for (let y = 1; y < ey - 1; y++) for (let x = 1; x < half; x++) if (inside(x, y) && !isBorder(x, y)) mezz.add(`${x},${y}`);
+  }
+
+  // Interior floor cells for content (never a border, never a pillar/dais base).
+  const contentCells: Coord[] = [];
+  for (let y = 0; y < ey; y++) for (let x = 0; x < ex; x++) if (inside(x, y) && !isBorder(x, y) && !pillar.has(`${x},${y}`)) contentCells.push([x, y, dais.has(`${x},${y}`) ? 1 : 0]);
+  if (contentCells.length === 0) contentCells.push([cx, cy, 0]);
+
   const contentByCell = new Map<string, ContentAnchor[]>();
   p.contents.forEach((req, i) => {
     const cell = contentCells[i % contentCells.length] as Coord;
@@ -130,18 +202,43 @@ export function composeRoom(p: RoomComposeParams): RoomDescriptor {
     contentByCell.set(coordKey(cell), list);
   });
 
-  for (let z = 0; z < extent[2]; z++) {
-    for (let y = 0; y < extent[1]; y++) {
-      for (let x = 0; x < extent[0]; x++) {
+  // adjacency-aware per-cell kit selection: filter candidates by the kit's
+  // `forbidBeside` grammar against already-placed neighbours (greedy; a light WFC).
+  const placedKit = new Map<string, KitPiece>();
+  const pickPiece = (role: string, x: number, y: number, z: number): string | null => {
+    const cands = piecesForRole(kit, role);
+    if (cands.length === 0) return null;
+    const neigh = [placedKit.get(`${x - 1},${y},${z}`), placedKit.get(`${x},${y - 1},${z}`), placedKit.get(`${x},${y},${z - 1}`)];
+    const ok = cands.filter((pc) =>
+      neigh.every((n) => !n || (!(pc.adjacency?.forbidBeside ?? []).includes(n.role) && !(n.adjacency?.forbidBeside ?? []).includes(role))),
+    );
+    const pool = ok.length > 0 ? ok : cands;
+    const chosen = pool[Math.floor(rng.next() * pool.length)] as KitPiece;
+    placedKit.set(`${x},${y},${z}`, chosen);
+    return chosen.id;
+  };
+
+  const cells: CellDescriptor[] = [];
+  for (let z = 0; z < ez; z++) {
+    for (let y = 0; y < ey; y++) {
+      for (let x = 0; x < ex; x++) {
         const coord: Coord = [x, y, z];
         const key = coordKey(coord);
         const socket = openingAt.get(key);
-        const cls = classifyCell(coord, extent);
-        const role: CellRole | "opening" = socket ? "opening" : cls.role;
-        const pieces = role === "air" ? [] : piecesForRole(kit, role);
-        const kitId = pieces.length > 0 ? rng.pick(pieces).id : null;
-        const firstFace = socket?.face ?? cls.faces[0];
-        const yaw = firstFace && firstFace !== "interior" ? snapAngle(yawFromDirection(faceNormal(firstFace)[0], faceNormal(firstFace)[1]), snap) : 0;
+        const col = `${x},${y}`;
+        let role: string;
+        if (socket) role = "opening";
+        else if (!inside(x, y)) role = "air";
+        else if (z === 0) role = "floor";
+        else if (z === ez - 1) role = "ceiling";
+        else if (isBorder(x, y)) role = isCorner(x, y) ? "corner" : "wall";
+        else if (dais.has(col) && z === 1) role = "floor"; // raised platform
+        else if (mezz.has(col) && z === mezZ) role = "floor"; // mezzanine (upper level)
+        else if (pillar.has(col) && z <= ez - 2) role = "corner"; // solid pillar column
+        else role = "air"; // interior void — the walkable space
+        const kitId = role === "air" ? null : pickPiece(role, x, y, z);
+        const firstFace = socket?.face ?? (isBorder(x, y) && role !== "air" ? borderFace(inside, x, y) : undefined);
+        const yaw = firstFace ? snapAngle(yawFromDirection(faceNormal(firstFace)[0], faceNormal(firstFace)[1]), snap) : 0;
         cells.push({
           coord,
           role,
@@ -156,7 +253,7 @@ export function composeRoom(p: RoomComposeParams): RoomDescriptor {
 
   const bounds: WorldBox = {
     min: p.origin,
-    max: [p.origin[0] + extent[0] * cs, p.origin[1] + extent[1] * cs, p.origin[2] + extent[2] * cs],
+    max: [p.origin[0] + ex * cs, p.origin[1] + ey * cs, p.origin[2] + ez * cs],
   };
 
   return {
@@ -171,5 +268,19 @@ export function composeRoom(p: RoomComposeParams): RoomDescriptor {
     bounds,
     styleId: p.styleId,
     seed: String(p.seed),
+    ...(p.arena ? { arena: p.arena } : {}),
   };
+}
+
+/** Compose a wave-lockdown arena room (a RoomComposer variant). */
+export function composeArena(p: Omit<RoomComposeParams, "arena"> & { waves: number }): RoomDescriptor {
+  return composeRoom({ ...p, arena: { waves: p.waves } });
+}
+
+/** Outward face of a border wall cell (points toward the nearest open side). */
+function borderFace(inside: (x: number, y: number) => boolean, x: number, y: number): CellFace {
+  if (!inside(x + 1, y)) return "px";
+  if (!inside(x - 1, y)) return "nx";
+  if (!inside(x, y + 1)) return "py";
+  return "ny";
 }

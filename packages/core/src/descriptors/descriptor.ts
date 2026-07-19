@@ -51,6 +51,8 @@ export interface RoomDescriptor {
   bounds: WorldBox;
   styleId: string;
   seed: string;
+  /** Wave-lockdown room: exits seal until `waves` enemy waves are cleared. */
+  arena?: { waves: number };
 }
 
 /** A connector joins two sockets — any non-boxy geometry. */
@@ -62,6 +64,10 @@ export interface ConnectorPlan {
   toSocket: string;
   kind: ConnectorKind;
   cells: CellDescriptor[];
+  /** World min corner the corridor `cells` are relative to (when geometry is composed). */
+  origin?: Vec3;
+  /** Fine cell size the corridor `cells` use. */
+  cellSize?: number;
   requires?: Rule;
   /** Full gate cap-set (never collapsed to one "primary"). */
   requiredCaps?: Capability[];
@@ -110,4 +116,11 @@ export interface ReachDescriptor {
   links: AreaLink[];
   startAreaId: number;
   bounds: WorldBox;
+}
+
+/** A World = the ordered sequence of Reaches (the top-level assembled output). */
+export interface WorldDescriptor {
+  reaches: ReachDescriptor[];
+  bounds: WorldBox;
+  meta: { reachCount: number; areaCount: number };
 }

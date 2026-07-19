@@ -8,4 +8,6 @@ export type {
   AreaDescriptor,
   AreaLink,
   ReachDescriptor,
+  WorldDescriptor,
 } from "./descriptor.js";
+export { assembleWorld } from "./assemble.js";

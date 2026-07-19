@@ -6,6 +6,8 @@
  */
 
 import type { Capability } from "../logic/index.js";
+import { assembleWorld } from "../descriptors/assemble.js";
+import type { WorldDescriptor } from "../descriptors/descriptor.js";
 import type { ComposeContext } from "./context.js";
 import { composeReach, type ComposeReachOptions, type ReachResult } from "./reach-composer.js";
 
@@ -19,10 +21,16 @@ export interface ComposeWorldOptions {
   styleFor?: (reachIndex: number) => string | undefined;
   /** Carry the previous reach's item capabilities into the next (lookbehind). */
   carryCaps?: boolean;
+  /** World offset for reach i (default: lateral spacing so reaches don't overlap). */
+  originFor?: (reachIndex: number) => [number, number, number];
+  /** Lateral spacing between reaches when `originFor` is omitted (default 700). */
+  reachSpacing?: number;
 }
 
 export interface WorldResult {
   reaches: ReachResult[];
+  /** The assembled top-level descriptor (all reaches). */
+  descriptor: WorldDescriptor;
 }
 
 export function composeWorld(ctx: ComposeContext, opts: ComposeWorldOptions): WorldResult {
@@ -30,12 +38,15 @@ export function composeWorld(ctx: ComposeContext, opts: ComposeWorldOptions): Wo
   const reaches: ReachResult[] = [];
   const carried = new Set<Capability>();
 
+  const spacing = opts.reachSpacing ?? 700;
   for (let i = 0; i < opts.reachCount; i++) {
     const template = opts.templateFor ? opts.templateFor(i) : opts.template;
     const styleId = opts.styleFor?.(i);
+    const origin = opts.originFor ? opts.originFor(i) : ([i * spacing, 0, 0] as [number, number, number]);
     const result = composeReach(ctx, {
       template,
       reachIndex: i,
+      origin,
       ...(opts.depthFor ? { depth: opts.depthFor(i) } : {}),
       ...(opts.carryCaps ? { startCaps: [...carried] } : {}),
       ...(styleId ? { styleId } : {}),
@@ -44,5 +55,5 @@ export function composeWorld(ctx: ComposeContext, opts: ComposeWorldOptions): Wo
     if (opts.carryCaps) for (const it of result.reach.items) carried.add(it.grants);
   }
 
-  return { reaches };
+  return { reaches, descriptor: assembleWorld(reaches.map((r) => r.descriptor)) };
 }

@@ -6,6 +6,6 @@ import { defineConfig } from "vite";
 // serving files from the monorepo root.
 export default defineConfig({
   optimizeDeps: { exclude: ["@cyclevania/core", "@cyclevania/examples"] },
-  server: { fs: { allow: ["../.."] }, open: false },
+  server: { fs: { allow: ["../.."] }, host: true, allowedHosts: true, open: false },
   build: { target: "es2022" },
 });

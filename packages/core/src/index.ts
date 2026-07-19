@@ -82,11 +82,16 @@ export { cellCenter, cellMin, coordKey, classifyCell, boundaryFaces, faceNormal,
 export type { Coord, CellRole, CellClass, Socket } from "./spatial/index.js";
 
 // --- abstract descriptors (renderer-free output) ---
-export type { ContentAnchor, GadgetPlacement, CellDescriptor, RoomDescriptor, ConnectorPlan, PortalSpec, AreaDescriptor, AreaLink, ReachDescriptor } from "./descriptors/index.js";
+export { assembleWorld } from "./descriptors/index.js";
+export type { ContentAnchor, GadgetPlacement, CellDescriptor, RoomDescriptor, ConnectorPlan, PortalSpec, AreaDescriptor, AreaLink, ReachDescriptor, WorldDescriptor } from "./descriptors/index.js";
 
 // --- composers ---
-export { composeRoom, composeArea, composeReach, composeWorld } from "./composers/index.js";
-export type { ComposeContext, RoomComposeParams, SocketRequest, ContentRequest, AreaComposeParams, PortalRequest, ComposeReachOptions, ReachResult, ComposeWorldOptions, WorldResult } from "./composers/index.js";
+export { composeRoom, composeArena, composeArea, composeReach, composeWorld, corridorGeometry } from "./composers/index.js";
+export type { ComposeContext, RoomComposeParams, RoomShape, SocketRequest, ContentRequest, AreaComposeParams, PortalRequest, ComposeReachOptions, ReachResult, ComposeWorldOptions, WorldResult, ConnectorGeom } from "./composers/index.js";
+
+// --- async orchestration ---
+export { composeWorldAsync, composeReachAsync, CancellationToken, GenCancelled, GenerationHorizon } from "./orchestration/index.js";
+export type { OrchestrationHooks, JobProgress } from "./orchestration/index.js";
 
 // --- playtest simulator ---
 export { buildSimWorld, neighbors, reachableAreaIds, initSim, cloneState, parseCommand, step, autosolve } from "./sim/index.js";
