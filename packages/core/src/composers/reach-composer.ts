@@ -13,7 +13,7 @@ import type { Vec3 } from "../math/vec.js";
 import { ruleCaps, type Capability } from "../logic/index.js";
 import { generateReach, type GeneratedReach } from "../template/grammar.js";
 import type { ReachTemplate } from "../template/template.js";
-import type { RegionId } from "../graph/region-graph.js";
+import type { ProgressionItem, RegionId } from "../graph/region-graph.js";
 import type { AreaDescriptor, AreaLink, ReachDescriptor } from "../descriptors/descriptor.js";
 import { composeArea, type PortalRequest } from "./area-composer.js";
 import type { ComposeContext } from "./context.js";
@@ -26,6 +26,9 @@ export interface ComposeReachOptions {
   styleId?: string;
   /** World offset for this whole Reach (so a World of Reaches doesn't overlap). */
   origin?: Vec3;
+  /** Progression items to place THIS reach (default: the registry's full set). Keep this small — a
+   *  reach should introduce a handful of gadgets, not the whole catalog, or the hub floods. */
+  gadgets?: readonly ProgressionItem[];
 }
 
 export interface ReachResult {
@@ -47,7 +50,7 @@ export function composeReach(ctx: ComposeContext, opts: ComposeReachOptions): Re
   const reach = generateReach({
     seed: reachSeed,
     template: opts.template,
-    items: ctx.registry.items.progression,
+    items: opts.gadgets ?? ctx.registry.items.progression,
     ...(opts.startCaps ? { startCaps: opts.startCaps } : {}),
   });
 

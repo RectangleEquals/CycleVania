@@ -6,10 +6,11 @@
  */
 
 import type { Capability } from "../logic/index.js";
+import type { ProgressionItem } from "../graph/region-graph.js";
 import { assembleWorld } from "../descriptors/assemble.js";
 import type { ComposeContext } from "../composers/context.js";
 import { composeReach, type ComposeReachOptions, type ReachResult } from "../composers/reach-composer.js";
-import type { ComposeWorldOptions, WorldResult } from "../composers/world-composer.js";
+import { reachGadgets, type ComposeWorldOptions, type WorldResult } from "../composers/world-composer.js";
 import type { CancellationToken } from "./cancellation.js";
 
 export interface JobProgress {
@@ -28,12 +29,14 @@ export interface OrchestrationHooks {
 
 const microtask = (): Promise<void> => Promise.resolve();
 
-function reachOptionsFor(opts: ComposeWorldOptions, i: number, carried: ReadonlySet<Capability>, spacing: number): ComposeReachOptions {
+function reachOptionsFor(opts: ComposeWorldOptions, i: number, carried: ReadonlySet<Capability>, spacing: number, progression: readonly ProgressionItem[]): ComposeReachOptions {
   const style = opts.styleFor?.(i);
+  const gadgets = reachGadgets(progression, opts.gadgetsPerReach, i);
   return {
     template: opts.templateFor ? opts.templateFor(i) : opts.template,
     reachIndex: i,
     origin: opts.originFor ? opts.originFor(i) : [i * spacing, 0, 0],
+    ...(gadgets ? { gadgets } : {}),
     ...(opts.depthFor ? { depth: opts.depthFor(i) } : {}),
     ...(opts.carryCaps ? { startCaps: [...carried] } : {}),
     ...(style ? { styleId: style } : {}),
@@ -49,7 +52,7 @@ export async function composeWorldAsync(ctx: ComposeContext, opts: ComposeWorldO
 
   for (let i = 0; i < opts.reachCount; i++) {
     hooks.signal?.throwIfCancelled();
-    const result = composeReach(ctx, reachOptionsFor(opts, i, carried, spacing));
+    const result = composeReach(ctx, reachOptionsFor(opts, i, carried, spacing, ctx.registry.items.progression));
     reaches.push(result);
     if (opts.carryCaps) for (const it of result.reach.items) carried.add(it.grants);
     hooks.onReach?.(result, i);

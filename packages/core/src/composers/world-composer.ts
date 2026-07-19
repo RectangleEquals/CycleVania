@@ -6,6 +6,7 @@
  */
 
 import type { Capability } from "../logic/index.js";
+import type { ProgressionItem } from "../graph/region-graph.js";
 import { assembleWorld } from "../descriptors/assemble.js";
 import type { WorldDescriptor } from "../descriptors/descriptor.js";
 import type { ComposeContext } from "./context.js";
@@ -25,6 +26,16 @@ export interface ComposeWorldOptions {
   originFor?: (reachIndex: number) => [number, number, number];
   /** Lateral spacing between reaches when `originFor` is omitted (default 700). */
   reachSpacing?: number;
+  /** How many progression gadgets to place per reach (rotating through the catalog). Omit = all. */
+  gadgetsPerReach?: number;
+}
+
+/** The gadgets a given reach should place, rotating through the catalog. */
+export function reachGadgets(progression: readonly ProgressionItem[], perReach: number | undefined, i: number): ProgressionItem[] | undefined {
+  if (!perReach || perReach <= 0 || progression.length === 0) return undefined;
+  const out: ProgressionItem[] = [];
+  for (let k = 0; k < perReach && k < progression.length; k++) out.push(progression[(i * perReach + k) % progression.length] as ProgressionItem);
+  return out;
 }
 
 export interface WorldResult {
@@ -43,10 +54,12 @@ export function composeWorld(ctx: ComposeContext, opts: ComposeWorldOptions): Wo
     const template = opts.templateFor ? opts.templateFor(i) : opts.template;
     const styleId = opts.styleFor?.(i);
     const origin = opts.originFor ? opts.originFor(i) : ([i * spacing, 0, 0] as [number, number, number]);
+    const gadgets = reachGadgets(ctx.registry.items.progression, opts.gadgetsPerReach, i);
     const result = composeReach(ctx, {
       template,
       reachIndex: i,
       origin,
+      ...(gadgets ? { gadgets } : {}),
       ...(opts.depthFor ? { depth: opts.depthFor(i) } : {}),
       ...(opts.carryCaps ? { startCaps: [...carried] } : {}),
       ...(styleId ? { styleId } : {}),

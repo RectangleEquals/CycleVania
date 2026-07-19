@@ -9,7 +9,7 @@
 import type { Capability } from "../logic/index.js";
 import type { ComposeContext } from "../composers/context.js";
 import { composeReach, type ReachResult } from "../composers/reach-composer.js";
-import type { ComposeWorldOptions } from "../composers/world-composer.js";
+import { reachGadgets, type ComposeWorldOptions } from "../composers/world-composer.js";
 
 export class GenerationHorizon {
   private cache = new Map<number, ReachResult>();
@@ -35,10 +35,12 @@ export class GenerationHorizon {
     if (this.opts.carryCaps) for (let k = this.highest + 1; k < i; k++) this.reach(k);
 
     const style = this.opts.styleFor?.(i);
+    const gadgets = reachGadgets(this.ctx.registry.items.progression, this.opts.gadgetsPerReach, i);
     const result = composeReach(this.ctx, {
       template: this.opts.templateFor ? this.opts.templateFor(i) : this.opts.template,
       reachIndex: i,
       origin: this.opts.originFor ? this.opts.originFor(i) : [i * this.spacing, 0, 0],
+      ...(gadgets ? { gadgets } : {}),
       ...(this.opts.depthFor ? { depth: this.opts.depthFor(i) } : {}),
       ...(this.opts.carryCaps ? { startCaps: [...this.carried] } : {}),
       ...(style ? { styleId: style } : {}),

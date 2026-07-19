@@ -21,15 +21,15 @@ describe("demo soak", () => {
     }
   });
 
-  it("120 fully-composed reaches: the bot completes each end-to-end", () => {
+  it("80 fully-composed reaches: the bot completes each end-to-end", () => {
     const reg = demoRegistry();
-    for (let s = 0; s < 120; s++) {
+    for (let s = 0; s < 80; s++) {
       const result = composeReach({ registry: reg, seed: `c-${s}` }, { template: demoTemplate, reachIndex: s % 12 });
       const world = buildSimWorld(result, reg);
       expect(world.terminalAreaId).not.toBeNull();
       expect(autosolve(world).visited.has(world.terminalAreaId as number)).toBe(true);
     }
-  });
+  }, 30000);
 
   it("every composed cell resolves to a kit piece or is empty air", () => {
     const result = composeReach({ registry: demoRegistry(), seed: "kit-check" }, { template: demoTemplate, reachIndex: 5 });

@@ -189,8 +189,15 @@ export function composeRoom(p: RoomComposeParams): RoomDescriptor {
   }
 
   // Interior floor cells for content (never a border, never a pillar/dais base).
+  // Mezzanine columns ALSO get an upper anchor so the second level is worth the climb.
   const contentCells: Coord[] = [];
-  for (let y = 0; y < ey; y++) for (let x = 0; x < ex; x++) if (inside(x, y) && !isBorder(x, y) && !pillar.has(`${x},${y}`)) contentCells.push([x, y, dais.has(`${x},${y}`) ? 1 : 0]);
+  for (let y = 0; y < ey; y++)
+    for (let x = 0; x < ex; x++) {
+      const c = `${x},${y}`;
+      if (!inside(x, y) || isBorder(x, y) || pillar.has(c)) continue;
+      contentCells.push([x, y, dais.has(c) ? 1 : 0]);
+      if (mezz.has(c)) contentCells.push([x, y, mezZ]);
+    }
   if (contentCells.length === 0) contentCells.push([cx, cy, 0]);
 
   const contentByCell = new Map<string, ContentAnchor[]>();

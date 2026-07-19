@@ -21,6 +21,8 @@ import {
   step,
   type AreaDescriptor,
   type CellDescriptor,
+  type GeometryKit,
+  type ItemCatalogInput,
   type ReachResult,
   type Registry,
   type Rule,
@@ -56,19 +58,31 @@ let at: RoomRef | null = null;
 let held = new CapSet();
 let collected = new Set<string>();
 let inventory = new Set<string>();
+let visited = new Set<string>();
 
 const linkTargets = new Map<string, () => void>();
 
 const HELP = [
   "commands:  /help /clear /goto <id> /take /use <item> /give <cap> /why <id> /reset /solve",
+  "play only: /see  (re-describe what you can see in the current room)",
 ].join("\n");
+
+// ---------- data (editable) ----------
+interface DataPack { items: ItemCatalogInput; geometryKit: GeometryKit; }
+const demoData = (): DataPack => ({ items: { catalog: [...gadgetCatalog, ...lootCatalog], startCaps: [] }, geometryKit: demoGeometryKit });
+const emptyData = (): DataPack => ({ items: { catalog: [], startCaps: [] }, geometryKit: { pieces: [] } });
+let data: DataPack = demoData();
+
+function syncDataJson(): void {
+  $<HTMLTextAreaElement>("dataJson").value = JSON.stringify(data, null, 2);
+}
 
 // ---------- compose ----------
 function buildRegistry(): void {
   registry = defineRegistry({
     grid: { areaCellSize: 16, roomCellSize: settings.roomCell, snap: settings.snap },
-    geometryKit: demoGeometryKit,
-    items: { catalog: [...gadgetCatalog, ...lootCatalog], startCaps: [] },
+    geometryKit: data.geometryKit,
+    items: data.items,
     locks: lockCatalog,
     styles: demoStyles,
   });
@@ -77,7 +91,7 @@ function buildRegistry(): void {
 function compose(): void {
   if (play) exitPlay();
   buildRegistry();
-  const world = composeWorld({ registry, seed: settings.seed }, { reachCount: settings.reachCount, template: demoTemplate, carryCaps: true, depthFor: (i) => settings.depth + i * 6 });
+  const world = composeWorld({ registry, seed: settings.seed }, { reachCount: settings.reachCount, template: demoTemplate, carryCaps: true, gadgetsPerReach: 3, depthFor: (i) => settings.depth + i * 6 });
   reaches = world.reaches;
   reaches.forEach((r, i) => tagReachIndex(r, i));
   graph = new RoomGraph(reaches, registry);
@@ -124,18 +138,20 @@ function goScope(s: Scope, sel: PickResult | null): void {
   render();
 }
 
-function selectOnly(pick: PickResult): void {
+/** Select an object (highlight + details). `focus` optionally tweens the camera to it. */
+function select(pick: PickResult, focus = false): void {
   selection = pick;
   scene.setSelected(pick);
-  scene.focus(pick);
+  if (focus) scene.focus(pick);
   render();
 }
 
-function inspect(pick: PickResult): void {
+/** Double-click in INSPECT mode: descend the scope (or focus a leaf). */
+function descend(pick: PickResult): void {
   if (pick.ri !== activeReach && scope.level === "world") setActiveReach(pick.ri);
   if (pick.kind === "area") goScope({ level: "area", ri: pick.ri, areaId: pick.areaId! }, pick);
   else if (pick.kind === "room") goScope({ level: "room", ri: pick.ri, areaId: pick.areaId!, nodeId: pick.nodeId! }, pick);
-  else selectOnly(pick);
+  else select(pick, true); // leaf → focus
 }
 
 function back(): void {
@@ -154,13 +170,17 @@ function enterPlay(): void {
   for (const c of registry.items.startCaps) held.add(c);
   collected = new Set();
   inventory = new Set();
+  visited = new Set();
   $("playToggle").textContent = "■ Exit Play";
   $("play-info").style.display = "block";
   $("xray-panel").style.display = "none";
   $("right").classList.add("collapsed");
   $("right-reopen").style.display = "block";
+  $("floatLegend").style.display = "block";
+  $("dpad").style.display = "flex";
+  $("right-toggle").textContent = "‹";
   scene.setXray({ on: false });
-  enterRoom(start, `You stand at the threshold of area ${start.areaId}.`);
+  enterRoom(start, `You stand at the threshold of area ${start.areaId}. (drag to look · d-pad to move)`);
 }
 
 function exitPlay(): void {
@@ -169,6 +189,12 @@ function exitPlay(): void {
   $("playToggle").textContent = "▶ Play";
   $("play-info").style.display = "none";
   $("xray-panel").style.display = "block";
+  $("right").classList.remove("collapsed");
+  $("right-reopen").style.display = "none";
+  $("floatLegend").style.display = "none";
+  $("dpad").style.display = "none";
+  $("right-toggle").textContent = "›";
+  scene.setFlyMove(0, 0, 0);
   scene.setPlayCamera(false);
   scene.setXray({ on: xrayOn });
   goScope({ level: "world" }, null);
@@ -176,15 +202,59 @@ function exitPlay(): void {
 
 function enterRoom(ref: RoomRef, message: string): void {
   at = ref;
+  visited.add(roomKey(ref));
   const node = graph.nodes.get(roomKey(ref));
   scope = { level: "room", ri: ref.ri, areaId: ref.areaId, nodeId: ref.nodeId };
-  scene.setScope(scope);
+  refreshPlay();
   if (node) scene.setPlayCamera(true, node.bounds);
   selection = null;
   scene.setSelected(null);
   $("back").style.display = "none";
   toast(message);
-  renderPlayInfo();
+  toast(seeMessage(ref));
+  render();
+}
+
+/** Re-render the visible neighbourhood (visited rooms + their neighbours, cascading). */
+function refreshPlay(): void {
+  if (at) scene.renderPlay(at, computeVisible(), collected);
+}
+
+/** Visible rooms = visited ∪ neighbours-of-visited; reveal-gated (false-wall) neighbours stay hidden without `reveal`. */
+function computeVisible(): RoomRef[] {
+  const out = new Map<string, RoomRef>();
+  for (const vk of visited) {
+    const node = graph.nodes.get(vk);
+    if (!node) continue;
+    out.set(vk, node.ref);
+    for (const e of node.exits) {
+      const falseWall = e.gate && [...ruleCaps(e.gate)].includes("reveal") && !held.has("reveal") && !visited.has(roomKey(e.to));
+      if (!falseWall) out.set(roomKey(e.to), e.to);
+    }
+  }
+  return [...out.values()];
+}
+
+/** Diegetic "what you can see", respecting lock & key (no seeing behind false walls, etc.). */
+function seeMessage(ref: RoomRef): string {
+  const node = graph.nodes.get(roomKey(ref));
+  if (!node) return "The way ahead is unclear.";
+  const parts: string[] = [];
+  const open = node.exits.filter((e) => !e.gate || evalRule(e.gate, held));
+  const sealed = node.exits.filter((e) => e.gate && !evalRule(e.gate, held));
+  if (open.length) parts.push(`${open.length} open way${open.length > 1 ? "s" : ""} lead onward`);
+  for (const e of sealed) {
+    const caps = [...ruleCaps(e.gate as Rule)];
+    if (caps.includes("reveal")) parts.push("a stretch of wall shimmers falsely — something hides beyond (need reveal)");
+    else if (caps.includes("leap")) parts.push("a high ledge sits out of reach (need leap)");
+    else if (caps.includes("rappel")) parts.push("a lethal drop yawns below (need rappel)");
+    else parts.push(`a sealed way needs ${caps.join(", ")}`);
+  }
+  const gads = node.gadgets.filter((g) => !collected.has(g.locationId));
+  for (const g of gads) parts.push(`you spy ${itemName(g.itemId)} resting here`);
+  const rd = room(ref.ri, ref.areaId, ref.nodeId);
+  if (rd?.arena) parts.push(`this is an arena — ${rd.arena.waves} wave(s) bar the exits`);
+  return parts.length ? `You see: ${parts.join("; ")}.` : "The room lies quiet and bare.";
 }
 
 function itemName(id: string): string {
@@ -204,7 +274,13 @@ function interact(pick: PickResult): void {
     collected.add(g.locationId);
     inventory.add(g.itemId);
     if (g.cap) held.add(g.cap);
-    toast(`Recovered ${itemName(g.itemId)}${g.cap ? ` — now wielding ${g.cap} access` : ""}.`);
+    toast(`Recovered ${itemName(g.itemId)}${g.cap ? ` — you can now ${g.cap}` : ""}.`);
+    if (g.cap) {
+      const cap = g.cap;
+      const opened = node.exits.filter((e) => e.gate && [...ruleCaps(e.gate)].includes(cap) && evalRule(e.gate, held));
+      if (opened.length) toast(`A sealed way here yields to your ${cap}.`);
+    }
+    refreshPlay(); // a lantern may reveal false-walled rooms
     renderPlayInfo();
     return;
   }
@@ -218,7 +294,7 @@ function interact(pick: PickResult): void {
     enterRoom(exit.to, travelMessage(exit));
     return;
   }
-  selectOnly(pick);
+  select(pick, false);
 }
 
 function travelMessage(exit: RoomExit): string {
@@ -243,6 +319,11 @@ function render(): void {
 function renderCrumbs(): void {
   linkTargets.clear();
   const s = scope;
+  if (play) {
+    // scope is locked to the current room during play — no navigation
+    $("crumbs").innerHTML = at ? `<span>▶ Playing · Area ${at.areaId} · Room ${esc(at.nodeId)}</span>` : "<span>▶ Playing</span>";
+    return;
+  }
   const parts: string[] = [linkEl("World", () => goScope({ level: "world" }, null))];
   if (s.level !== "world") parts.push(linkEl(`Reach ${s.ri}`, () => goScope({ level: "reach", ri: s.ri }, null)));
   if (s.level === "area" || s.level === "room") parts.push(linkEl(`Area ${s.areaId}`, () => goScope({ level: "area", ri: s.ri, areaId: s.areaId }, area(s.ri, s.areaId) ? { kind: "area", ri: s.ri, areaId: s.areaId, box: area(s.ri, s.areaId)!.bounds } : null)));
@@ -309,8 +390,8 @@ function areaDetail(ri: number, areaId: number): string {
   const a = area(ri, areaId);
   if (!a) return "";
   const rooms = a.rooms.map((r) => pillLink(`${r.nodeId} · ${r.kind}`, "", () => goScope({ level: "room", ri, areaId, nodeId: r.nodeId }, { kind: "room", ri, areaId, nodeId: r.nodeId, box: r.bounds }))).join("");
-  const portals = a.portals.map((p) => pillLink(`${p.key}${p.requires ? " 🔒" : ""}`, p.requires ? "need" : "have", () => selectOnly({ kind: "connection", ri, areaId, socketId: `portal:${p.key}`, gated: !!p.requires, pos: p.spawn }))).join("") || "<span class='hint'>none</span>";
-  const gadgets = a.gadgets.map((g) => pillLink(esc(itemName(g.itemId)), "", () => selectOnly({ kind: "gadget", ri, areaId, itemId: g.itemId, pos: g.pos }))).join("") || "<span class='hint'>none</span>";
+  const portals = a.portals.map((p) => pillLink(`${p.key}${p.requires ? " 🔒" : ""}`, p.requires ? "need" : "have", () => select({ kind: "connection", ri, areaId, socketId: `portal:${p.key}`, gated: !!p.requires, pos: p.spawn }, !play))).join("") || "<span class='hint'>none</span>";
+  const gadgets = a.gadgets.map((g) => pillLink(esc(itemName(g.itemId)), "", () => select({ kind: "gadget", ri, areaId, itemId: g.itemId, pos: g.pos }, !play))).join("") || "<span class='hint'>none</span>";
   return `<h2>Area ${areaId}</h2>${tableRows([["role", esc(a.role)], ["region", esc(a.regionId)], ["rooms", String(a.rooms.length)], ["connectors", String(a.connectors.length)]])}<h2>rooms</h2>${rooms}<h2>portals</h2>${portals}<h2>gadgets</h2>${gadgets}`;
 }
 
@@ -320,7 +401,7 @@ function roomDetail(ri: number, areaId: number, nodeId: string): string {
   const roleCount = new Map<string, number>();
   for (const c of r.cells) roleCount.set(c.role, (roleCount.get(c.role) ?? 0) + 1);
   const roles = [...roleCount].map(([role, n]) => `<span class="pill">${esc(role)} ×${n}</span>`).join("");
-  const sockets = r.sockets.map((s) => pillLink(`${s.id} · ${s.face}${s.gate ? " 🔒" : ""}`, s.gate ? "need" : "have", () => selectOnly({ kind: "connection", ri, areaId, nodeId, socketId: s.id, gated: !!s.gate, pos: s.pos }))).join("") || "<span class='hint'>none</span>";
+  const sockets = r.sockets.map((s) => pillLink(`${s.id} · ${s.face}${s.gate ? " 🔒" : ""}`, s.gate ? "need" : "have", () => select({ kind: "connection", ri, areaId, nodeId, socketId: s.id, gated: !!s.gate, pos: s.pos }, !play))).join("") || "<span class='hint'>none</span>";
   return `<h2>Room ${esc(nodeId)}</h2>${tableRows([["kind", esc(r.kind)], ["role", esc(r.role)], ["footprint", r.footprint.join(" × ")], ["cells", String(r.cells.length)]])}<h2>cell roles</h2>${roles}<h2>exits</h2>${sockets}<div class="hint">Click a cell in 3D for its metadata.</div>`;
 }
 
@@ -332,20 +413,26 @@ function cellDetail(c: CellDescriptor): string {
 function renderPlayInfo(): void {
   if (!at) return;
   linkSeq = 5000;
-  const node = graph.nodes.get(roomKey(at));
-  const a = area(at.ri, at.areaId);
-  const roomItems = (node?.gadgets ?? []).map((g) => `<span class="pill ${collected.has(g.locationId) ? "have" : ""}">${esc(itemName(g.itemId))}${collected.has(g.locationId) ? " ✓" : ""}</span>`).join("") || "<span class='hint'>none here</span>";
+  const cur = at;
+  const node = graph.nodes.get(roomKey(cur));
+  const a = area(cur.ri, cur.areaId);
+  // current-room items are clickable (select only, no camera move); area items are informational
+  const roomItems =
+    (node?.gadgets ?? []).map((g) => pillLink(`${itemName(g.itemId)}${collected.has(g.locationId) ? " ✓" : ""}`, collected.has(g.locationId) ? "have" : "", () => select({ kind: "gadget", ri: cur.ri, areaId: cur.areaId, nodeId: cur.nodeId, itemId: g.itemId, pos: g.pos }, false))).join("") ||
+    "<span class='hint'>none here</span>";
   const inv = [...inventory].map((id) => `<span class="pill have">${esc(itemName(id))}</span>`).join("") || "<span class='hint'>empty</span>";
   const areaItems = (a?.gadgets ?? []).map((g) => `<span class="pill ${collected.has(g.locationId) ? "have" : ""}">${esc(itemName(g.itemId))}</span>`).join("") || "<span class='hint'>none</span>";
-  const hints = (node?.exits ?? []).map((e) => {
-    const open = !e.gate || evalRule(e.gate, held);
-    const miss = e.gate && !open ? [...missingCaps(e.gate, held)].join(",") : "";
-    return `<span class="pill ${open ? "have" : "need"}">${esc(e.label)}${open ? "" : " — need " + miss}</span>`;
-  }).join("") || "<span class='hint'>no exits</span>";
+  const hints =
+    (node?.exits ?? []).map((e) => {
+      const open = !e.gate || evalRule(e.gate, held);
+      const miss = e.gate && !open ? [...missingCaps(e.gate, held)].join(",") : "";
+      return `<span class="pill ${open ? "have" : "need"}">${esc(e.label)}${open ? "" : " — need " + miss}</span>`;
+    }).join("") || "<span class='hint'>no exits</span>";
   $("pi-room").innerHTML = roomItems;
   $("pi-collected").innerHTML = inv;
   $("pi-area").innerHTML = areaItems;
   $("pi-hints").innerHTML = hints;
+  bindLinks("play-info");
 }
 
 // ---------- console + log + toasts ----------
@@ -355,6 +442,11 @@ function runCommand(input: string): void {
   const bare = s.replace(/^\//, "").toLowerCase();
   if (bare === "help" || bare === "?") return log(HELP);
   if (bare === "clear") return clearLog();
+  if (bare === "see") {
+    if (play && at) toast(seeMessage(at));
+    else log("· /see only works in Play mode");
+    return;
+  }
   try {
     const res = step(simWorld, simState, parseCommand(s));
     simState = res.state;
@@ -446,7 +538,8 @@ $("regen").addEventListener("click", () => { readSettings(); compose(); });
 $("addReach").addEventListener("click", () => { readSettings(); settings.reachCount += 1; writeSettings(); compose(); });
 $("save").addEventListener("click", () => {
   readSettings();
-  const url = URL.createObjectURL(new Blob([JSON.stringify(settings, null, 2)], { type: "application/json" }));
+  const world = { settings, data };
+  const url = URL.createObjectURL(new Blob([JSON.stringify(world, null, 2)], { type: "application/json" }));
   const a = document.createElement("a");
   a.href = url;
   a.download = `cyclevania-${settings.seed}.json`;
@@ -458,14 +551,56 @@ $<HTMLInputElement>("loadFile").addEventListener("change", (e) => {
   const file = (e.target as HTMLInputElement).files?.[0];
   if (!file) return;
   const reader = new FileReader();
-  reader.onload = () => { try { settings = { ...settings, ...(JSON.parse(String(reader.result)) as Partial<Settings>) }; writeSettings(); compose(); } catch (err) { log(`✗ load: ${(err as Error).message}`); } };
+  reader.onload = () => {
+    try {
+      const parsed = JSON.parse(String(reader.result)) as { settings?: Partial<Settings>; data?: DataPack } & Partial<Settings>;
+      settings = { ...settings, ...(parsed.settings ?? parsed) };
+      if (parsed.data) data = parsed.data;
+      writeSettings();
+      syncDataJson();
+      compose();
+    } catch (err) {
+      log(`✗ load: ${(err as Error).message}`);
+    }
+  };
   reader.readAsText(file);
 });
+$("applyData").addEventListener("click", () => {
+  try {
+    data = JSON.parse($<HTMLTextAreaElement>("dataJson").value) as DataPack;
+    compose();
+    log(`· data applied: ${data.items.catalog.length} items, ${data.geometryKit.pieces.length} kit pieces`);
+  } catch (err) {
+    log(`✗ data JSON: ${(err as Error).message}`);
+  }
+});
+$("resetData").addEventListener("click", () => { data = demoData(); syncDataJson(); compose(); });
+$("clearData").addEventListener("click", () => { data = emptyData(); syncDataJson(); compose(); });
 for (const b of document.querySelectorAll<HTMLButtonElement>("button[data-cmd]")) b.addEventListener("click", () => runCommand(b.dataset["cmd"] as string));
 $("clearLog").addEventListener("click", clearLog);
 $<HTMLInputElement>("repl").addEventListener("keydown", (e) => { if (e.key === "Enter") { runCommand($<HTMLInputElement>("repl").value); $<HTMLInputElement>("repl").value = ""; } });
 $("back").addEventListener("click", back);
 $("playToggle").addEventListener("click", () => (play ? exitPlay() : enterPlay()));
+
+// d-pad → flycam movement (mobile-friendly; drag on the canvas to look)
+const MOVE: Record<string, [number, number, number]> = { fwd: [0, 0, 1], back: [0, 0, -1], left: [-1, 0, 0], right: [1, 0, 0], up: [0, 1, 0], down: [0, -1, 0] };
+const activeMove = new Set<string>();
+const syncMove = (): void => {
+  let x = 0;
+  let y = 0;
+  let z = 0;
+  for (const m of activeMove) { const v = MOVE[m] as [number, number, number]; x += v[0]; y += v[1]; z += v[2]; }
+  scene.setFlyMove(x, y, z);
+};
+for (const b of document.querySelectorAll<HTMLButtonElement>("#dpad button")) {
+  const m = b.dataset["move"] as string;
+  const down = (e: PointerEvent): void => { e.preventDefault(); activeMove.add(m); syncMove(); };
+  const up = (): void => { activeMove.delete(m); syncMove(); };
+  b.addEventListener("pointerdown", down);
+  b.addEventListener("pointerup", up);
+  b.addEventListener("pointerleave", up);
+  b.addEventListener("pointercancel", up);
+}
 
 const collapseRight = (v: boolean): void => {
   $("right").classList.toggle("collapsed", v);
@@ -491,16 +626,16 @@ canvas.addEventListener("pointerup", (e) => {
   const hit = scene.pick(e.clientX, e.clientY);
   const now = performance.now();
   if (now - lastTap < 280) {
+    // double-tap: play → interact; inspect → change scope
     if (clickTimer) { clearTimeout(clickTimer); clickTimer = undefined; }
     lastTap = 0;
-    if (hit) (play ? interact(hit) : inspect(hit));
+    if (hit) (play ? interact(hit) : descend(hit));
   } else {
+    // single-tap: select only (never moves the camera or changes scope)
     lastTap = now;
     clickTimer = window.setTimeout(() => {
       clickTimer = undefined;
-      if (!hit) return;
-      if (play) selectOnly(hit);
-      else inspect(hit);
+      if (hit) select(hit, false);
     }, 260);
   }
 });
@@ -508,4 +643,5 @@ canvas.addEventListener("pointerup", (e) => {
 buildLegend();
 buildXrayMask();
 writeSettings();
+syncDataJson();
 compose();

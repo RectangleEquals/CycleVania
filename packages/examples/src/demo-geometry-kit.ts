@@ -9,8 +9,8 @@
 import type { GeometryKit } from "@cyclevania/core";
 
 const A = (deg: number): number => (deg * Math.PI) / 180;
-/** PS2 angle palette: 45° multiples. */
-const PS2 = [0, 45, 90, 135, 180, 225, 270, 315].map(A);
+/** PS2 angle palette: 15° increments (the 5° grid's typical step for flats/chamfers). */
+const PS2 = Array.from({ length: 24 }, (_, i) => A(i * 15));
 
 export const demoGeometryKit: GeometryKit = {
   pieces: [

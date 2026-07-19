@@ -72,6 +72,17 @@ export class InspectorScene {
   private xray: XrayConfig = { on: true, dist: 34, coneDeg: 55, mask: { ceiling: true, wall: true, corner: true, opening: false } };
   private play = false;
   private fwd = new THREE.Vector3();
+  private tgtCam = new THREE.Vector3();
+  private tgtTarget = new THREE.Vector3();
+  private tweenActive = false;
+  private playBox: WorldBox | null = null;
+  // first-person flycam (play mode)
+  private flyMode = false;
+  private flyYaw = 0;
+  private flyPitch = 0;
+  private flyMove = { x: 0, y: 0, z: 0 };
+  private flyKeys = new Set<string>();
+  private flyLook = { active: false, x: 0, y: 0 };
 
   constructor(private container: HTMLElement) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
@@ -86,8 +97,27 @@ export class InspectorScene {
     const key = new THREE.DirectionalLight(0xffffff, 1.35);
     key.position.set(120, 320, 160);
     this.scene.add(key, new THREE.GridHelper(6000, 100, 0x151b28, 0x10141d), this.group, this.selGroup);
+    // flycam input (only acts in play/flyMode; drag = look, WASD/QE/space = move)
+    const dom = this.renderer.domElement;
+    dom.addEventListener("pointerdown", (e) => { if (this.flyMode) { this.flyLook.active = true; this.flyLook.x = e.clientX; this.flyLook.y = e.clientY; } });
+    dom.addEventListener("pointermove", (e) => {
+      if (!this.flyMode || !this.flyLook.active) return;
+      this.flyYaw -= (e.clientX - this.flyLook.x) * 0.005;
+      this.flyPitch = Math.max(-1.4, Math.min(1.4, this.flyPitch - (e.clientY - this.flyLook.y) * 0.005));
+      this.flyLook.x = e.clientX;
+      this.flyLook.y = e.clientY;
+    });
+    dom.addEventListener("pointerup", () => { this.flyLook.active = false; });
+    window.addEventListener("keydown", (e) => { if (this.flyMode) this.flyKeys.add(e.key.toLowerCase()); });
+    window.addEventListener("keyup", (e) => this.flyKeys.delete(e.key.toLowerCase()));
+
     window.addEventListener("resize", () => this.resize());
     this.animate();
+  }
+
+  /** On-screen d-pad drives movement (mobile-friendly): axes in [-1,1]. */
+  setFlyMove(x: number, y: number, z: number): void {
+    this.flyMove = { x, y, z };
   }
 
   setData(reaches: ReachResult[]): void {
@@ -184,6 +214,58 @@ export class InspectorScene {
       const p = this.cellPos(room, cell).add(new THREE.Vector3(0, 1.6, 0));
       this.marker(p, contentColor(c.kind), "gadget", { kind: "gadget", ri, areaId, nodeId: room.nodeId, ...(c.ref ? { itemId: c.ref } : {}), pos: [p.x, p.z, p.y] });
     }
+  }
+
+  /** Play mode: render the visited/visible neighbourhood; only the CURRENT room is interactive.
+   *  `collected` location ids are hidden (already picked up). */
+  renderPlay(current: { ri: number; areaId: number; nodeId: string }, visible: Array<{ ri: number; areaId: number; nodeId: string }>, collected: ReadonlySet<string> = new Set()): void {
+    this.scope = { level: "room", ri: current.ri, areaId: current.areaId, nodeId: current.nodeId };
+    this.group.clear();
+    this.selGroup.clear();
+    this.pickables = [];
+    this.cellMeshes = [];
+    const key = (v: { ri: number; areaId: number; nodeId: string }): string => `${v.ri}:${v.areaId}:${v.nodeId}`;
+    const curKey = key(current);
+    const visSet = new Set(visible.map(key));
+
+    for (const v of visible) {
+      const room = this.room(v.ri, v.areaId, v.nodeId);
+      if (!room) continue;
+      const isCur = key(v) === curKey;
+      const rcs = this.roomCs(room);
+      if (isCur) {
+        for (const cell of room.cells) {
+          if (cell.role === "air" || cell.kitId === null) continue;
+          const mesh = new THREE.Mesh(new THREE.BoxGeometry(1.85, 1.85, 1.85), new THREE.MeshStandardMaterial({ color: ROLE_COLORS[cell.role] ?? 0x888888, roughness: 0.82 }));
+          mesh.position.copy(this.cellPos(room, cell));
+          mesh.userData = { role: cell.role, air: false, pick: { kind: "cell", ri: v.ri, areaId: v.areaId, nodeId: v.nodeId, cell, box: room.bounds } satisfies PickResult };
+          this.group.add(mesh);
+          this.cellMeshes.push(mesh);
+          this.pickables.push(mesh);
+        }
+        for (const sk of room.sockets) this.marker(v3(sk.pos), sk.gate ? C_GATED : C_OPEN, "cone", { kind: "connection", ri: v.ri, areaId: v.areaId, nodeId: v.nodeId, socketId: sk.id, gated: !!sk.gate, pos: sk.pos });
+      } else {
+        this.instanceCellsAt(room.cells, room.origin, rcs, 1.5); // adjacent visible room (peer-through)
+      }
+      for (const cell of room.cells)
+        for (const c of cell.contents) {
+          if (c.ref && collected.has(c.ref)) continue; // already picked up — don't render it
+          const at = this.cellPos(room, cell).add(new THREE.Vector3(0, rcs * 0.6, 0));
+          if (isCur) this.marker(at, contentColor(c.kind), "gadget", { kind: "gadget", ri: v.ri, areaId: v.areaId, nodeId: v.nodeId, ...(c.ref ? { itemId: c.ref } : {}), pos: [at.x, at.z, at.y] });
+          else {
+            const m = new THREE.Mesh(new THREE.OctahedronGeometry(1.0), new THREE.MeshBasicMaterial({ color: contentColor(c.kind) }));
+            m.position.copy(at);
+            this.group.add(m);
+          }
+        }
+    }
+    // corridors between visible rooms (so the passage into the next room is visible)
+    const reach = this.reaches[current.ri];
+    if (reach)
+      for (const area of reach.descriptor.areas)
+        for (const c of area.connectors)
+          if (visSet.has(`${current.ri}:${area.areaId}:${c.fromRoom}`) && visSet.has(`${current.ri}:${area.areaId}:${c.toRoom}`) && c.origin && c.cellSize)
+            this.instanceCellsAt(c.cells, c.origin, c.cellSize, 1.4);
   }
 
   // ---- helpers ----
@@ -295,10 +377,12 @@ export class InspectorScene {
     this.focusPoint(centerOf(b), spanOf(b));
   }
 
+  /** Ease-out tween the camera to frame a point (instead of teleporting). */
   focusPoint(center: THREE.Vector3, span: number): void {
-    this.controls.target.copy(center);
-    this.camera.position.copy(center).add(new THREE.Vector3(span * 0.4, span * 0.7, span * 1.1));
-    this.controls.update();
+    this.tgtTarget.copy(center);
+    this.tgtCam.copy(center).add(new THREE.Vector3(span * 0.4, span * 0.7, span * 1.1));
+    this.tweenActive = true;
+    this.controls.enabled = false; // don't let the user fight the tween
   }
 
   private frameScope(): void {
@@ -311,16 +395,54 @@ export class InspectorScene {
 
   setPlayCamera(on: boolean, box?: WorldBox): void {
     this.play = on;
+    this.playBox = on && box ? box : null;
     if (on && box) {
-      this.controls.enablePan = false;
-      this.controls.maxDistance = spanOf(box) * 1.4;
-      this.controls.minDistance = 3;
-      this.focusPoint(centerOf(box), spanOf(box) * 0.7);
+      // first-person flycam: stand inside the room, orbit disabled
+      this.flyMode = true;
+      this.tweenActive = false;
+      this.controls.enabled = false;
+      const c = centerOf(box);
+      this.camera.position.set(c.x, c.y, c.z);
+      this.flyYaw = 0;
+      this.flyPitch = -0.12;
+      this.flyMove = { x: 0, y: 0, z: 0 };
+      this.flyKeys.clear();
     } else {
+      this.flyMode = false;
+      this.controls.enabled = true;
       this.controls.enablePan = true;
       this.controls.maxDistance = Infinity;
       this.controls.minDistance = 0;
     }
+  }
+
+  /** First-person flycam step: orient from yaw/pitch, move from keys + d-pad, collide with room walls. */
+  private updateFly(): void {
+    this.camera.quaternion.setFromEuler(new THREE.Euler(this.flyPitch, this.flyYaw, 0, "YXZ"));
+    const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion);
+    const right = new THREE.Vector3(1, 0, 0).applyQuaternion(this.camera.quaternion);
+    const k = this.flyKeys;
+    const mz = (k.has("w") || k.has("arrowup") ? 1 : 0) - (k.has("s") || k.has("arrowdown") ? 1 : 0) + this.flyMove.z;
+    const mx = (k.has("d") || k.has("arrowright") ? 1 : 0) - (k.has("a") || k.has("arrowleft") ? 1 : 0) + this.flyMove.x;
+    const my = (k.has("e") || k.has(" ") ? 1 : 0) - (k.has("q") ? 1 : 0) + this.flyMove.y;
+    const move = new THREE.Vector3();
+    move.addScaledVector(fwd, mz).addScaledVector(right, mx);
+    move.y += my;
+    if (move.lengthSq() > 0) {
+      const speed = this.playBox ? Math.max(0.35, spanOf(this.playBox) * 0.012) : 0.6;
+      this.camera.position.add(move.normalize().multiplyScalar(speed));
+    }
+    this.clampPos(this.camera.position);
+  }
+
+  /** Keep a point inside the current room's interior (collision with floor/ceiling/walls). */
+  private clampPos(v: THREE.Vector3): void {
+    const b = this.playBox;
+    if (!b) return;
+    const inset = Math.min(1.5, (b.max[0] - b.min[0]) / 3, (b.max[1] - b.min[1]) / 3);
+    v.x = Math.max(b.min[0] + inset, Math.min(b.max[0] - inset, v.x)); // three x ↔ world x
+    v.y = Math.max(b.min[2] + inset, Math.min(b.max[2] - inset, v.y)); // three y ↔ world z
+    v.z = Math.max(b.min[1] + inset, Math.min(b.max[1] - inset, v.z)); // three z ↔ world y
   }
 
   highlightSim(ri: number, world: SimWorld, state: SimState): void {
@@ -386,7 +508,22 @@ export class InspectorScene {
 
   private animate = (): void => {
     requestAnimationFrame(this.animate);
-    this.controls.update();
+    if (this.flyMode) {
+      this.updateFly();
+    } else if (this.tweenActive) {
+      const t = 0.14; // exponential approach = ease-out
+      this.camera.position.lerp(this.tgtCam, t);
+      this.controls.target.lerp(this.tgtTarget, t);
+      this.camera.lookAt(this.controls.target);
+      if (this.camera.position.distanceTo(this.tgtCam) < 0.4 && this.controls.target.distanceTo(this.tgtTarget) < 0.4) {
+        this.camera.position.copy(this.tgtCam);
+        this.controls.target.copy(this.tgtTarget);
+        this.tweenActive = false;
+        this.controls.enabled = true;
+      }
+    } else {
+      this.controls.update();
+    }
     this.applyXray();
     this.renderer.render(this.scene, this.camera);
   };
