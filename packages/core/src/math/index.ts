@@ -24,3 +24,5 @@ export {
   boxUnion,
   boxUnionAll,
 } from "./geom.js";
+export { gradNoise3, fbm3 } from "./noise.js";
+export { solveQEF } from "./qef.js";

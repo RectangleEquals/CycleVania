@@ -7,5 +7,6 @@ export { corridorGeometry } from "./connector-composer.js";
 export type { ConnectorGeom } from "./connector-composer.js";
 export { composeReach } from "./reach-composer.js";
 export type { ComposeReachOptions, ReachResult } from "./reach-composer.js";
-export { composeWorld, reachGadgets } from "./world-composer.js";
+export { composeWorld, reachGadgets, selectReachGadgets, itemPower } from "./world-composer.js";
 export type { ComposeWorldOptions, WorldResult } from "./world-composer.js";
+export { buildAreaGeometry } from "./geometry-pass.js";

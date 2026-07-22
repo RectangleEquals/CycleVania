@@ -20,6 +20,7 @@ import type { RegionRole } from "../template/role.js";
 import type { AreaDescriptor, ConnectorPlan, GadgetPlacement, PortalSpec, RoomDescriptor } from "../descriptors/descriptor.js";
 import { composeRoom, type ContentRequest, type RoomShape, type SocketRequest } from "./room-composer.js";
 import { corridorGeometry } from "./connector-composer.js";
+import { buildAreaGeometry } from "./geometry-pass.js";
 import type { Coord } from "../spatial/grid.js";
 
 export interface PortalRequest {
@@ -43,6 +44,10 @@ export interface AreaComposeParams {
   locations: string[];
   placement: Map<string, string>;
   itemCap: Map<string, Capability | undefined>;
+  /** Run the SDF → dual-contour geometry pass and attach kit/occupancy/dressing. */
+  geometry?: boolean;
+  /** World-shaping feedback: aggregate affordance bias from this reach's placed gadgets. */
+  bias?: { zWeight?: number; loopWeight?: number };
 }
 
 const ALL_FACES: CellFace[] = ["px", "nx", "py", "ny", "pz", "nz"];
@@ -108,12 +113,20 @@ export function composeArea(p: AreaComposeParams): AreaDescriptor {
   // per-room extents (fine cells) + shapes
   const extents: Coord[] = [];
   const shapes: RoomShape[] = [];
+  const outdoorFlags: boolean[] = [];
   const big = p.role === "capstone" || p.role === "vault";
   for (let i = 0; i < roomCount; i++) {
-    const exy = Math.max(4, Math.min(12, (big ? 8 : 5) + Math.round(budget.c * 5) + rng.int(-1, 1)));
-    const ez = Math.max(3, Math.min(6, 3 + Math.round(budget.zSpread * 3) + rng.int(0, 1)));
+    // occasionally (budget-scaled) a room is a large hall / outdoor-scale space
+    const large = i > 0 && p.role !== "vault" && p.role !== "terminal" && rng.chance(0.12 + 0.12 * budget.c);
+    // some large rooms in open roles become outdoor (sky-exposed) spaces
+    const outdoor = large && (p.role === "segment" || p.role === "hub") && rng.chance(0.45);
+    outdoorFlags.push(outdoor);
+    const capXY = large ? 18 : 12;
+    const capZ = large ? 9 : 6;
+    const exy = Math.max(4, Math.min(capXY, (big ? 8 : 5) + Math.round(budget.c * 5) + (large ? 6 : 0) + rng.int(-1, 1)));
+    const ez = Math.max(3, Math.min(capZ, 3 + Math.round(budget.zSpread * 3) + (large ? 2 : 0) + rng.int(0, 1)));
     extents.push([exy, exy, ez]);
-    shapes.push(shapeOf(kind, rng));
+    shapes.push(outdoor ? "cavern" : large ? "cavern" : shapeOf(kind, rng));
   }
 
   // --- place room-nodes: branching walk with Z, non-overlapping ---
@@ -122,7 +135,8 @@ export function composeArea(p: AreaComposeParams): AreaDescriptor {
   const boxes: WorldBox[] = [boxAt(origin, extents[0] as Coord, cs)];
   const parentOf: number[] = [-1];
   const dirFaceOf: CellFace[] = ["interior"];
-  const zBias = 0.15 + 0.55 * budget.zSpread;
+  // affordance feedback: a reach that placed vertical gadgets (leap/invert) makes THIS area more vertical
+  const zBias = Math.max(0, Math.min(0.85, 0.15 + 0.55 * budget.zSpread + (p.bias?.zWeight ?? 0) * 0.3));
 
   for (let i = 1; i < roomCount; i++) {
     const size = extents[i] as Coord;
@@ -197,13 +211,14 @@ export function composeArea(p: AreaComposeParams): AreaDescriptor {
         pairs.push({ a, b, d: Math.hypot(ca[0] - cb[0], ca[1] - cb[1], ca[2] - cb[2]) });
       }
     pairs.sort((x, y) => x.d - y.d);
-    const cap = 1 + Math.round(budget.extraCycles);
+    const loopW = p.bias?.loopWeight ?? 0; // recall/rappel gadgets → more loops
+    const cap = 1 + Math.round(budget.extraCycles + loopW * 2);
     let added = 0;
     for (const { a, b } of pairs) {
       if (added >= cap) break;
       const key = [nodeId(a), nodeId(b)].sort().join("|");
       if (connected.has(key)) continue;
-      if (!rng.chance(0.35 + budget.loopChance * 0.5)) continue;
+      if (!rng.chance(0.35 + budget.loopChance * 0.5 + loopW * 0.2)) continue;
       const face = dominantFace(origins[a] as Vec3, origins[b] as Vec3);
       const opp = oppositeFace(face);
       if (usedFaces[a]?.has(face) || usedFaces[b]?.has(opp)) continue;
@@ -247,8 +262,38 @@ export function composeArea(p: AreaComposeParams): AreaDescriptor {
   }
 
   // --- content distribution ---
+  // Gadgets (progression) are exploration rewards: spread across DEEPER rooms, never the
+  // entry room (index 0) when avoidable, at most one per room. Caches fill in round-robin.
   const locByRoom: string[][] = Array.from({ length: roomCount }, () => []);
-  p.locations.forEach((loc, i) => (locByRoom[i % roomCount] as string[]).push(loc));
+  const gadgetLocs = p.locations.filter((l) => p.placement.has(l));
+  const otherLocs = p.locations.filter((l) => !p.placement.has(l));
+  const hasGadget = new Set<number>();
+  let slot = roomCount - 1; // deepest room first
+  for (const g of gadgetLocs) {
+    let target = -1;
+    for (let t = 0; t < roomCount; t++) {
+      const idx = ((slot - t) % roomCount + roomCount) % roomCount;
+      if (roomCount > 1 && idx === 0) continue; // avoid the entry room
+      if (!hasGadget.has(idx)) {
+        target = idx;
+        break;
+      }
+    }
+    if (target < 0) {
+      // overflow: allow a non-entry room to hold a second, else fall back to the entry room
+      for (let t = 0; t < roomCount; t++) {
+        const idx = ((slot - t) % roomCount + roomCount) % roomCount;
+        if (roomCount > 1 && idx === 0) continue;
+        target = idx;
+        break;
+      }
+      if (target < 0) target = 0;
+    }
+    (locByRoom[target] as string[]).push(g);
+    hasGadget.add(target);
+    slot = (target - 1 + roomCount) % roomCount;
+  }
+  otherLocs.forEach((loc, i) => (locByRoom[i % roomCount] as string[]).push(loc));
 
   // --- compose rooms ---
   const rooms: RoomDescriptor[] = [];
@@ -325,7 +370,7 @@ export function composeArea(p: AreaComposeParams): AreaDescriptor {
     }
   }
 
-  return {
+  const area: AreaDescriptor = {
     areaId: p.areaId,
     regionId: p.regionId,
     role: p.role,
@@ -337,7 +382,13 @@ export function composeArea(p: AreaComposeParams): AreaDescriptor {
     bounds: boxUnionAll(rooms.map((r) => r.bounds)),
     styleId: p.styleId,
     seed: String(p.seed),
+    biome: p.registry.defaultBiome.id,
   };
+
+  // Phase D: optional volumetric geometry pass (SDF → dual contour → modular kit).
+  if (p.geometry) buildAreaGeometry(area, p.registry, `${p.seed}:area${p.areaId}`);
+
+  return area;
 }
 
 // --- helpers ---

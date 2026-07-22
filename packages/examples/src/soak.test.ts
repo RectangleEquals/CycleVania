@@ -62,7 +62,7 @@ describe("demo soak", () => {
         }
       }
     }
-  });
+  }, 30000);
 
   it("capstone areas produce wave-lockdown arena rooms", () => {
     const reg = demoRegistry();

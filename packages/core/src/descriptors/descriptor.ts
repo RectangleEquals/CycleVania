@@ -9,6 +9,7 @@ import type { Capability, Rule } from "../logic/index.js";
 import type { ConnectorKind, RoomKind, Traversal } from "../types.js";
 import type { Socket } from "../spatial/sockets.js";
 import type { Coord } from "../spatial/grid.js";
+import type { GeneratedKit, PieceInstance, OccupancyData, DressingAnchor } from "./geometry.js";
 
 /** Something placed into a cell that isn't structural geometry. */
 export interface ContentAnchor {
@@ -47,10 +48,16 @@ export interface RoomDescriptor {
   origin: Vec3; // world min corner
   footprint: Coord; // extent in fine cells
   cells: CellDescriptor[];
+  /** Phase D: generated grid-aligned piece instances (references AreaDescriptor.kit). */
+  instances?: PieceInstance[];
   sockets: Socket[];
   bounds: WorldBox;
   styleId: string;
   seed: string;
+  /** Room biome (for kit piece materials + dressing). */
+  biome?: string;
+  /** Open-top outdoor space (sky, cliff walls) rather than an enclosed room. */
+  outdoor?: boolean;
   /** Wave-lockdown room: exits seal until `waves` enemy waves are cleared. */
   arena?: { waves: number };
 }
@@ -64,6 +71,8 @@ export interface ConnectorPlan {
   toSocket: string;
   kind: ConnectorKind;
   cells: CellDescriptor[];
+  /** Phase D: generated grid-aligned piece instances (references AreaDescriptor.kit). */
+  instances?: PieceInstance[];
   /** World min corner the corridor `cells` are relative to (when geometry is composed). */
   origin?: Vec3;
   /** Fine cell size the corridor `cells` use. */
@@ -99,6 +108,16 @@ export interface AreaDescriptor {
   bounds: WorldBox;
   styleId: string;
   seed: string;
+  /** Phase D: the area's dedup'd generated geometry kit (rooms/connectors instance it). */
+  kit?: GeneratedKit;
+  /** Phase D: flat placement list for the whole area (references `kit`). */
+  instances?: PieceInstance[];
+  /** Phase D: serializable occupancy/collision grid (game reuses for player collision). */
+  occupancy?: OccupancyData;
+  /** Phase D: naturalization dressing anchors (water/stalactite/foliage/rubble). */
+  dressing?: DressingAnchor[];
+  /** Dominant biome for the area. */
+  biome?: string;
 }
 
 /** A directed link between two areas (carries the region edge's gate). */

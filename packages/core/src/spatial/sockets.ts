@@ -6,9 +6,24 @@
  */
 
 import type { Vec3 } from "../math/vec.js";
+import { cross, normalize } from "../math/vec.js";
 import type { Rule } from "../logic/index.js";
 import type { CellFace, SocketKind, Traversal } from "../types.js";
 import type { Coord } from "./grid.js";
+
+/** An orthonormal aperture frame (organic sockets angle/curve/exit ceilings). */
+export interface SocketBasis {
+  right: Vec3;
+  up: Vec3;
+  forward: Vec3; // == Socket.dir (outward)
+}
+
+/** Extra generation semantics an organic socket carries (Gemini L3). */
+export interface SocketMeta {
+  biome?: string;
+  size?: string; // "small" | "wide" | "grand" | …
+  type?: string; // "MorphBall_Slot" | "cliff-seam" | …
+}
 
 export interface Socket {
   id: string;
@@ -26,6 +41,22 @@ export interface Socket {
   gate?: Rule;
   /** One-way aperture (drop): forward only. */
   oneWay?: boolean;
+  /** Full organic transform frame (arbitrary angle/curve, 5°-snapped by the composer). */
+  basis?: SocketBasis;
+  /** Aperture radius (for spline-connector carve + hull socket carve). */
+  radius?: number;
+  /** Generation metadata (biome/size/type). */
+  meta?: SocketMeta;
+}
+
+/** Build an orthonormal aperture frame from an outward direction (+ optional up hint). */
+export function socketBasis(dir: Vec3, upHint: Vec3 = [0, 0, 1]): SocketBasis {
+  const forward = normalize(dir);
+  let up = upHint;
+  if (Math.abs(forward[0] * up[0] + forward[1] * up[1] + forward[2] * up[2]) > 0.95) up = [1, 0, 0]; // avoid parallel
+  const right = normalize(cross(forward, up));
+  const trueUp = normalize(cross(right, forward));
+  return { right, up: trueUp, forward };
 }
 
 /** Outward unit normal for a boundary face. */

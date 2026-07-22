@@ -35,6 +35,13 @@ export interface CapabilityProfileBias {
 export interface CapabilityProfile {
   grants?: CapabilityProfileGrants;
   bias?: CapabilityProfileBias;
+  /**
+   * Relative player-power of this capability (≈0 lateral/minor … 1 world-reshaping).
+   * Drives the gadget economy's weighted, depth-scheduled draw: early reaches favour
+   * low-power/lateral gadgets, later reaches allow higher-power/vertical ones. When
+   * omitted, a default is derived from `bias.zWeight` + grant magnitude.
+   */
+  power?: number;
 }
 
 /** What `/use <item>` does in the simulator (data-driven). */

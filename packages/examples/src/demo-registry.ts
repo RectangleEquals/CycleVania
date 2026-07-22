@@ -10,6 +10,7 @@ import { gadgetCatalog, lootCatalog } from "./gadget-catalog.js";
 import { lockCatalog } from "./lock-catalog.js";
 import { demoGeometryKit } from "./demo-geometry-kit.js";
 import { demoTemplate } from "./demo-template.js";
+import { demoHullArchetypes, demoBiomes } from "./demo-biomes.js";
 
 export const demoStyles = {
   "sunken-parish": { id: "sunken-parish", biome: "gothic-flooded", tags: ["gothic", "flooded"] },
@@ -23,6 +24,10 @@ export function demoRegistry(): Registry {
     items: { catalog: [...gadgetCatalog, ...lootCatalog], startCaps: [] },
     locks: lockCatalog,
     styles: demoStyles,
+    // Phase D geometry backend: hybrid hull archetypes + biome content-packs + landmark.
+    hullArchetypes: demoHullArchetypes,
+    biomes: demoBiomes,
+    gadgetEconomy: { min: 1, max: 3 },
   });
 }
 

@@ -29,6 +29,8 @@ export interface ComposeReachOptions {
   /** Progression items to place THIS reach (default: the registry's full set). Keep this small — a
    *  reach should introduce a handful of gadgets, not the whole catalog, or the hub floods. */
   gadgets?: readonly ProgressionItem[];
+  /** Run the volumetric geometry pass per area (SDF → dual contour → modular kit). */
+  geometry?: boolean;
 }
 
 export interface ReachResult {
@@ -107,6 +109,19 @@ export function composeReach(ctx: ComposeContext, opts: ComposeReachOptions): Re
   const itemCap = new Map<string, Capability | undefined>();
   for (const it of reach.items) itemCap.set(it.id, it.grants);
 
+  // world-shaping feedback: aggregate the affordance bias of THIS reach's placed gadgets,
+  // so the environment follows the progression (vertical gadgets → more vertical areas).
+  let zWeight = 0;
+  let loopWeight = 0;
+  for (const it of reach.items) {
+    const b = ctx.registry.items.defs.get(it.id)?.profile?.bias;
+    if (b) {
+      zWeight += b.zWeight ?? 0;
+      loopWeight += b.loopWeight ?? 0;
+    }
+  }
+  const reachBias = { zWeight, loopWeight };
+
   // portals + area links from region edges
   const portalsByRegion = new Map<RegionId, PortalRequest[]>();
   const pushPortal = (r: RegionId, pr: PortalRequest): void => {
@@ -149,6 +164,8 @@ export function composeReach(ctx: ComposeContext, opts: ComposeReachOptions): Re
         locations,
         placement,
         itemCap,
+        bias: reachBias,
+        ...(opts.geometry ? { geometry: true } : {}),
       }),
     );
   }

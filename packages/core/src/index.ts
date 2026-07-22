@@ -49,7 +49,7 @@ export { generateReach } from "./template/index.js";
 export type { ReachTemplate, TemplateNode, BranchSpec, BranchEntrance, RegionRole, GenerateReachParams, GeneratedReach, ReachMeta } from "./template/index.js";
 
 // --- registries (data injection) ---
-export { defineRegistry, RULE_DSL, complexityFor, DEFAULT_COMPLEXITY, piecesForRole, kitRoles } from "./registries/index.js";
+export { defineRegistry, RULE_DSL, complexityFor, DEFAULT_COMPLEXITY, piecesForRole, kitRoles, DEFAULT_HULL_ARCHETYPES, DEFAULT_BIOME, DEFAULT_FIDELITY } from "./registries/index.js";
 export type {
   Registry,
   RegistryInput,
@@ -75,18 +75,31 @@ export type {
   RoomArchetype,
   ConnectorArchetype,
   StyleDef,
+  HullArchetypeDef,
+  HullArchetypeRegistry,
+  BiomePack,
+  BiomeRegistry,
+  FidelityConfig,
 } from "./registries/index.js";
 
 // --- spatial primitives ---
-export { cellCenter, cellMin, coordKey, classifyCell, boundaryFaces, faceNormal, oppositeFace, snapAngle, anglePalette, Occupancy } from "./spatial/index.js";
-export type { Coord, CellRole, CellClass, Socket } from "./spatial/index.js";
+export { cellCenter, cellMin, coordKey, classifyCell, boundaryFaces, faceNormal, oppositeFace, socketBasis, snapAngle, anglePalette, Occupancy } from "./spatial/index.js";
+export type { Coord, CellRole, CellClass, Socket, SocketBasis, SocketMeta } from "./spatial/index.js";
+
+// --- volume (SDF) + geometry (dual contouring, kit, collision) + layout ---
+export { sphere, ellipsoid, box, roundBox, capsule, plane, union, subtract, intersect, smoothUnion, displace, sdfNormal, hull, HULL_ARCHETYPES, catmullRom, splineTube, connectorTube, composeAreaField } from "./volume/index.js";
+export type { Sdf, HullParams, HullArchetype, AreaField } from "./volume/index.js";
+export { quantizeNormal, isQuantized, dualContour, meshToKit, occupancyGrid, cellOf, isSolidAt, collideSphere, dressArea } from "./geometry/index.js";
+export type { Mesh, GeneratedKit, GeneratedPiece, PieceInstance, PieceMeta, SurfaceKind, KitOptions, OccupancyGrid, DressingAnchor } from "./geometry/index.js";
+export { forceLayout } from "./layout/index.js";
+export type { LayoutNode, LayoutEdge, LayoutOptions, LayoutResult } from "./layout/index.js";
 
 // --- abstract descriptors (renderer-free output) ---
 export { assembleWorld } from "./descriptors/index.js";
-export type { ContentAnchor, GadgetPlacement, CellDescriptor, RoomDescriptor, ConnectorPlan, PortalSpec, AreaDescriptor, AreaLink, ReachDescriptor, WorldDescriptor } from "./descriptors/index.js";
+export type { ContentAnchor, GadgetPlacement, CellDescriptor, RoomDescriptor, ConnectorPlan, PortalSpec, AreaDescriptor, AreaLink, ReachDescriptor, WorldDescriptor, OccupancyData } from "./descriptors/index.js";
 
 // --- composers ---
-export { composeRoom, composeArena, composeArea, composeReach, composeWorld, corridorGeometry } from "./composers/index.js";
+export { composeRoom, composeArena, composeArea, composeReach, composeWorld, corridorGeometry, reachGadgets, selectReachGadgets, itemPower, buildAreaGeometry } from "./composers/index.js";
 export type { ComposeContext, RoomComposeParams, RoomShape, SocketRequest, ContentRequest, AreaComposeParams, PortalRequest, ComposeReachOptions, ReachResult, ComposeWorldOptions, WorldResult, ConnectorGeom } from "./composers/index.js";
 
 // --- async orchestration ---

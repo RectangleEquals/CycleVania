@@ -15,6 +15,9 @@ import type { RoomArchetype } from "./room-archetypes.js";
 import type { ConnectorArchetype } from "./connector-archetypes.js";
 import type { StyleDef } from "./style-registry.js";
 import { DEFAULT_COMPLEXITY, type ComplexityConfig } from "./complexity-config.js";
+import { DEFAULT_HULL_ARCHETYPES, type HullArchetypeRegistry } from "./hull-archetypes.js";
+import { DEFAULT_BIOME, type BiomePack, type BiomeRegistry } from "./biome-pack.js";
+import { DEFAULT_FIDELITY, type FidelityConfig } from "./fidelity-config.js";
 
 export interface RegistryInput {
   grid: GridConfig;
@@ -25,6 +28,12 @@ export interface RegistryInput {
   connectors?: Record<string, ConnectorArchetype>;
   styles?: Record<string, StyleDef>;
   complexity?: ComplexityConfig;
+  /** Phase D geometry backend (all optional; sensible defaults supplied). */
+  hullArchetypes?: HullArchetypeRegistry;
+  biomes?: BiomeRegistry;
+  fidelity?: FidelityConfig;
+  /** Per-reach gadget economy: how many gadgets to place (min 1). */
+  gadgetEconomy?: { min: number; max: number };
 }
 
 export interface Registry {
@@ -44,6 +53,11 @@ export interface Registry {
   connectors: Map<string, ConnectorArchetype>;
   styles: Map<string, StyleDef>;
   complexity: ComplexityConfig;
+  hullArchetypes: HullArchetypeRegistry;
+  biomes: BiomeRegistry;
+  defaultBiome: BiomePack;
+  fidelity: FidelityConfig;
+  gadgetEconomy: { min: number; max: number };
 }
 
 const toMap = <T>(o?: Record<string, T>): Map<string, T> => new Map(Object.entries(o ?? {}));
@@ -86,5 +100,10 @@ export function defineRegistry(input: RegistryInput): Registry {
     connectors: toMap(input.connectors),
     styles: toMap(input.styles),
     complexity: input.complexity ?? DEFAULT_COMPLEXITY,
+    hullArchetypes: input.hullArchetypes ?? DEFAULT_HULL_ARCHETYPES,
+    biomes: input.biomes ?? { default: DEFAULT_BIOME },
+    defaultBiome: input.biomes ? (Object.values(input.biomes)[0] ?? DEFAULT_BIOME) : DEFAULT_BIOME,
+    fidelity: input.fidelity ?? DEFAULT_FIDELITY,
+    gadgetEconomy: input.gadgetEconomy ?? { min: 1, max: 3 },
   };
 }

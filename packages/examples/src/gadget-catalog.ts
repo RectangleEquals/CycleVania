@@ -18,7 +18,7 @@ export const gadgetCatalog: ItemDef[] = [
     class: "progression",
     grants: "grapple",
     use: { grants: "grapple", charges: 3 },
-    profile: { grants: { gapSpan: 4, reachUp: 3 }, bias: { loopWeight: 0.2, enableTags: ["anchor"] } },
+    profile: { grants: { gapSpan: 4, reachUp: 3 }, bias: { loopWeight: 0.2, enableTags: ["anchor"] }, power: 0.4 },
   },
   {
     id: "gravemoth-filament",
@@ -34,7 +34,8 @@ export const gadgetCatalog: ItemDef[] = [
     class: "progression",
     grants: "leap",
     use: { grants: "leap", charges: 2 },
-    profile: { grants: { reachUp: 2, gapSpan: 2 }, bias: { zWeight: 0.4 } },
+    // double-jump: makes the WHOLE world more vertical → high power, unlikely (not impossible) early
+    profile: { grants: { reachUp: 2, gapSpan: 2 }, bias: { zWeight: 0.4 }, power: 0.7 },
   },
   {
     id: "wend-stone",
@@ -42,7 +43,7 @@ export const gadgetCatalog: ItemDef[] = [
     class: "progression",
     grants: "phase",
     use: { grants: "phase", charges: 2 },
-    profile: { grants: { throughMatter: true }, bias: { enableTags: ["lattice"] } },
+    profile: { grants: { throughMatter: true }, bias: { enableTags: ["lattice"] }, power: 0.75 },
   },
   {
     id: "waystone-beacon",
@@ -50,7 +51,7 @@ export const gadgetCatalog: ItemDef[] = [
     class: "progression",
     grants: "recall",
     use: { grants: "recall", charges: 1 },
-    profile: { bias: { loopWeight: 0.5 } },
+    profile: { bias: { loopWeight: 0.5 }, power: 0.72 },
   },
   {
     id: "antipode-governor",
@@ -58,7 +59,8 @@ export const gadgetCatalog: ItemDef[] = [
     class: "progression",
     grants: "invert",
     use: { grants: "invert", charges: 2 },
-    profile: { grants: { massDelta: -1 }, bias: { zWeight: 0.5, enableTags: ["ceiling"] } },
+    // flip gravity: the most world-reshaping traversal verb → highest power
+    profile: { grants: { massDelta: -1 }, bias: { zWeight: 0.5, enableTags: ["ceiling"] }, power: 0.85 },
   },
   {
     id: "lodestar-coil",
@@ -66,7 +68,7 @@ export const gadgetCatalog: ItemDef[] = [
     class: "progression",
     grants: "magnet",
     use: { grants: "magnet", charges: 3 },
-    profile: { grants: { gapSpan: 3 }, bias: { enableTags: ["ferric"] } },
+    profile: { grants: { gapSpan: 3 }, bias: { enableTags: ["ferric"] }, power: 0.35 },
   },
   {
     id: "anchorites-burden",
@@ -130,7 +132,7 @@ export const gadgetCatalog: ItemDef[] = [
     class: "progression",
     grants: "reveal",
     use: { grants: "reveal", reveals: "hidden", charges: 4 },
-    profile: { grants: { revealHidden: true }, bias: { enableTags: ["hidden", "ghost-platform"] } },
+    profile: { grants: { revealHidden: true }, bias: { enableTags: ["hidden", "ghost-platform"] }, power: 0.68 },
   },
   {
     id: "glossolith",
@@ -138,7 +140,7 @@ export const gadgetCatalog: ItemDef[] = [
     class: "progression",
     grants: "translate",
     use: { grants: "translate" },
-    profile: { bias: { enableTags: ["glyph", "cipher"] } },
+    profile: { bias: { enableTags: ["glyph", "cipher"] }, power: 0.2 },
   },
   {
     id: "aegis-thurible",
@@ -178,7 +180,7 @@ export const gadgetCatalog: ItemDef[] = [
     class: "progression",
     grants: "small-form",
     use: { grants: "small-form" },
-    profile: { grants: { throughMatter: false }, bias: { enableTags: ["crawlspace", "vent"] } },
+    profile: { grants: { throughMatter: false }, bias: { enableTags: ["crawlspace", "vent"] }, power: 0.3 },
   },
   {
     id: "mirrorwright-oculus",
