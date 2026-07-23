@@ -3,20 +3,20 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "CycleVania 3D debug inspector + interactive playtest simulator (dev tool; not part of the published core).",
+  "description": "CycleVania dataset workbench — per-layer synced views, real-geometry rendering, Play mode, data editor, seed lab, and reproduction bundles.",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "preview": "vite preview",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@cyclevania/core": "workspace:*",
-    "@cyclevania/examples": "workspace:*",
-    "three": "^0.169.0"
+    "@cyclevania/examples": "workspace:*"
   },
   "devDependencies": {
-    "@types/three": "^0.169.0",
-    "vite": "^5.4.0",
-    "typescript": "^5.7.0"
+    "three": "^0.170.0",
+    "@types/three": "^0.170.0",
+    "vite": "^6.0.0"
   }
 }

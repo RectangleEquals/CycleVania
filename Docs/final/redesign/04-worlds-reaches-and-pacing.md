@@ -276,9 +276,12 @@ strictly **before** `validateGraph`, or the validated graph wouldn't be the one 
 1. Validate the `ReachRequest` (legal slot; modifiers legal at this depth; exclusion tags).
 2. Draw/resolve the template (`request.template` ?? pool draw).
 3. Compute `FinalCeiling` (all four terms).
-4. Interpret template + structure nudges → concrete `MissionGraph`; draw `AreaCount`.
-5. `validateGraph(graph, startHeld ∪ thisReachItems)`.
-6. Select items & puzzles (schedulers + virtual-schedule bias + pity + sweep).
+4. Select items & puzzles (schedulers + virtual-schedule bias + pity + sweep) — selection comes
+   **before** interpretation because gate rules must reference the selected content.
+5. Interpret template + structure nudges → concrete `MissionGraph`, binding gate slots to rules
+   drawn from the selected capabilities/puzzle instances (teach→test→combine pacing,
+   [06](./06-puzzles-locks-and-recipes.md)); draw `AreaCount`.
+6. `validateGraph(graph, startHeld ∪ thisReachItems)`.
 7. `assumedFill` → placement. Solvability now constructed; nothing downstream may alter it.
 8. Hand off to L2 with: the graph, the placement, the budget, the biome plan, and the aggregated
    capability buckets ([05](./05-capabilities-and-facets.md)).

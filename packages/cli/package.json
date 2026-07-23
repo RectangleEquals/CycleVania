@@ -1,0 +1,17 @@
+{
+  "name": "@cyclevania/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "CycleVania headless CLI: generate / validate / soak / report / diff / export-diagram over the public core API.",
+  "bin": { "cyclevania": "./src/main.ts" },
+  "main": "./src/main.ts",
+  "types": "./src/main.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@cyclevania/core": "workspace:*",
+    "@cyclevania/examples": "workspace:*"
+  }
+}

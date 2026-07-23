@@ -1,98 +1,136 @@
 import { describe, it, expect } from "vitest";
-import { defineRegistry } from "../registries/registry.js";
-import type { GeometryKit } from "../registries/geometry-kit.js";
-import type { ReachTemplate } from "../template/template.js";
-import { ruleCaps } from "../logic/index.js";
-import { composeReach } from "../composers/reach-composer.js";
-import { buildSimWorld, neighbors } from "./world.js";
-import { autosolve } from "./autosolve.js";
-import { initSim } from "./state.js";
+import { ALWAYS, have, CapSet } from "../logic/index.js";
+import type { CapabilityDef, GadgetDef } from "../capability/index.js";
+import { defineRegistry } from "../registries/index.js";
+import { worldFromRegistry } from "../world/index.js";
+import type { ReachTemplate, ReachTemplatePool } from "../template/index.js";
+import { buildSimWorld, type SimWorld } from "./world.js";
+import { initSim, cloneState, type SimState } from "./state.js";
 import { step } from "./reducer.js";
 import { parseCommand } from "./parser.js";
+import { autosolve } from "./autosolve.js";
 
-const KIT: GeometryKit = {
-  pieces: [
-    { id: "floor", role: "floor", snapAngles: [0], tags: [] },
-    { id: "ceil", role: "ceiling", snapAngles: [0], tags: [] },
-    { id: "wall", role: "wall", snapAngles: [0], tags: [] },
-    { id: "corner", role: "corner", snapAngles: [0], tags: [] },
-    { id: "door", role: "opening", snapAngles: [0], tags: [], socketCapable: true },
-  ],
-};
+const worldLit = (over: Partial<SimWorld> = {}): SimWorld => ({
+  start: "A",
+  terminal: "B",
+  startHeld: new CapSet(),
+  nodes: new Map([
+    ["A", { id: "A", role: "hub", locations: [] }],
+    ["B", { id: "B", role: "terminal", locations: [] }],
+  ]),
+  links: [{ from: "A", to: "B", rule: ALWAYS }],
+  items: new Map(),
+  flagSetters: new Map(),
+  puzzles: [],
+  spheres: [],
+  ...over,
+});
 
-const TEMPLATE: ReachTemplate = {
-  criticalPath: ["hub", "seg1", "seg2", "seg3", "seg4", "seg5", "capstone", "terminal"],
-  nodes: {
-    hub: { id: "hub", role: "hub", slots: { min: 3, max: 4 }, bootstrap: true },
-    seg1: { id: "seg1", role: "segment", slots: { min: 1, max: 2 } },
-    seg2: { id: "seg2", role: "segment", slots: { min: 1, max: 2 } },
-    seg3: { id: "seg3", role: "segment", slots: { min: 1, max: 2 } },
-    seg4: { id: "seg4", role: "segment", slots: { min: 1, max: 2 } },
-    seg5: { id: "seg5", role: "segment", slots: { min: 1, max: 2 } },
-    capstone: { id: "capstone", role: "capstone", slots: { min: 1, max: 1 } },
-    terminal: { id: "terminal", role: "terminal", slots: { min: 1, max: 1 } },
-  },
-  branches: [{ anchor: "any-segment", role: "vault", slots: { min: 1, max: 2 }, entrance: "single" }],
-  gating: { lockFraction: 0.5, compoundChance: 0.25, keepEntryOpen: true, keepExitOpen: true },
-  loops: { guaranteeAtLeastOne: true },
-};
+const canon = (s: SimState): string => JSON.stringify({ at: s.at, caps: s.held.capIds().sort(), collected: [...s.collected].sort(), visited: [...s.visited].sort() });
 
-function reg() {
-  return defineRegistry({
-    grid: { areaCellSize: 16, roomCellSize: 2, snap: "ps2" },
-    geometryKit: KIT,
-    items: {
-      catalog: [
-        { id: "skyhook", class: "progression", grants: "grapple", name: "The Ardent Skyhook" },
-        { id: "lantern", class: "progression", grants: "reveal", name: "The Wan Lantern" },
-        { id: "censer", class: "progression", grants: "leap", name: "Censer of the Second Wind" },
-      ],
-      startCaps: [],
-    },
-    locks: { gate: (r) => r.have("grapple") },
-    styles: { sunken: { id: "sunken" } },
+describe("reducer", () => {
+  it("is pure — step twice from a cloned state gives identical results", () => {
+    const w = worldLit();
+    const s = initSim(w);
+    const a = step(w, cloneState(s), { k: "move", to: "B" });
+    const b = step(w, cloneState(s), { k: "move", to: "B" });
+    expect(canon(a.state)).toBe(canon(b.state));
+    expect(a.message).toBe(b.message);
   });
-}
 
-describe("simulator", () => {
-  it("autosolve reaches the terminal for every seed (bot completes a Reach)", () => {
-    const registry = reg();
-    for (let s = 0; s < 200; s++) {
-      const world = buildSimWorld(composeReach({ registry, seed: `sim-${s}` }, { template: TEMPLATE }), registry);
-      const end = autosolve(world);
-      expect(world.terminalAreaId).not.toBeNull();
-      expect(end.visited.has(world.terminalAreaId as number)).toBe(true);
+  it("blocks a gated move with the full unmet set, then opens after taking the key", () => {
+    const w = worldLit({
+      nodes: new Map([
+        ["A", { id: "A", role: "hub", locations: [{ id: "L0", itemId: "keyitem" }] }],
+        ["B", { id: "B", role: "terminal", locations: [] }],
+      ]),
+      links: [{ from: "A", to: "B", rule: have("key") }],
+      items: new Map([["keyitem", { id: "keyitem", class: "progression", grants: ["key"] }]]),
+    });
+    let s = initSim(w);
+    const blocked = step(w, s, { k: "move", to: "B" });
+    expect(blocked.ok).toBe(false);
+    expect(blocked.message).toContain("key");
+    s = step(w, s, { k: "take" }).state;
+    const opened = step(w, s, { k: "move", to: "B" });
+    expect(opened.ok).toBe(true);
+    expect(opened.state.at).toBe("B");
+  });
+
+  it("follows a one-way link forward only", () => {
+    const w = worldLit({ links: [{ from: "A", to: "B", rule: ALWAYS, oneWay: true }] });
+    const forward = step(w, initSim(w), { k: "move", to: "B" });
+    expect(forward.ok).toBe(true);
+    // from B, A is not reachable (no reverse)
+    const back = step(w, forward.state, { k: "move", to: "A" });
+    expect(back.ok).toBe(false);
+  });
+
+  it("clears a volatile flag when leaving the region that set it", () => {
+    const w = worldLit();
+    const s = initSim(w);
+    s.held.addFlag("timed");
+    s.volatileFlags.set("timed", "A");
+    const after = step(w, s, { k: "move", to: "B" });
+    expect(after.state.held.hasFlag("timed")).toBe(false);
+    expect(after.state.volatileFlags.size).toBe(0);
+  });
+
+  it("see/why report open, blocked, and missing caps", () => {
+    const w = worldLit({ links: [{ from: "A", to: "B", rule: have("wings") }] });
+    const s = initSim(w);
+    expect(step(w, s, { k: "why", to: "B" }).message).toContain("wings");
+    expect(step(w, s, { k: "see" }).message).toContain("blocked");
+  });
+
+  it("parses slash commands", () => {
+    expect(parseCommand("/move X")).toEqual({ k: "move", to: "X" });
+    expect(parseCommand("/use skyhook")).toEqual({ k: "use", itemId: "skyhook" });
+    expect(parseCommand("/take")).toEqual({ k: "take" });
+    expect(parseCommand("/nonsense")).toBeUndefined();
+  });
+});
+
+describe("autosolve", () => {
+  const caps: CapabilityDef[] = [
+    { id: "jump", held: "granted", facets: [{ kind: "tag", tag: "j" }], powerWeight: () => 0.5 },
+    { id: "grapple", held: "granted", facets: [{ kind: "tag", tag: "g" }], powerWeight: () => 0.5 },
+  ];
+  const gadgets: GadgetDef[] = [{ id: "boots", grants: ["jump"] }, { id: "hook", grants: ["grapple"] }];
+  const template: ReachTemplate = {
+    id: "t",
+    criticalPath: ["hub", "s1", "gate1", "capstone", "terminal"],
+    nodes: {
+      hub: { role: "hub", slots: { min: 6, max: 6 } },
+      s1: { role: "segment", slots: { min: 1, max: 2 } },
+      gate1: { role: "gate", slots: { min: 1, max: 1 } },
+      capstone: { role: "capstone", slots: { min: 1, max: 1 } },
+      terminal: { role: "terminal", slots: { min: 0, max: 1 } },
+    },
+    branches: [],
+    gating: { lockFraction: 0.5, compoundChance: 0, keepEntryOpen: true, keepExitOpen: true },
+    loops: { guaranteeAtLeastOne: true, density: 0.2 },
+  };
+  const pool: ReachTemplatePool = { poolAt: () => [{ template, weight: 1 }] };
+  const reg = defineRegistry({ gadgets: { capabilities: caps, gadgets }, gadgetEconomy: { min: 2, max: 2 }, templatePool: pool });
+
+  it("reaches the terminal for 100 seeds (matching isSolvable)", () => {
+    for (let seed = 0; seed < 100; seed++) {
+      const w = worldFromRegistry(reg, `sim-${seed}`);
+      const rr = w.requestReach({ reachIndex: 0, chosenModifiers: [] });
+      const result = autosolve(buildSimWorld(rr)); // throws if stuck
+      expect(result.success).toBe(true);
+      expect(Number.isFinite(result.movesBetweenRewards)).toBe(true);
     }
   });
 
-  it("parses REPL commands", () => {
-    expect(parseCommand("/goto 7")).toEqual({ k: "goto", areaId: 7 });
-    expect(parseCommand("use skyhook")).toEqual({ k: "use", itemId: "skyhook" });
-    expect(parseCommand("/take")).toEqual({ k: "take" });
-    expect(parseCommand("/give reveal")).toEqual({ k: "give", cap: "reveal" });
-    expect(() => parseCommand("/frobnicate")).toThrow();
-  });
-
-  it("step: giving a gate's caps unblocks an adjacent move", () => {
-    const registry = reg();
-    const world = buildSimWorld(composeReach({ registry, seed: "walk" }, { template: TEMPLATE }), registry);
-    let st = initSim(world);
-    const opts = neighbors(world, st.areaId, st.held);
-    expect(opts.length).toBeGreaterThan(0);
-    const target = opts[0]!;
-    for (const cap of ruleCaps(target.link.requires)) st = step(world, st, { k: "give", cap }).state;
-    const res = step(world, st, { k: "goto", areaId: target.to });
-    expect(res.ok).toBe(true);
-    expect(res.state.areaId).toBe(target.to);
-  });
-
-  it("step is pure (does not mutate the input state)", () => {
-    const registry = reg();
-    const world = buildSimWorld(composeReach({ registry, seed: "pure" }, { template: TEMPLATE }), registry);
-    const st = initSim(world);
-    const before = st.areaId;
-    step(world, st, { k: "give", cap: "grapple" });
-    expect(st.held.has("grapple")).toBe(false); // original untouched
-    expect(st.areaId).toBe(before);
+  it("is unaffected by geometry being enabled", () => {
+    const wOff = worldFromRegistry(reg, "geo-same");
+    const wOn = worldFromRegistry(reg, "geo-same", { geometry: true });
+    const off = autosolve(buildSimWorld(wOff.requestReach({ reachIndex: 0, chosenModifiers: [] })));
+    const on = autosolve(buildSimWorld(wOn.requestReach({ reachIndex: 0, chosenModifiers: [] })));
+    expect(off.success).toBe(true);
+    expect(on.success).toBe(true);
+    expect(off.state.collected.size).toBe(on.state.collected.size);
   });
 });

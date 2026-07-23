@@ -1,14 +1,15 @@
 /**
  * Reachability — fixed-point BFS over region edges, following an edge only when
- * its access rule is satisfied by the held state. Directed edges mean a one-way
- * drop is naturally handled (no reverse edge is followed).
+ * its rule is satisfied. Directed edges handle one-way drops naturally (no
+ * reverse edge is followed). Every returned collection is in deterministic
+ * (graph insertion) order.
  */
 
 import { evalRule, type Held } from "../logic/index.js";
-import type { LocationId, RegionGraph, RegionId } from "./region-graph.js";
+import type { LocationId, MissionGraph, RegionId } from "./mission-graph.js";
 
-/** Regions reachable from `start` given held state (fixed-point BFS). */
-export function reachableRegions(g: RegionGraph, held: Held): Set<RegionId> {
+/** Regions reachable from `start` given held state (fixed-point). */
+export function reachableRegions(g: MissionGraph, held: Held): Set<RegionId> {
   const reached = new Set<RegionId>([g.start]);
   let changed = true;
   while (changed) {
@@ -23,10 +24,15 @@ export function reachableRegions(g: RegionGraph, held: Held): Set<RegionId> {
   return reached;
 }
 
-/** Locations whose region is reachable given held state. */
-export function reachableLocations(g: RegionGraph, held: Held): Set<LocationId> {
+/**
+ * Locations reachable given held state: their region is reachable AND their own
+ * gate (if any) passes. Returned in `graph.locations` array order.
+ */
+export function reachableLocations(g: MissionGraph, held: Held): LocationId[] {
   const rr = reachableRegions(g, held);
-  const out = new Set<LocationId>();
-  for (const [loc, reg] of g.locations) if (rr.has(reg)) out.add(loc);
+  const out: LocationId[] = [];
+  for (const loc of g.locations) {
+    if (rr.has(loc.region) && (loc.gate === undefined || evalRule(loc.gate, held))) out.push(loc.id);
+  }
   return out;
 }

@@ -18,6 +18,9 @@
 | Virtual-schedule purity | `computeVirtualSchedule` repeated → identical; consulting it never perturbs real generation |
 | Callback purity (double-run) | full generation twice in-process with the same registry object → identical (catches impure host callbacks in shipped presets) |
 | CI grep | `Math\.random` / `Math\.(sin|cos|tan|atan)` absent from `core/src` |
+| Diagnostics purity | generation under a trace-collecting sink vs. the silent sink → byte-identical output; a throwing sink never corrupts a run |
+| Progress monotonicity | `GenProgress.fraction` non-decreasing, ends at 1; async sliced run byte-equals inline (incl. intra-finish slab slicing) |
+| Bundle round-trip | export → import → regenerate byte-identical (Inspector and CLI paths both) |
 
 ### Solvability & logic ([03](./03-mission-graph.md), [04](./04-worlds-reaches-and-pacing.md))
 

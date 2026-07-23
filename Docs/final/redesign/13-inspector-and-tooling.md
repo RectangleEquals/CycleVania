@@ -72,6 +72,28 @@ registry ([12](./12-orchestration-and-host-integration.md) table), with:
 - **Seed lab** — pin a seed, browse neighbors, A/B two seeds side-by-side (world diff: graph
   diff, placement diff, autosolve-log pacing diff).
 
+### The diagnostics panel — warnings and errors, visually
+
+The Inspector routes CycleVania's diagnostics channel ([12](./12-orchestration-and-host-integration.md))
+into a dedicated, always-reachable panel: every warning and error from the last generation
+(registry validation issues, recorded relaxations, budget pressure, res clamping), each with its
+stable code, human message, and a **click-to-navigate path** — clicking `skeleton.junction-inserted
+@ reach0/area:r2` selects that Area in the Skeleton view. Severity badges surface on the top bar
+(a warnings count you can't miss), and the panel filters by level and by generation phase. The
+verbosity dial (`DiagnosticsConfig.level`) is in the dial panel like everything else — turning it
+to `debug`/`trace` is how a CycleVania developer watches the generator think without touching a
+debugger.
+
+### The default progress display
+
+Any async generation the Inspector triggers (regenerate, a Reach request, a preset switch) shows
+a **default progress overlay** built on the structured progress reports from
+[12](./12-orchestration-and-host-integration.md): an overall bar (monotonic `fraction`), the
+current phase label ("Meshing Area 3/5"), a per-phase sub-bar, elapsed time, and the derived
+remaining-time estimate. It is deliberately a *reasonable default* — the same `GenProgress`
+stream a host consumes for its own loading screen, rendered plainly — so what the Inspector
+shows is exactly what a host can show.
+
 ### Reproduction bundles — the no-guesswork contract
 
 One button: **Export bundle** — a single JSON file containing the registry (full data), every
@@ -81,6 +103,29 @@ displayed world byte-identically — the fingerprint check tells you immediately
 why ([02](./02-determinism.md), "what can legitimately change a world"). Bundles are the unit of
 sharing between designers, bug reports, and host integration: "use this bundle" replaces every
 "what settings were you on?" conversation.
+
+### Import is a first-class peer of export
+
+Everything exportable is importable — **from actual files, not just a preset menu**. The
+Inspector accepts, via both a file picker and viewport drag-and-drop:
+
+- **Full reproduction bundles** — load registry + dials + seed + request log, regenerate, and
+  show the "reproduction verified" badge (or the explanatory fingerprint-mismatch panel: what
+  differs — data, callbacks/revision, or engine version — and what that means, per
+  [02](./02-determinism.md)).
+- **Standalone dataset files** — a registry (or any single catalog/config slice: just a gadget
+  catalog, just a biome pack, just a dial snapshot) exported from the data editor. Partial
+  imports merge into the current working dataset with a preview diff ("this replaces your
+  puzzle catalog, 14 entries → 21") and run live validation before applying — an import that
+  would produce a `GenError` is shown as errors-in-place, never half-applied.
+- **World descriptors** — a previously generated world JSON opens read-only in every view (no
+  regeneration needed), which is how a collaborator inspects a bug report's world without the
+  producing dataset.
+
+The CLI mirrors this: every `<bundle>` argument accepts a bundle **file path** (or a
+module-reference bundle for callback-bearing registries), and `validate`/`report`/`diff` accept
+standalone dataset and descriptor files too. Export and import are symmetric round-trips by
+test: export → import → regenerate must be byte-identical.
 
 ## The CLI (`@cyclevania/cli`)
 
@@ -97,6 +142,11 @@ For CI, scripting, and hosts who never open the Inspector:
 
 The report and diagrams are generated **from descriptors**, not from a parallel model — whatever
 ships in output is what gets drawn, so visuals can never lie.
+
+Every subcommand takes `--log-level <error|warn|info|debug|trace>` (default `warn`), routing the
+same diagnostics channel the Inspector displays to stderr with stable codes — grep-able CI
+output and the CycleVania-debugging workflow in one flag. Long-running commands (`generate
+--geometry`, `soak`) render the `GenProgress` stream as a terminal progress line.
 
 ## Verification workflow note (for CycleVania's own development)
 

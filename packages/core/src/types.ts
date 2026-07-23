@@ -1,39 +1,13 @@
 /**
- * Shared primitive type aliases used across composers, registries and spatial.
- * Kept dependency-free so any module can import them without cycles.
+ * Cross-cutting shared type aliases used across layers. Kept tiny and dependency-
+ * free so any module can import them without a cycle.
  */
 
-/** How a socket/edge is traversed — walk today, the rest as the game supports them. */
-export type Traversal = "walk" | "climb" | "crawl" | "drop" | "open" | "ladder" | "rope" | "vertical";
+/** How a connection/socket is crossed. `drop` implies one-way unless re-opened. */
+export type Traversal = "walk" | "climb" | "crawl" | "drop" | "swim" | "vertical";
 
-/** Geometry snap policy: PS2-era angle palette by default, or arbitrary. */
-export type SnapPolicy = "ps2" | "free";
+/** Space kinds decided at L2, realized at L3. */
+export type SpaceKind = "room" | "outdoor" | "connector";
 
-/** How a connector between two sockets is shaped. */
-export type ConnectorKind = "straight" | "curved" | "ramp45" | "open" | "vertical" | "snake";
-
-/** A face (or the interior) of a subdivided grid cell. */
-export type CellFace = "px" | "nx" | "py" | "ny" | "pz" | "nz" | "interior";
-
-/** The kind of aperture a socket is (not always a door). */
-export type SocketKind =
-  | "arch"
-  | "cave-mouth"
-  | "open"
-  | "threshold"
-  | "crawlspace"
-  | "climb-face"
-  | "drop-hatch"
-  | "vent";
-
-/** What kind of space a room realizes. */
-export type RoomKind =
-  | "indoor"
-  | "outdoor"
-  | "arena"
-  | "vault"
-  | "boss-chamber"
-  | "hub"
-  | "junction"
-  | "shrine"
-  | "secret";
+/** Local surface classification from an outward normal (L3/L4 share this). */
+export type SurfaceKind = "floor" | "wall" | "ceiling" | "slope" | "overhang";

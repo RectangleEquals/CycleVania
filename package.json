@@ -4,14 +4,19 @@
   "private": true,
   "type": "module",
   "description": "Deterministic, renderer-free, data-driven procgen for co-op metroidvanias (cyclic dungeon generation + sockets + Archipelago-style solvability).",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "typecheck": "pnpm -r --parallel typecheck",
     "test": "vitest run",
     "test:watch": "vitest",
+    "cyclevania": "tsx packages/cli/src/main.ts",
     "inspector": "pnpm --filter @cyclevania/inspector dev"
   },
   "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.23.1",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"
   }

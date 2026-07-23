@@ -222,12 +222,15 @@ interface BranchSpec {
   decision, typically biased by biome.
 - `terminal` — the hand-off (a `ReachPortal` endpoint, [04](./04-worlds-reaches-and-pacing.md)).
 
-**Interpretation** (`interpretTemplate(template, dials, rng): MissionGraph`) proceeds: instantiate
-nodes → wire the spine → hang branches (probabilities nudged by any modifier `dials.structure`,
-[04](./04-worlds-reaches-and-pacing.md)) → gate `lockFraction` of spine edges (a `gate` node always
-locks its entrance; entry/exit respect `keepEntryOpen`/`keepExitOpen`) → close loops (the
-guarantee, then `density`-driven extra attempts) → allocate Location slots per node → then
-`validateGraph` + `assumedFill`. Any failure throws.
+**Interpretation** (`interpretTemplate(template, selectedContent, dials, rng): MissionGraph`)
+proceeds: instantiate nodes → wire the spine → hang branches (probabilities nudged by any modifier
+`dials.structure`, [04](./04-worlds-reaches-and-pacing.md)) → gate `lockFraction` of spine edges,
+**binding each gate's rule from the Reach's already-selected content** (capability locks and Puzzle
+instances chosen in the selection step that precedes interpretation — see the pipeline order in
+[04](./04-worlds-reaches-and-pacing.md); a `gate` node always locks its entrance; entry/exit
+respect `keepEntryOpen`/`keepExitOpen`) → close loops (the guarantee, then `density`-driven extra
+attempts) → allocate Location slots per node → then `validateGraph` + `assumedFill`. Any failure
+throws.
 
 ### `ReachTemplatePool` — templates are drawn, not fixed
 

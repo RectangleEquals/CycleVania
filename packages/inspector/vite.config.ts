@@ -1,11 +1,9 @@
 import { defineConfig } from "vite";
 
-// The workspace libraries ship TypeScript source (main → ./src/index.ts). Exclude
-// them from dep pre-bundling so Vite processes them from source (resolving the
-// `.js` import specifiers to their `.ts` siblings, same as Vitest does), and allow
-// serving files from the monorepo root.
+// The inspector consumes @cyclevania/core + /examples as TS source (workspace deps),
+// so no pre-build is needed; Vite resolves `.js` specifiers to their `.ts` sources.
 export default defineConfig({
-  optimizeDeps: { exclude: ["@cyclevania/core", "@cyclevania/examples"] },
-  server: { fs: { allow: ["../.."] }, host: true, allowedHosts: true, open: false },
-  build: { target: "es2022" },
+  root: ".",
+  build: { outDir: "dist", target: "es2022", chunkSizeWarningLimit: 2000 },
+  server: { port: 5173, strictPort: false },
 });

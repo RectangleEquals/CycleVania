@@ -2,7 +2,15 @@
  * Seeded, deterministic 3D gradient (Perlin-style) noise + fbm. Pure integer
  * hashing + arithmetic — no `Math.random`, no host trig — so it's identical on
  * every engine (used to warp SDF hulls into organic shapes).
+ *
+ * Interpolation is quintic smootherstep and gradients are the fixed 12-direction
+ * set, matching the determinism spec. Seeding uses integer lattice hashing rather
+ * than a permutation table — an equivalent, simpler construction with the same
+ * guarantees (seeded, deterministic, engine-identical). `noise3`/`fbm3v` are
+ * Vec3-tuple wrappers over the coordinate forms.
  */
+
+import type { Vec3 } from "./vec.js";
 
 const GRAD3: ReadonlyArray<readonly [number, number, number]> = [
   [1, 1, 0], [-1, 1, 0], [1, -1, 0], [-1, -1, 0],
@@ -27,7 +35,7 @@ function grad(ix: number, iy: number, iz: number, seed: number, dx: number, dy: 
 const fade = (t: number): number => t * t * t * (t * (t * 6 - 15) + 10);
 const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
 
-/** Gradient noise in ~[-1, 1]. */
+/** Gradient noise in ~[-1, 1] from separate coordinates. */
 export function gradNoise3(x: number, y: number, z: number, seed = 0): number {
   const xi = Math.floor(x);
   const yi = Math.floor(y);
@@ -53,7 +61,7 @@ export function gradNoise3(x: number, y: number, z: number, seed = 0): number {
   return lerp(lerp(x00, x10, v), lerp(x01, x11, v), w);
 }
 
-/** Fractal Brownian motion (summed octaves) in ~[-1, 1]. */
+/** Fractal Brownian motion (summed octaves) in ~[-1, 1] from separate coordinates. */
 export function fbm3(x: number, y: number, z: number, seed = 0, octaves = 4, lacunarity = 2, gain = 0.5): number {
   let amp = 0.5;
   let freq = 1;
@@ -66,4 +74,14 @@ export function fbm3(x: number, y: number, z: number, seed = 0, octaves = 4, lac
     freq *= lacunarity;
   }
   return norm > 0 ? sum / norm : 0;
+}
+
+/** Vec3-tuple gradient noise in ~[-1, 1]. */
+export function noise3(p: Vec3, seed = 0): number {
+  return gradNoise3(p[0], p[1], p[2], seed);
+}
+
+/** Vec3-tuple fbm in ~[-1, 1]. */
+export function fbm3v(p: Vec3, seed = 0, octaves = 4, lacunarity = 2, gain = 0.5): number {
+  return fbm3(p[0], p[1], p[2], seed, octaves, lacunarity, gain);
 }

@@ -1,98 +1,113 @@
 /**
- * SimWorld — a lightweight, playtest-oriented view of a composed Reach: areas,
- * their gadgets, the gated links between them, and item metadata. Built from a
- * `ReachResult` + the `Registry`. The reducer and autosolver walk it exactly the
- * way a player would (forward links gated by their rule; walking back is open
- * unless a link is one-way).
+ * SimWorld — a playtest view of a realized Reach over its MISSION GRAPH (regions +
+ * gated links + placed items + puzzles). The reducer and autosolver walk it the way
+ * a player would: forward links gated by their rule, walking back open unless
+ * one-way. Operates on ABSTRACT facts only (no geometry). Built from a ReachResult.
  */
 
-import { evalRule, type Capability, type Held, type Rule } from "../logic/index.js";
-import type { Registry } from "../registries/registry.js";
-import type { UseEffect } from "../registries/item-catalog.js";
-import type { ReachResult } from "../composers/reach-composer.js";
+import { evalRule, heldFromData, CapSet, type CapabilityId, type Held, type Rule } from "../logic/index.js";
+import type { NodeRole, RegionId, LocationId } from "../graph/index.js";
+import type { PuzzleInstance } from "../puzzle/index.js";
+import type { ReachResult } from "../world/index.js";
 
-export interface SimGadget {
-  itemId: string;
-  cap?: Capability;
-  locationId: string;
+export interface SimItemInfo {
+  id: string;
+  class: string;
+  grants: CapabilityId[];
 }
 
-export interface SimArea {
-  areaId: number;
-  regionId: string;
-  role: string;
-  gadgets: SimGadget[];
+export interface SimLocation {
+  id: LocationId;
+  itemId?: string;
+  bonus?: boolean;
+  sphere?: number;
+}
+
+export interface SimNode {
+  id: RegionId;
+  role: NodeRole;
+  locations: SimLocation[];
 }
 
 export interface SimLink {
-  fromAreaId: number;
-  toAreaId: number;
-  requires: Rule;
+  from: RegionId;
+  to: RegionId;
+  rule: Rule;
   oneWay?: boolean;
 }
 
-export interface SimItemInfo {
-  name: string;
-  class: string;
-  cap?: Capability;
-  use?: UseEffect;
-}
-
 export interface SimWorld {
-  startAreaId: number;
-  terminalAreaId: number | null;
-  startCaps: Capability[];
-  areas: Map<number, SimArea>;
+  start: RegionId;
+  terminal: RegionId | undefined;
+  startHeld: CapSet;
+  nodes: Map<RegionId, SimNode>;
   links: SimLink[];
   items: Map<string, SimItemInfo>;
+  /** flag name → the Location whose collection sets it (non-volatile). */
+  flagSetters: Map<LocationId, string[]>;
+  puzzles: PuzzleInstance[];
+  spheres: string[][];
 }
 
-export function buildSimWorld(result: ReachResult, registry: Registry): SimWorld {
-  const areas = new Map<number, SimArea>();
-  let terminalAreaId: number | null = null;
-  for (const a of result.descriptor.areas) {
-    areas.set(a.areaId, {
-      areaId: a.areaId,
-      regionId: a.regionId,
-      role: a.role,
-      gadgets: a.gadgets.map((g) => ({ itemId: g.itemId, ...(g.cap ? { cap: g.cap } : {}), locationId: g.locationId })),
-    });
-    if (a.role === "terminal") terminalAreaId = a.areaId;
+export function buildSimWorld(rr: ReachResult): SimWorld {
+  const sphereOf = new Map<LocationId, number>();
+  rr.meta.spheres.forEach((s, i) => {
+    for (const l of s) sphereOf.set(l, i);
+  });
+
+  const nodes = new Map<RegionId, SimNode>();
+  for (const r of rr.graph.regions) nodes.set(r.id, { id: r.id, role: r.role, locations: [] });
+  for (const loc of rr.graph.locations) {
+    const node = nodes.get(loc.region);
+    if (!node) continue;
+    const sl: SimLocation = { id: loc.id };
+    const itemId = rr.placement.get(loc.id);
+    if (itemId !== undefined) sl.itemId = itemId;
+    if (loc.bonus !== undefined) sl.bonus = loc.bonus;
+    const sphere = sphereOf.get(loc.id);
+    if (sphere !== undefined) sl.sphere = sphere;
+    node.locations.push(sl);
+  }
+
+  const flagSetters = new Map<LocationId, string[]>();
+  for (const f of rr.graph.flags) {
+    if (f.volatile) continue;
+    const list = flagSetters.get(f.setBy) ?? [];
+    list.push(f.name);
+    flagSetters.set(f.setBy, list);
   }
 
   const items = new Map<string, SimItemInfo>();
-  for (const [id, def] of registry.items.defs) {
-    items.set(id, {
-      name: def.name ?? id,
-      class: def.class,
-      ...(def.grants ? { cap: def.grants } : {}),
-      ...(def.use ? { use: def.use } : {}),
-    });
-  }
+  for (const it of rr.items) items.set(it.id, { id: it.id, class: it.class, grants: it.grants ?? [] });
+
+  const links: SimLink[] = rr.graph.edges.map((e) => (e.oneWay !== undefined ? { from: e.from, to: e.to, rule: e.rule, oneWay: e.oneWay } : { from: e.from, to: e.to, rule: e.rule }));
 
   return {
-    startAreaId: result.descriptor.startAreaId,
-    terminalAreaId,
-    startCaps: [...registry.items.startCaps],
-    areas,
-    links: result.descriptor.links.map((l) => ({ fromAreaId: l.fromAreaId, toAreaId: l.toAreaId, requires: l.requires, ...(l.oneWay ? { oneWay: true } : {}) })),
+    start: rr.graph.start,
+    terminal: rr.graph.regions.find((r) => r.role === "terminal")?.id,
+    startHeld: heldFromData(rr.meta.startHeld),
+    nodes,
+    links,
     items,
+    flagSetters,
+    puzzles: rr.puzzleInstances,
+    spheres: rr.meta.spheres,
   };
 }
 
-/** Areas directly reachable from `areaId`: forward links gated, reverse links open (unless one-way). */
-export function neighbors(world: SimWorld, areaId: number, held: Held): Array<{ to: number; ok: boolean; link: SimLink; reverse: boolean }> {
-  const out: Array<{ to: number; ok: boolean; link: SimLink; reverse: boolean }> = [];
+/** Neighbors of `id`: forward links gated by their rule, reverse links open unless one-way. */
+export function neighbors(world: SimWorld, id: RegionId, held: Held): Array<{ to: RegionId; ok: boolean; link: SimLink; reverse: boolean }> {
+  const out: Array<{ to: RegionId; ok: boolean; link: SimLink; reverse: boolean }> = [];
   for (const l of world.links) {
-    if (l.fromAreaId === areaId) out.push({ to: l.toAreaId, ok: evalRule(l.requires, held), link: l, reverse: false });
-    else if (l.toAreaId === areaId && !l.oneWay) out.push({ to: l.fromAreaId, ok: true, link: l, reverse: true });
+    if (l.from === id) out.push({ to: l.to, ok: evalRule(l.rule, held), link: l, reverse: false });
+    else if (l.to === id && !l.oneWay) out.push({ to: l.from, ok: true, link: l, reverse: true });
   }
   return out;
 }
 
-/** All areas reachable from the start given held state (fixed-point). */
-export function reachableAreaIds(world: SimWorld, held: Held): Set<number> {
-  const reached = new Set<number>([world.startAreaId]);
+/** All regions reachable from start given held state (fixed-point, play model). */
+export function reachableNodes(world: SimWorld, held: Held): Set<RegionId> {
+  const reached = new Set<RegionId>([world.start]);
   let changed = true;
   while (changed) {
     changed = false;

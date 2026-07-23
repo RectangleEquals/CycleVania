@@ -1,40 +1,33 @@
-/**
- * Command parser — turns REPL text like `/use skyhook` or `goto 7` into a
- * `Command`. Throws on malformed input so the REPL can echo the error.
- */
+/** Parse a slash command string into a `Command` (the REPL front-end). */
 
 import type { Command } from "./command.js";
 
-export function parseCommand(input: string): Command {
-  const s = input.trim().replace(/^\//, "");
-  const parts = s.split(/\s+/);
-  const verb = (parts[0] ?? "").toLowerCase();
-  const arg = parts[1] ?? "";
+export function parseCommand(input: string): Command | undefined {
+  const parts = input.trim().replace(/^\//, "").split(/\s+/);
+  const verb = parts[0]?.toLowerCase();
+  const arg = parts[1];
   switch (verb) {
+    case "move":
+      return arg !== undefined ? { k: "move", to: arg } : undefined;
     case "goto":
-    case "move": {
-      const areaId = Number(arg);
-      if (!Number.isFinite(areaId)) throw new Error(`goto: expected an area id, got "${arg}"`);
-      return { k: "goto", areaId };
-    }
-    case "use":
-      if (!arg) throw new Error("use: expected an item id");
-      return { k: "use", itemId: arg };
+      return arg !== undefined ? { k: "goto", to: arg } : undefined;
     case "take":
       return { k: "take" };
+    case "use":
+      return arg !== undefined ? { k: "use", itemId: arg } : undefined;
+    case "interact":
+      return arg !== undefined ? { k: "interact", puzzleId: arg } : undefined;
+    case "see":
+      return { k: "see" };
+    case "why":
+      return arg !== undefined ? { k: "why", to: arg } : undefined;
     case "give":
-      if (!arg) throw new Error("give: expected a capability");
-      return { k: "give", cap: arg };
-    case "why": {
-      const areaId = Number(arg);
-      if (!Number.isFinite(areaId)) throw new Error(`why: expected an area id, got "${arg}"`);
-      return { k: "why", areaId };
-    }
+      return arg !== undefined ? { k: "give", cap: arg } : undefined;
     case "reset":
       return { k: "reset" };
     case "solve":
       return { k: "solve" };
     default:
-      throw new Error(`unknown command: "${verb}"`);
+      return undefined;
   }
 }

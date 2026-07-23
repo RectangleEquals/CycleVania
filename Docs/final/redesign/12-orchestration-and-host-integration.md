@@ -5,7 +5,7 @@
 > output: an orchestrated generation is byte-identical to an inline one. This doc also carries the
 > complete host-integration surface and the error taxonomy.
 
-## Sync cores, async facade
+## Sync cores, async facade — and async is the host default
 
 ```ts
 // the pure cores (everything in docs 03–09):
@@ -15,15 +15,83 @@ worldComposer.requestReach(request): ReachComposer                              
 // the facade:
 requestReachAsync(world, request, hooks?): Promise<ReachDescriptor>
 interface OrchestrationHooks {
-  onProgress?(p: { phase: GenPhase; areaIndex?: number; fraction: number }): void;
+  onProgress?(p: GenProgress): void;
   shouldYield?(): Promise<void> | void;    // host-pure cooperative yielding (frame budget)
   token?: CancellationToken;               // cancel → rejects with GenCancelled; no partial output escapes
+  diagnostics?: DiagnosticsConfig;         // per-run override of the registry-level config (below)
 }
 ```
 
-The facade slices work at natural boundaries (per phase, per Area — Areas are independent forks by
-construction, [01](./01-architecture.md)) and yields/checks between slices. Determinism holds
-because slicing never reorders RNG consumption — each slice owns its own fork.
+**Hosts should treat the async facade as the default entry point.** The synchronous cores exist
+as the determinism/testing substrate; anything player-facing runs through the facade so frames
+stay responsive during long generations. The facade slices work at natural boundaries — per
+phase, per Area (Areas are independent forks by construction, [01](./01-architecture.md)) —
+**and inside the long phases**: the finish pass (the dominant cost) is structured as a resumable
+slab iterator, so meshing a large Area yields every z-slab rather than blocking for the whole
+Area. Determinism holds because slicing never reorders RNG consumption — each slice owns its own
+fork, and a sliced run is byte-identical to an inline one.
+
+### Progress reports — structured enough for a real loading screen
+
+```ts
+type GenPhase = "template" | "selection" | "graph" | "fill" | "skeleton"
+              | "volume" | "anchors" | "finish" | "assemble";
+
+interface GenProgress {
+  phase: GenPhase;
+  label: string;                 // human-readable: "Meshing Area 3/5"
+  areaIndex?: number; areasTotal?: number;
+  fraction: number;              // 0..1 OVERALL, monotonic non-decreasing across the whole run
+  phaseFraction: number;         // 0..1 within the current phase
+  elapsedMs: number;             // remaining ≈ elapsedMs * (1 - fraction) / fraction
+}
+```
+
+Overall `fraction` is computed against a static per-phase **weight table** (finish dominates;
+weights are part of the dial surface) so the bar moves honestly rather than sprinting through
+cheap phases and stalling at 90%. The host decides presentation entirely — a custom loading
+screen, a diegetic animation, a terminal line; the Inspector ships a plain default overlay
+rendering exactly this stream ([13](./13-inspector-and-tooling.md)), so "what the Inspector
+shows" and "what a host can show" are the same data.
+
+## Diagnostics & logging — one channel, every package
+
+Errors alone aren't enough for either audience — a host integrating CycleVania needs actionable
+warnings; a CycleVania developer needs to watch the generator think. One structured,
+**write-only** channel serves both:
+
+```ts
+type DiagLevel = "error" | "warn" | "info" | "debug" | "trace";
+
+interface DiagEvent {
+  level: DiagLevel;
+  code: string;                  // stable, grep-able: "fill.relaxed-per-region-cap",
+                                 // "skeleton.junction-inserted", "finish.res-clamped", …
+  message: string;               // human-readable
+  path?: string;                 // where: "reach3/area:r2/space:s4"
+  details?: Record<string, unknown>;
+}
+interface DiagnosticsSink { emit(e: DiagEvent): void; }
+interface DiagnosticsConfig { level: DiagLevel; sink: DiagnosticsSink; }   // default: level "warn", silent sink
+```
+
+Rules, all load-bearing:
+
+1. **Diagnostics never affect generation.** Output is byte-identical under any sink and any
+   level — enforced by test (generate under a trace-collecting sink vs. the silent sink;
+   compare). Sinks must not throw into the pipeline (the emitter guards).
+2. **Codes are stable API.** Every recorded relaxation ([03](./03-mission-graph.md),
+   [07](./07-spatial-skeleton.md), [09](./09-naturalization-and-kit.md)) emits a `warn` with the
+   same code string that lands in `ReachMeta.relaxations`; every `GenError` emits an `error`
+   event (same code + details) before throwing; registry validation emits `warn` for soft issues
+   (unused vocabulary tags, never-referenced catalog entries) alongside its hard `GenError`s.
+   `info` marks phase transitions; `debug`/`trace` narrate choices (scheduler rolls, layout
+   iterations) for CycleVania's own developers.
+3. **Configurable everywhere.** The registry carries a default `DiagnosticsConfig`; every
+   generation call accepts a per-run override; the CLI exposes `--log-level`; the Inspector
+   renders the channel visually in its diagnostics panel and exposes the level as a dial
+   ([13](./13-inspector-and-tooling.md)). Core itself never writes to a console — sinks are
+   always supplied by the tool or host.
 
 ## Horizon prefetch — eager *requests*, still lazy *generation*
 

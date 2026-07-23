@@ -1,52 +1,71 @@
 /**
- * Spheres — the solvability ladder. Sphere 0 = reachable from start with
- * starting capabilities; sphere N+1 = reachable once items in spheres ≤ N are
- * collected. Playing forward from `startCaps`, collect every reachable item,
- * expanding the held state until a fixed point.
+ * Spheres — the solvability ladder. Sphere 0 = reachable from `start` with
+ * `startHeld`; sphere n+1 = reachable once everything in spheres ≤ n is
+ * collected. Playing forward, collect every reachable Location, folding placed
+ * items' grants and non-volatile flag-setters into the held state until a fixed
+ * point. Volatile flags are deliberately NOT auto-set here — the baseline proof
+ * runs against non-volatile state only.
  */
 
-import { CapSet, heldOf, type Capability } from "../logic/index.js";
+import { CapSet, type HeldData } from "../logic/index.js";
 import { reachableLocations } from "./reachability.js";
-import type { LocationId, Placement, ProgressionItem, RegionGraph } from "./region-graph.js";
+import type { Item, LocationId, MissionGraph, Placement } from "./mission-graph.js";
 
 export interface SphereResult {
   /** location ids first reachable at each sphere, in order. */
   spheres: LocationId[][];
-  /** total capabilities collectible playing forward. */
-  held: CapSet;
-  /** every NON-bonus location is reachable (no stranded required slots). */
+  /** held snapshot after each sphere. */
+  heldPerSphere: HeldData[];
+  /** everything collectible playing forward. */
+  finalHeld: CapSet;
+  /** every NON-bonus Location is reachable (no stranded required slots). */
   reachedAll: boolean;
 }
 
-/** Collect items sphere by sphere from a placement, to a fixed point. */
 export function computeSpheres(
-  g: RegionGraph,
-  placement: ReadonlyMap<LocationId, string>,
-  itemsById: ReadonlyMap<string, ProgressionItem>,
-  startCaps: Iterable<Capability> = [],
-  bonus?: ReadonlySet<LocationId>,
+  g: MissionGraph,
+  startHeld: CapSet,
+  placement: Placement,
+  items: readonly Item[],
 ): SphereResult {
-  const held = heldOf(startCaps);
+  const itemsById = new Map(items.map((i) => [i.id, i] as const));
+
+  // Non-volatile flag setters: reaching the setter Location sets the flag.
+  const setters = new Map<LocationId, string[]>();
+  for (const f of g.flags) {
+    if (f.volatile) continue;
+    const list = setters.get(f.setBy);
+    if (list) list.push(f.name);
+    else setters.set(f.setBy, [f.name]);
+  }
+
+  const held = startHeld.clone();
   const collected = new Set<LocationId>();
   const spheres: LocationId[][] = [];
+  const heldPerSphere: HeldData[] = [];
+
   for (;;) {
-    const newly: LocationId[] = [];
-    for (const l of reachableLocations(g, held)) if (!collected.has(l)) newly.push(l);
+    const newly = reachableLocations(g, held).filter((l) => !collected.has(l));
     if (newly.length === 0) break;
     spheres.push(newly);
     for (const l of newly) {
       collected.add(l);
-      const id = placement.get(l);
-      const item = id ? itemsById.get(id) : undefined;
-      if (item) held.add(item.grants, 1);
+      const itemId = placement.get(l);
+      const item = itemId !== undefined ? itemsById.get(itemId) : undefined;
+      if (item?.grants) for (const cap of item.grants) held.add(cap, 1);
+      const flags = setters.get(l);
+      if (flags) for (const f of flags) held.addFlag(f);
     }
+    heldPerSphere.push(held.toData());
   }
+
   let reachedAll = true;
-  for (const l of g.locations.keys()) {
-    if ((!bonus || !bonus.has(l)) && !collected.has(l)) {
+  for (const loc of g.locations) {
+    if (!loc.bonus && !collected.has(loc.id)) {
       reachedAll = false;
       break;
     }
   }
-  return { spheres, held, reachedAll };
+
+  return { spheres, heldPerSphere, finalHeld: held, reachedAll };
 }

@@ -1,4 +1,4 @@
-export type { RegionRole } from "./role.js";
-export type { ReachTemplate, TemplateNode, BranchSpec, BranchEntrance } from "./template.js";
-export { generateReach } from "./grammar.js";
-export type { GenerateReachParams, GeneratedReach, ReachMeta } from "./grammar.js";
+export { interpretTemplate } from "./interpret.js";
+export type { SelectedContent, StructureNudges } from "./interpret.js";
+export { drawTemplate } from "./template-pool.js";
+export type { ReachTemplate, TemplateNode, BranchSpec, ReachTemplatePool } from "./reach-template.js";

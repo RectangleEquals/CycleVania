@@ -1,22 +1,22 @@
+export { GENERATION_VERSION } from "./version.js";
+export { assembleReach, assembleWorld } from "./assemble.js";
+export { stableStringify, toTypedKit } from "./serialize.js";
+export type { TypedKit, TypedPiece } from "./serialize.js";
+export { missionGraphMermaid, reachMissionDiagram, ruleSummary } from "./diagram.js";
+export type { DiagramOptions } from "./diagram.js";
+export { BUNDLE_KIND, makeBundle, checkReproduction, sniffPayload } from "./bundle.js";
+export type { ReproductionBundle, BundleRegistryRef, MakeBundleArgs, ReproCheck, PayloadKind } from "./bundle.js";
 export type {
-  ContentAnchor,
-  GadgetPlacement,
-  CellDescriptor,
-  RoomDescriptor,
-  ConnectorPlan,
-  PortalSpec,
+  Vec3Data,
+  WorldBoxData,
+  SocketData,
+  ConnectorDescriptor,
+  SpaceDescriptor,
   AreaDescriptor,
-  AreaLink,
+  MissionGraphData,
+  PlacementEntry,
+  ReachMetaData,
   ReachDescriptor,
+  WorldMetaData,
   WorldDescriptor,
-} from "./descriptor.js";
-export type {
-  GeneratedKit,
-  GeneratedPiece,
-  PieceInstance,
-  PieceMeta,
-  SurfaceKind,
-  DressingAnchor,
-  OccupancyData,
-} from "./geometry.js";
-export { assembleWorld } from "./assemble.js";
+} from "./shapes.js";

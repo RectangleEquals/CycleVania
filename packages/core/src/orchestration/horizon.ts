@@ -1,56 +1,50 @@
 /**
- * GenerationHorizon — a lazy, cached cursor over a World's Reaches. A game builds
- * only the Reaches near the player and pulls the next one on demand (each Reach is
- * generated deterministically from the run seed), so the world streams in instead
- * of composing all at once. Mirrors "generate the next Reach from within the most
- * recent Sanctum."
+ * GenerationHorizon — the host's agent issuing real ReachRequests EARLY. Reaches
+ * are still requested (never scheduled): the horizon calls `requestReachAsync`
+ * with host-authored requests, caches the results, and evicts by policy (evicted
+ * descriptors stay regenerable from identity). Because prefetched requests enter
+ * the request log like any other, determinism is untouched.
  */
 
-import type { Capability } from "../logic/index.js";
-import type { ComposeContext } from "../composers/context.js";
-import { composeReach, type ReachResult } from "../composers/reach-composer.js";
-import { reachOptionsFrom, type ComposeWorldOptions } from "../composers/world-composer.js";
+import type { ReachRequest, ReachResult, WorldComposer } from "../world/index.js";
+import { requestReachAsync, type OrchestrationHooks } from "./async.js";
+
+export interface HorizonPolicy {
+  ahead: number;
+  /** HOST-authored: the horizon can't invent modifier choices. */
+  requestFor: (nextIndex: number) => ReachRequest;
+  evictBehind?: number;
+}
 
 export class GenerationHorizon {
-  private cache = new Map<number, ReachResult>();
-  private carried = new Set<Capability>();
-  private highest = -1;
-  private readonly spacing: number;
+  private readonly cache = new Map<number, ReachResult>();
 
   constructor(
-    private ctx: ComposeContext,
-    private opts: ComposeWorldOptions,
-  ) {
-    this.spacing = opts.reachSpacing ?? 700;
+    private readonly world: WorldComposer,
+    private readonly policy: HorizonPolicy,
+    private readonly runner: (w: WorldComposer, r: ReachRequest, h?: OrchestrationHooks) => Promise<ReachResult> = requestReachAsync,
+  ) {}
+
+  /** Note the player's position; prefetch up to `ahead` next Reaches, evict behind. */
+  async noteAt(reachIndex: number): Promise<void> {
+    for (let k = 1; k <= this.policy.ahead; k++) {
+      const idx = reachIndex + k;
+      if (this.world.drawnLength !== undefined && idx >= this.world.drawnLength) break;
+      if (this.world.realized.has(idx) || this.cache.has(idx)) continue;
+      const result = await this.runner(this.world, this.policy.requestFor(idx));
+      this.cache.set(idx, result);
+    }
+    if (this.policy.evictBehind !== undefined) {
+      for (const k of [...this.cache.keys()]) if (k < reachIndex - this.policy.evictBehind) this.cache.delete(k);
+    }
   }
 
-  has(i: number): boolean {
-    return this.cache.has(i);
+  /** A prefetched (or already-realized) Reach, if available. */
+  get(idx: number): ReachResult | undefined {
+    return this.cache.get(idx) ?? this.world.realized.get(idx);
   }
 
-  /** Compose (or return cached) Reach `i`; composes predecessors first if caps carry. */
-  reach(i: number): ReachResult {
-    const cached = this.cache.get(i);
-    if (cached) return cached;
-    if (this.opts.carryCaps) for (let k = this.highest + 1; k < i; k++) this.reach(k);
-
-    const result = composeReach(this.ctx, reachOptionsFrom(this.ctx, this.opts, i, this.carried, this.spacing));
-
-    this.cache.set(i, result);
-    if (this.opts.carryCaps) for (const it of result.reach.items) this.carried.add(it.grants);
-    this.highest = Math.max(this.highest, i);
-    return result;
-  }
-
-  /** Ensure Reaches `from … from+radius` are composed; returns them. */
-  prefetch(from: number, radius: number): ReachResult[] {
-    const out: ReachResult[] = [];
-    for (let i = Math.max(0, from); i <= from + radius; i++) out.push(this.reach(i));
-    return out;
-  }
-
-  /** Drop cached Reaches outside `[keepFrom, keepTo]` to bound memory. */
-  evictOutside(keepFrom: number, keepTo: number): void {
-    for (const i of [...this.cache.keys()]) if (i < keepFrom || i > keepTo) this.cache.delete(i);
+  get cachedIndices(): number[] {
+    return [...this.cache.keys()].sort((a, b) => a - b);
   }
 }

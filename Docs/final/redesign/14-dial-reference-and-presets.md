@@ -44,6 +44,8 @@
 | dressing densities (per kind, per biome) | finish | scatter weights | [09](./09-naturalization-and-kit.md) |
 | `HorizonPolicy` (`ahead`, `requestFor`, `evictBehind`) | orchestration | prefetch behavior | [12](./12-orchestration-and-host-integration.md) |
 | `geometry` (per generation call) | orchestration | run/skip the finish pass | [01](./01-architecture.md) |
+| `DiagnosticsConfig` (`level`, `sink`) | registry + per-run override | the logging channel: `error…trace`, host-supplied sink | [12](./12-orchestration-and-host-integration.md) |
+| progress phase-weight table | orchestration | how `GenProgress.fraction` apportions phases | [12](./12-orchestration-and-host-integration.md) |
 
 ## Calibration philosophy
 

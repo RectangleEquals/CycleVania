@@ -1,35 +1,34 @@
 /**
- * Solvability checks — the independent reachability regression the fill is
- * verified against. A world is solvable when, playing forward from starting
- * capabilities: every progression item is collectible AND every non-bonus
- * location is reachable (no stranded required slots).
+ * Solvability — the zero-softlock guarantee and structural helpers. A Reach is
+ * solvable when, playing forward from `startHeld`: every progression capability
+ * its items introduce is collectible AND every non-bonus Location is reachable.
  */
 
-import type { Capability, Held } from "../logic/index.js";
+import type { CapSet } from "../logic/index.js";
 import { computeSpheres } from "./spheres.js";
-import { reachableRegions } from "./reachability.js";
-import type { LocationId, ProgressionItem, RegionGraph, RegionId } from "./region-graph.js";
+import type { Item, MissionGraph, Placement, RegionId } from "./mission-graph.js";
 
-/** The zero-softlock guarantee. */
 export function isSolvable(
-  g: RegionGraph,
-  placement: ReadonlyMap<LocationId, string>,
-  itemsById: ReadonlyMap<string, ProgressionItem>,
-  startCaps: Iterable<Capability> = [],
-  bonus?: ReadonlySet<LocationId>,
+  g: MissionGraph,
+  startHeld: CapSet,
+  items: readonly Item[],
+  placement: Placement,
 ): boolean {
-  const { held, reachedAll } = computeSpheres(g, placement, itemsById, startCaps, bonus);
-  for (const it of itemsById.values()) if (!held.has(it.grants)) return false;
+  const { finalHeld, reachedAll } = computeSpheres(g, startHeld, placement, items);
+  for (const it of items) {
+    if (it.class !== "progression" || !it.grants) continue;
+    for (const cap of it.grants) if (!finalHeld.hasCap(cap)) return false;
+  }
   return reachedAll;
 }
 
 /** Does the graph contain a directed cycle (ignoring access rules)? */
-export function hasCycle(g: RegionGraph): boolean {
+export function hasCycle(g: MissionGraph): boolean {
   const adj = new Map<RegionId, RegionId[]>();
   for (const e of g.edges) {
-    let list = adj.get(e.from);
-    if (!list) adj.set(e.from, (list = []));
-    list.push(e.to);
+    const list = adj.get(e.from);
+    if (list) list.push(e.to);
+    else adj.set(e.from, [e.to]);
   }
   const WHITE = 0;
   const GRAY = 1;
@@ -45,31 +44,6 @@ export function hasCycle(g: RegionGraph): boolean {
     color.set(u, BLACK);
     return false;
   };
-  for (const r of g.regions) if ((color.get(r) ?? WHITE) === WHITE && visit(r)) return true;
+  for (const r of g.regions) if ((color.get(r.id) ?? WHITE) === WHITE && visit(r.id)) return true;
   return false;
-}
-
-/** A `Held` that satisfies everything — used to validate full-equipment reachability. */
-const OMNISCIENT: Held = {
-  has: () => true,
-  count: () => Number.MAX_SAFE_INTEGER,
-  flag: () => true,
-};
-
-export interface GraphValidation {
-  ok: boolean;
-  /** regions unreachable even when every capability/flag is held. */
-  stranded: RegionId[];
-}
-
-/**
- * Construction-time precondition for softlock-impossible fill: every region must
- * be reachable when the party holds everything. If not, the template/embedding is
- * malformed (a region gated behind an impossible or dangling edge) — fail loudly
- * with the exact stranded set rather than an opaque "fill failed".
- */
-export function validateGraph(g: RegionGraph): GraphValidation {
-  const reached = reachableRegions(g, OMNISCIENT);
-  const stranded = [...g.regions].filter((r) => !reached.has(r));
-  return { ok: stranded.length === 0, stranded };
 }

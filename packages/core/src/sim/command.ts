@@ -1,15 +1,14 @@
-/**
- * Simulator commands — the interactive vocabulary the inspector REPL drives
- * (`/goto`, `/use`, `/take`, `/give`, `/why`, `/reset`, `/solve`).
- */
-
-import type { Capability } from "../logic/index.js";
+import type { CapabilityId } from "../logic/index.js";
+import type { RegionId } from "../graph/index.js";
 
 export type Command =
-  | { k: "goto"; areaId: number }
+  | { k: "move"; to: RegionId } // one step to an adjacent, open region
+  | { k: "goto"; to: RegionId } // pathfind via currently-open links, then move
+  | { k: "take" } // collect the current region's uncollected Locations
   | { k: "use"; itemId: string }
-  | { k: "take" }
-  | { k: "give"; cap: Capability }
-  | { k: "why"; areaId: number }
+  | { k: "interact"; puzzleId: string }
+  | { k: "see" }
+  | { k: "why"; to: RegionId }
+  | { k: "give"; cap: CapabilityId }
   | { k: "reset" }
   | { k: "solve" };

@@ -124,9 +124,9 @@ below resolve it precisely.
 flowchart TB
   A["1 · ReachRequest arrives\n(reachIndex, chosenModifiers, overrides)"] --> B["2 · resolve template\n(request override, or a seeded draw from ReachTemplatePool)"]
   B --> C["3 · compute FinalCeiling\n(tier curve + entropy + lookbehind + modifier patch — doc 04)"]
-  C --> D["4 · interpret template (+ structure nudges)\ninto a concrete MissionGraph; draw AreaCount"]
-  D --> E["5 · validateGraph(graph, startHeld) — throws on a stranded Region"]
-  E --> F["6 · select this Reach's items & puzzles\n(schedulers + virtual-schedule bias + pity + final sweep — docs 05, 06)"]
+  C --> D["4 · select this Reach's items & puzzles\n(schedulers + virtual-schedule bias + pity + final sweep — docs 05, 06)"]
+  D --> E["5 · interpret template (+ structure nudges)\ninto a concrete MissionGraph; BIND gate rules from the\nselected content (teach→test→combine pacing); draw AreaCount"]
+  E --> F["6 · validateGraph(graph, startHeld ∪ selected items) — throws on a stranded Region"]
   F --> G["7 · assumedFill(graph, startHeld, items)\n→ Sphere-ordered placement; solvability now constructed, forever"]
   G --> H["8 · per Region: AreaComposer\nSpace count/kinds (Room/Outdoor), budget split + pooling, recipe envelopes"]
   H --> I["9 · force-directed layout\n→ Space origins + bounding envelopes (no overlaps)"]
@@ -141,8 +141,10 @@ flowchart TB
 
 Rules the sequence must obey:
 
-- **Steps 1–4 decide shape; 5–7 construct and prove solvability.** Nothing after step 7 may alter
-  the graph, gating, or placement. If a later step *needs* a change (it can't — see GenError
+- **Steps 1–5 decide shape; 6–7 construct and prove solvability.** Selection (step 4) runs
+  *before* interpretation (step 5) because gate rules must reference the selected content — a
+  graph whose gates aren't bound yet cannot be validated. Nothing after step 7 may alter the
+  graph, gating, or placement. If a later step *needs* a change (it can't — see GenError
   taxonomy, [12](./12-orchestration-and-host-integration.md)), that's a design bug.
 - **Step 8 decides all abstract Space facts** — including which Spaces are outdoor, which host a
   landmark, and which reserve a recipe envelope. L3 realizes those facts; it never invents them.

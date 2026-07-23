@@ -8,3 +8,4 @@ coverage/
 *.tsbuildinfo
 packages/inspector/shot*.png
 .chrome-tmp*/
+.legacy-packages/
