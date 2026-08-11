@@ -1,0 +1,17 @@
+# Rust
+/target
+**/target
+
+# Node
+node_modules/
+dist/
+build/
+*.node
+
+# Private design & implementation notes — never committed
+/.notes/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.log

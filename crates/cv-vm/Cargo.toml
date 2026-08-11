@@ -1,0 +1,12 @@
+[package]
+name = "cv-vm"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "The owned CVScript bytecode VM + api-dispatch registry (embedded by cv-core)."
+
+[lints]
+workspace = true
+
+[dependencies]
+cv-determinism = { workspace = true }

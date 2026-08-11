@@ -1,0 +1,40 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/cv-determinism",
+    "crates/cv-core",
+    "crates/cv-script",
+    "crates/cv-vm",
+    "crates/cv-bindings",
+    "crates/cv-cli",
+    "crates/cv-editor-backend",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.89"
+
+[workspace.dependencies]
+# Internal crates (path-referenced so versions stay in lockstep).
+cv-determinism = { path = "crates/cv-determinism" }
+cv-core = { path = "crates/cv-core" }
+cv-script = { path = "crates/cv-script" }
+cv-vm = { path = "crates/cv-vm" }
+# Host-facing / tooling deps.
+napi = { version = "3" }
+napi-derive = { version = "3" }
+napi-build = { version = "2" }
+wasm-bindgen = { version = "0.2" }
+clap = { version = "4", features = ["derive"] }
+
+# Determinism note: Rust never enables fast-math and does not auto-contract to FMA (fp-contract off),
+# so the default codegen is already replayable. Cross-machine determinism comes from owned math (M02)
+# + the WASM canonical target, not from profile flags. codegen-units=1 buys native reproducibility.
+[profile.release]
+lto = "thin"
+codegen-units = 1
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "warn"
+# M02 escalates: deny float arithmetic outside cv-determinism's owned-math module.

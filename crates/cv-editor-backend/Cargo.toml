@@ -1,0 +1,13 @@
+[package]
+name = "cv-editor-backend"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "WebSocket service wrapping cv-core for the browser editor (Tauri skips this)."
+
+[lints]
+workspace = true
+
+[dependencies]
+cv-core = { workspace = true }
+cv-script = { workspace = true }
