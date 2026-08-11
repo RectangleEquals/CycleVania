@@ -12,7 +12,7 @@
 //! This blob is append-only in spirit: adding cases at the end is a deliberate re-bless; reordering or
 //! changing existing cases invalidates the fixture and must be reviewed as a determinism change.
 
-use crate::geom::{Aabb, Quat, Transform, Vec3};
+use crate::geom::{Aabb, Mat4, Quat, Transform, Vec3};
 use crate::math;
 use crate::Rng;
 
@@ -141,6 +141,47 @@ pub fn determinism_probe() -> Vec<u8> {
     let composed = t.compose(&Transform::from_translation(a));
     push_vec3(&mut out, composed.transform_point(b));
 
+    // --- 4. Mat4: general affine math, including the mirroring TRS cannot express ---------------
+    let ma = Mat4::from(t);
+    for v in ma.to_cols_array() {
+        push_f64(&mut out, v);
+    }
+    // A deliberately non-unit normal, so from_reflection's internal normalize is exercised too.
+    let mb = Mat4::from_reflection(Vec3::new(0.5, -0.5, 0.8)) * Mat4::from_rotation(q);
+    for v in mb.to_cols_array() {
+        push_f64(&mut out, v);
+    }
+    let product = ma * mb;
+    for v in product.to_cols_array() {
+        push_f64(&mut out, v);
+    }
+    push_f64(&mut out, ma.determinant());
+    push_f64(&mut out, mb.determinant());
+    push_vec3(&mut out, product.transform_point(a));
+    push_vec3(&mut out, product.transform_vector(b));
+    for v in ma
+        .inverse()
+        .expect("TRS matrix is invertible")
+        .to_cols_array()
+    {
+        push_f64(&mut out, v);
+    }
+    for v in ma.transpose().to_cols_array() {
+        push_f64(&mut out, v);
+    }
+    // Decomposition: the TRS round-trip, and the off-origin mirror plane.
+    let decomposed = ma.to_transform().expect("TRS decomposes");
+    push_vec3(&mut out, decomposed.translation);
+    push_vec3(&mut out, decomposed.scale);
+    push_f64(&mut out, decomposed.rotation.x);
+    push_f64(&mut out, decomposed.rotation.y);
+    push_f64(&mut out, decomposed.rotation.z);
+    push_f64(&mut out, decomposed.rotation.w);
+    for v in Mat4::from_reflection_plane(Vec3::Y, Vec3::new(0.0, 2.5, 0.0)).to_cols_array() {
+        push_f64(&mut out, v);
+    }
+
+    // --- 5. Bounding volumes --------------------------------------------------------------------
     let bounds = Aabb::from_center_extents(a, Vec3::new(2.0, 3.0, 1.0));
     push_vec3(&mut out, bounds.min);
     push_vec3(&mut out, bounds.max);
