@@ -6,7 +6,7 @@
 //!
 //! * [`Rng`] — the forkable, label-addressed PRNG (M01).
 //! * [`math`] — owned exact + transcendental scalar math, and the float contract (M02).
-//! * [`geom`] — `Vec3`/`Quat`/`Transform`/`Aabb` kernels built on `math` (M02).
+//! * [`geom`] — `Vec3`/`Quat`/`Transform`/`Mat4`/`Aabb` kernels built on `math` (M02).
 //! * [`probe`] — the canonical cross-target determinism blob (M02).
 
 pub mod geom;
@@ -14,7 +14,7 @@ pub mod math;
 pub mod probe;
 mod rng;
 
-pub use geom::{Aabb, Quat, Transform, Vec3};
+pub use geom::{Aabb, Mat4, Quat, Transform, Vec3};
 pub use rng::Rng;
 
 /// This crate's version, surfaced for cross-crate linkage smoke tests.

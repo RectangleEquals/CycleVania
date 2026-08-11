@@ -11,7 +11,7 @@ freshly computed output — any drift is a determinism regression.
 | `m00_placeholder.bin` | the harness itself | `cv-determinism/tests/golden.rs` |
 | `m01_root_seed_c0ffee.bin` | the root PRNG stream | `cv-determinism/tests/prng.rs` |
 | `m01_fork_tree_seed42.bin` | labelled + indexed fork streams | `cv-determinism/tests/prng.rs` |
-| `m02_determinism_probe.bin` | **the cross-target probe** — owned math, RNG, and geometry | `tests/cross_target.rs` **and** `scripts/wasm-golden.cjs` |
+| `m02_determinism_probe.bin` | **the cross-target probe** — owned math, RNG, geometry, and `Mat4` affine/mirror math | `tests/cross_target.rs` **and** `scripts/wasm-golden.cjs` |
 
 ## Why `m02_determinism_probe.bin` is the important one
 

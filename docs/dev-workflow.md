@@ -5,12 +5,20 @@ support being current (Design/v0.1 toolchain decision).
 
 ## Toolchain
 
-Pinned in `rust-toolchain.toml` (`1.89.0` + `rustfmt`, `clippy`, and the `wasm32-unknown-unknown` target).
-`rustup` auto-installs the pin on first use; or explicitly:
+Pinned in `rust-toolchain.toml` (`1.89.0` + `rust-analyzer`, `rustfmt`, `clippy`, and the
+`wasm32-unknown-unknown` target). `rustup` auto-installs the pin on first use; or explicitly:
 
 ```
-rustup toolchain install 1.89.0 --profile minimal --component rustfmt clippy --target wasm32-unknown-unknown
+rustup toolchain install 1.89.0 --profile minimal \
+  --component rust-analyzer --component rustfmt --component clippy \
+  --target wasm32-unknown-unknown
 ```
+
+> **Why `rust-analyzer` is in the components list.** Because the toolchain is *pinned*, VS Code's
+> bundled rust-analyzer refuses to work against it ("a toolchain too old for the extension shipped
+> rust-analyzer") and prompts you to add the component. Listing it here means the version matched to
+> **this** toolchain is installed and used, so the pin and the IDE agree out of the box. Keep it in the
+> file whenever the pinned channel changes.
 
 ## Build & test (CLI, source of truth)
 
