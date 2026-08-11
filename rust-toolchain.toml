@@ -1,6 +1,6 @@
 # Pinned for reproducible builds (Design/v0.1: 1.89.0 is adequate — bump only on concrete need).
 [toolchain]
 channel = "1.89.0"
-components = ["rustfmt", "clippy"]
+components = ["rust-analyzer", "rustfmt", "clippy"]
 targets = ["wasm32-unknown-unknown"]
 profile = "minimal"

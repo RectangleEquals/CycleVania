@@ -24,7 +24,10 @@ pub fn assert_golden_bytes(name: &str, actual: &[u8]) {
         return;
     }
     let expected = std::fs::read(&path).unwrap_or_else(|e| {
-        panic!("missing golden fixture {} ({e}); run with CV_BLESS=1 to create", path.display())
+        panic!(
+            "missing golden fixture {} ({e}); run with CV_BLESS=1 to create",
+            path.display()
+        )
     });
     assert_eq!(expected, actual, "golden mismatch for {name}");
 }
