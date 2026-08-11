@@ -4,7 +4,10 @@
 //! the canonical cross-machine target. Owned forkable PRNG (`ctx.rng.fork(label)`), owned transcendental
 //! math (FMA/fast-math off), ordered iteration, no clock, no ambient RNG.
 //!
-//! **M00: skeleton only.** M01 lands the owned PRNG; M02 the owned math + cross-target golden vectors.
+//! **M01: the owned PRNG (`Rng`) is in.** M02 lands the owned math + cross-target golden vectors.
+
+mod rng;
+pub use rng::Rng;
 
 /// This crate's version, surfaced for cross-crate linkage smoke tests.
 pub fn version() -> &'static str {
