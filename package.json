@@ -6,6 +6,10 @@
   "scripts": {
     "build:addon": "cargo build -p cv-bindings",
     "smoke:addon": "node scripts/smoke-addon.cjs",
-    "verify:addon": "cargo build -p cv-bindings && node scripts/smoke-addon.cjs"
+    "verify:addon": "cargo build -p cv-bindings && node scripts/smoke-addon.cjs",
+    "build:wasm-probe": "cargo build -p cv-determinism --example wasm_probe --target wasm32-unknown-unknown",
+    "verify:wasm-golden": "npm run build:wasm-probe && node scripts/wasm-golden.cjs",
+    "verify:determinism": "cargo test -p cv-determinism && npm run verify:wasm-golden",
+    "verify": "cargo test && npm run verify:wasm-golden && npm run verify:addon"
   }
 }

@@ -37,4 +37,8 @@ codegen-units = 1
 
 [workspace.lints.rust]
 unsafe_op_in_unsafe_fn = "warn"
-# M02 escalates: deny float arithmetic outside cv-determinism's owned-math module.
+
+[workspace.lints.clippy]
+# The determinism guard: the banned list lives in clippy.toml. Platform transcendentals (f64::sin …)
+# and clock reads are denied workspace-wide; the owned replacements are in cv_determinism::math.
+disallowed_methods = "deny"

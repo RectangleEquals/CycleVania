@@ -62,7 +62,10 @@ fn fork_is_consumption_independent() {
         drained.next_u64();
     }
     let mut child_late = drained.fork("x");
-    assert_eq!(draw_bytes(&mut child_early, 8), draw_bytes(&mut child_late, 8));
+    assert_eq!(
+        draw_bytes(&mut child_early, 8),
+        draw_bytes(&mut child_late, 8)
+    );
 }
 
 #[test]
@@ -92,9 +95,17 @@ fn shuffle_is_a_permutation() {
     let mut rng = Rng::new(555);
     let mut v: Vec<u32> = (0..100).collect();
     rng.shuffle(&mut v);
-    assert_ne!(v, (0..100).collect::<Vec<_>>(), "a 100-element shuffle should reorder");
+    assert_ne!(
+        v,
+        (0..100).collect::<Vec<_>>(),
+        "a 100-element shuffle should reorder"
+    );
     v.sort_unstable();
-    assert_eq!(v, (0..100).collect::<Vec<_>>(), "shuffle must preserve the multiset");
+    assert_eq!(
+        v,
+        (0..100).collect::<Vec<_>>(),
+        "shuffle must preserve the multiset"
+    );
 }
 
 #[test]

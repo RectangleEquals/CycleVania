@@ -8,4 +8,9 @@ description = "Owned PRNG, owned math, and ordered containers — the determinis
 [lints]
 workspace = true
 
+# The cross-target determinism probe, built for wasm32 and read back by scripts/wasm-golden.cjs.
+[[example]]
+name = "wasm_probe"
+crate-type = ["cdylib"]
+
 [dependencies]

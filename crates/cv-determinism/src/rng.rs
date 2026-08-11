@@ -72,13 +72,19 @@ impl Rng {
     /// Fork a labelled child stream. Order-independent and consumption-independent.
     pub fn fork(&self, label: &str) -> Self {
         let child_key = mix64(self.key ^ mix64(fnv1a(label.as_bytes())));
-        Rng { key: child_key, state: child_key }
+        Rng {
+            key: child_key,
+            state: child_key,
+        }
     }
 
     /// Fork a numerically-indexed child stream (for per-element sub-streams without a string label).
     pub fn fork_index(&self, index: u64) -> Self {
         let child_key = mix64(self.key ^ mix64(index ^ INDEX_SALT));
-        Rng { key: child_key, state: child_key }
+        Rng {
+            key: child_key,
+            state: child_key,
+        }
     }
 
     /// A double in `[0, 1)` from the high 53 bits (exact power-of-two scaling; no FMA).

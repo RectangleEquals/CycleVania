@@ -1,0 +1,46 @@
+# Determinism guard (M02).
+#
+# The platform libm rounds transcendentals differently on every target (MSVC CRT vs. glibc vs. musl
+# vs. the wasm builtins), so calling these would silently break the cross-target guarantee. The owned
+# implementations in `cv_determinism::math` are built from exact IEEE-754 ops only and are verified
+# bit-identical native↔wasm by the golden probe.
+#
+# NOT banned: `sqrt`, `abs`, `floor`, `ceil`, `trunc`, `round`, `copysign` and the basic arithmetic
+# operators — IEEE-754 requires those to be correctly rounded, so they are already identical
+# everywhere. Banning plain `+`/`*` on floats (clippy::float_arithmetic) was considered and rejected:
+# it is not a real determinism risk and would make every downstream crate unwritable.
+
+disallowed-methods = [
+    { path = "f64::sin", reason = "platform libm diverges across targets; use cv_determinism::math::sin" },
+    { path = "f64::cos", reason = "platform libm diverges across targets; use cv_determinism::math::cos" },
+    { path = "f64::tan", reason = "platform libm diverges across targets; use cv_determinism::math::tan" },
+    { path = "f64::sin_cos", reason = "platform libm diverges across targets; use cv_determinism::math::sin_cos" },
+    { path = "f64::asin", reason = "platform libm diverges across targets; use cv_determinism::math::asin" },
+    { path = "f64::acos", reason = "platform libm diverges across targets; use cv_determinism::math::acos" },
+    { path = "f64::atan", reason = "platform libm diverges across targets; use cv_determinism::math::atan" },
+    { path = "f64::atan2", reason = "platform libm diverges across targets; use cv_determinism::math::atan2" },
+    { path = "f64::exp", reason = "platform libm diverges across targets; use cv_determinism::math::exp" },
+    { path = "f64::exp2", reason = "platform libm diverges across targets; use cv_determinism::math::pow" },
+    { path = "f64::exp_m1", reason = "platform libm diverges across targets; use cv_determinism::math::exp" },
+    { path = "f64::ln", reason = "platform libm diverges across targets; use cv_determinism::math::ln" },
+    { path = "f64::ln_1p", reason = "platform libm diverges across targets; use cv_determinism::math::ln" },
+    { path = "f64::log", reason = "platform libm diverges across targets; use cv_determinism::math::log" },
+    { path = "f64::log2", reason = "platform libm diverges across targets; use cv_determinism::math::log2" },
+    { path = "f64::log10", reason = "platform libm diverges across targets; use cv_determinism::math::log10" },
+    { path = "f64::powf", reason = "platform libm diverges across targets; use cv_determinism::math::pow" },
+    { path = "f64::powi", reason = "codegen-dependent; use cv_determinism::math::powi (exact by squaring)" },
+    { path = "f64::cbrt", reason = "platform libm diverges across targets; use cv_determinism::math::cbrt" },
+    { path = "f64::hypot", reason = "platform libm diverges across targets; use cv_determinism::math::hypot" },
+    { path = "f64::sinh", reason = "platform libm diverges across targets; build it from cv_determinism::math::exp" },
+    { path = "f64::cosh", reason = "platform libm diverges across targets; build it from cv_determinism::math::exp" },
+    { path = "f64::tanh", reason = "platform libm diverges across targets; build it from cv_determinism::math::exp" },
+    { path = "f64::mul_add", reason = "FMA availability varies by target; write the multiply and add separately" },
+    { path = "f64::to_degrees", reason = "use cv_determinism::math::to_degrees so the constant is owned" },
+    { path = "f64::to_radians", reason = "use cv_determinism::math::to_radians so the constant is owned" },
+    { path = "f32::sin", reason = "f32 transcendentals diverge too; the engine is f64 via cv_determinism::math" },
+    { path = "f32::cos", reason = "f32 transcendentals diverge too; the engine is f64 via cv_determinism::math" },
+    { path = "f32::powf", reason = "f32 transcendentals diverge too; the engine is f64 via cv_determinism::math" },
+    { path = "f32::mul_add", reason = "FMA availability varies by target; write the multiply and add separately" },
+    { path = "std::time::Instant::now", reason = "generation must not read the clock — it would break replay" },
+    { path = "std::time::SystemTime::now", reason = "generation must not read the clock — it would break replay" },
+]
