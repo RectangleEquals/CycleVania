@@ -1,0 +1,11 @@
+[package]
+name = "cv-determinism"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Owned PRNG, owned math, and ordered containers — the determinism foundation."
+
+[lints]
+workspace = true
+
+[dependencies]

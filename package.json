@@ -1,0 +1,11 @@
+{
+  "name": "cyclevania",
+  "private": true,
+  "version": "0.1.0",
+  "description": "CycleVania SDK workspace — deterministic procedural metroidvania level generation (Rust core + napi addon + WASM).",
+  "scripts": {
+    "build:addon": "cargo build -p cv-bindings",
+    "smoke:addon": "node scripts/smoke-addon.cjs",
+    "verify:addon": "cargo build -p cv-bindings && node scripts/smoke-addon.cjs"
+  }
+}

@@ -1,0 +1,13 @@
+[package]
+name = "cv-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Data model, L0–L6 pipeline, solver, scheduling, and the Context API (no I/O)."
+
+[lints]
+workspace = true
+
+[dependencies]
+cv-determinism = { workspace = true }
+cv-vm = { workspace = true }

@@ -1,0 +1,19 @@
+[package]
+name = "cv-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Headless CycleVania CLI: generate / validate / soak / report."
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "cv"
+path = "src/main.rs"
+
+[dependencies]
+cv-core = { workspace = true }
+cv-script = { workspace = true }
+cv-determinism = { workspace = true }
+clap = { workspace = true }
