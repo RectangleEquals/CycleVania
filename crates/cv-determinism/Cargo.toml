@@ -9,8 +9,10 @@ description = "Owned PRNG, owned math, and ordered containers — the determinis
 workspace = true
 
 # The cross-target determinism probe, built for wasm32 and read back by scripts/wasm-golden.cjs.
+# Named per-crate: all workspace examples share one output directory, so a generic name would collide
+# with cv-core's probe.
 [[example]]
-name = "wasm_probe"
+name = "determinism_probe"
 crate-type = ["cdylib"]
 
 [dependencies]

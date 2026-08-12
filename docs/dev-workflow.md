@@ -52,13 +52,19 @@ mechanisms enforce it, and both will fail your build rather than let drift throu
    instead; the error message names the replacement. Basic `+ - * /` and `sqrt` are *not* banned —
    IEEE-754 requires those to be correctly rounded, so they are already identical everywhere.
    Run `cargo clippy --all-targets` before committing.
-2. **The cross-target golden probe** (`golden/vectors/m02_determinism_probe.bin`) is byte-compared
-   against both the native build and a wasm32 build. If you change numerical behaviour, that fixture
-   changes — which is fine when intended, and a bug report when not. See `golden/README.md` for how
-   to bless it.
+2. **The cross-target golden probes** (`golden/vectors/m0*_*probe.bin`) are byte-compared against both
+   the native build and a wasm32 build. If you change numerical or serialized behaviour, a fixture
+   changes — which is fine when intended, and a bug report when not. See `golden/README.md` for how to
+   bless them.
 
 New float-heavy code belongs in `cv-determinism`, exposed through `math` / `geom`, rather than
 open-coded in the pipeline crates.
+
+### Serialization: never write a `usize`
+
+`usize` is 64-bit on native and **32-bit on wasm32**, so serializing one produces different bytes per
+target. `cv_core::Writer` therefore has **no `usize` method** — use `w.len(n)` (which emits a `u32`)
+or an explicitly-sized integer. The `m03` probe verifies this holds end to end.
 
 ## Editors (either works; neither is required)
 
