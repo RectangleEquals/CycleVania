@@ -8,6 +8,8 @@
 //! * [`object`] — [`ObjectId`] identity, [`ObjectHeader`], and the [`Object`] trait.
 //! * [`node`] — the `World → Reach → Area → Space → Spatial` scope graph and its
 //!   projected→reserved→realized lifecycle.
+//! * [`content`] — the L0 registry of everything a world may be built from.
+//! * [`fingerprint`] — recipe identity (deliberately excluding the seed) and reproduction bundles.
 //! * [`serialize`] — the deterministic binary spine for reproduction bundles and round-trips.
 //! * [`probe`] — the cross-target determinism blob for the data model.
 //!
@@ -20,12 +22,16 @@
 #![forbid(unsafe_code)]
 
 pub mod arena;
+pub mod content;
+pub mod fingerprint;
 pub mod node;
 pub mod object;
 pub mod probe;
 pub mod serialize;
 
 pub use arena::{Arena, Handle};
+pub use content::{ContentEntry, ContentKind, ContentRegistry, RegistryError};
+pub use fingerprint::{Fingerprint, FingerprintBuilder, ReproductionBundle, ReproductionError};
 pub use node::{Node, NodeError, NodeGraph, NodeKind, NodeResult, NodeState};
 pub use object::{IdAllocator, Object, ObjectHeader, ObjectId};
 pub use serialize::{Deserialize, Reader, SerError, SerResult, Serialize, Writer};

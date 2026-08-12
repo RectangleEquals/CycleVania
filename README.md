@@ -28,7 +28,7 @@ crates/
   cv-cli/           the `cv` headless CLI
   cv-editor-backend/ WebSocket service wrapping cv-core for the browser editor
 golden/             byte-exact determinism fixtures
-docs/               dev workflow
+docs/               the manual (concepts / scripting / hosting / editor / contributing)
 ```
 
 ## Quick start
@@ -38,5 +38,6 @@ cargo build && cargo test
 cargo run -p cv-cli -- --version
 ```
 
-See [`docs/dev-workflow.md`](docs/dev-workflow.md) for WASM builds, the Node addon round-trip, and editor
-setup.
+Start at [`docs/README.md`](docs/README.md), which routes by what you are trying to do. For WASM builds,
+the Node addon round-trip, and editor setup, see
+[`docs/contributing/dev-workflow.md`](docs/contributing/dev-workflow.md).

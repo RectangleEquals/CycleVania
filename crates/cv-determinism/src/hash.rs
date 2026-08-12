@@ -44,6 +44,17 @@ pub fn combine(a: u64, b: u64) -> u64 {
     mix64(a ^ mix64(b))
 }
 
+/// A stable content digest over a byte sequence — FNV-1a with an avalanche finalizer.
+///
+/// FNV alone leaves near-identical inputs in nearby buckets; the [`mix64`] pass spreads them, which
+/// matters when a digest is *compared for equality* to decide whether two builds are the same recipe.
+/// Like everything here it is a determinism primitive, not a cryptographic one: it detects accidental
+/// difference, not deliberate forgery.
+#[inline]
+pub fn digest64(bytes: &[u8]) -> u64 {
+    mix64(fnv1a_64(bytes))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -9,11 +9,18 @@
 //! offering no `usize` method — but "the API makes it hard" is a weaker claim than "both targets
 //! produce these exact bytes", so this probe makes the strong claim checkable.
 //!
-//! The blob is a serialized object graph: arenas with vacant slots, cyclic handle references, ids,
-//! strings, and floats. `scripts/wasm-golden.cjs` compares the wasm32 output of
-//! `examples/wasm_probe.rs` against the same fixture `tests/cross_target.rs` checks natively.
+//! Hashing adds a second hazard on top of that. Content-addressed ids, `BTreeMap` ordering and the
+//! fingerprint digest all have to land on identical bytes across targets, and none of that follows
+//! from the serializer being portable — so the registry and a reproduction bundle are in here too.
+//!
+//! The blob covers: arenas with vacant slots and cyclic handle references, object identity, the scope
+//! graph across every kind and lifecycle state, the content registry, and a fingerprint computed from
+//! it. `scripts/wasm-golden.cjs` compares the wasm32 output of `examples/core_probe.rs` against the
+//! same fixture `tests/cross_target.rs` checks natively.
 
 use crate::arena::{Arena, Handle};
+use crate::content::{ContentKind, ContentRegistry};
+use crate::fingerprint::{FingerprintBuilder, ReproductionBundle};
 use crate::node::{NodeGraph, NodeState};
 use crate::object::{IdAllocator, ObjectHeader, ObjectId};
 use crate::serialize::{to_bytes, Deserialize, Reader, SerResult, Serialize, Writer};
@@ -57,12 +64,15 @@ impl Deserialize for ProbeNode {
     }
 }
 
-/// The probe world: an allocator plus an arena containing holes and cycles, and a scope graph.
+/// The probe world: an allocator plus an arena containing holes and cycles, a scope graph, and the
+/// content registry with the fingerprint derived from it.
 struct ProbeWorld {
     ids: IdAllocator,
     nodes: Arena<ProbeNode>,
     derived: Vec<ObjectId>,
     scopes: NodeGraph,
+    registry: ContentRegistry,
+    bundle: ReproductionBundle,
 }
 
 impl Serialize for ProbeWorld {
@@ -71,7 +81,47 @@ impl Serialize for ProbeWorld {
         w.write(&self.nodes);
         w.write(&self.derived);
         w.write(&self.scopes);
+        w.write(&self.registry);
+        w.write(&self.bundle);
     }
+}
+
+/// A registry plus the recipe fingerprint computed from it.
+///
+/// Included in the probe because fingerprinting layers *hashing* on top of serialization — content-
+/// addressed ids, `BTreeMap` ordering, and the content digest all have to land on the same bytes on
+/// both targets, and none of that is implied by the serializer alone being portable.
+fn build_registry_and_bundle() -> (ContentRegistry, ReproductionBundle) {
+    let mut registry = ContentRegistry::new();
+    for (kind, path, digest) in [
+        (ContentKind::Actor, "crawler/door_heavy", 0x1001u64),
+        (ContentKind::Item, "crawler/key_bronze", 0x1002),
+        (ContentKind::Capability, "blink_dash", 0x1003),
+        (ContentKind::Biome, "caverns", 0x1004),
+        (ContentKind::Motif, "ruins", 0x1005),
+        (ContentKind::Component, "hinge", 0x1006),
+        (ContentKind::SurfaceProperty, "portalable", 0x1007),
+        (ContentKind::StaticMesh, "kit/door_a", 0x1008),
+        (ContentKind::CurveTable, "curves/jump", 0x1009),
+    ] {
+        registry.register(kind, path, digest).unwrap();
+    }
+
+    let fingerprint = FingerprintBuilder::new("probe-0.1.0")
+        .content(&registry)
+        .script("door.cvs", 0xDEAD_BEEF)
+        .script("key.cvs", 0x0BAD_F00D)
+        .config_f64("worldScale", 1.5)
+        .config_f64("awkward", 0.1) // not representable in binary
+        .config_u64("reachTarget", 6)
+        .config_i64("offset", -42)
+        .config_bool("legibility", true)
+        .config_str("preset", "crawler")
+        .finish();
+
+    let bundle =
+        ReproductionBundle::new(fingerprint, 0xC0FF_EE00).with_output(0x1234_5678_9ABC_DEF0);
+    (registry, bundle)
 }
 
 /// A scope graph spanning every kind, every lifecycle state, adjacency, and envelopes — so node
@@ -184,11 +234,14 @@ fn build() -> ProbeWorld {
         ObjectId::NONE,
     ];
 
+    let (registry, bundle) = build_registry_and_bundle();
     ProbeWorld {
         ids,
         nodes,
         derived,
         scopes: build_scopes(),
+        registry,
+        bundle,
     }
 }
 
