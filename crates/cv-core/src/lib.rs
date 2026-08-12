@@ -12,6 +12,9 @@
 //! * [`fingerprint`] — recipe identity (deliberately excluding the seed) and reproduction bundles.
 //! * [`descriptor`] — the host-facing `WorldDescriptor`: what goes where and why, never geometry.
 //! * [`events`] — the one-way, batched notification bridge to the host.
+//! * [`mechanic`] — the api-shaped callback seam that breaks the core↔CVScript cycle (M07).
+//! * [`context`] — the per-call lens handed into every mechanic callback.
+//! * [`fixtures`] — hand-written mechanics standing in for CVScript until the VM lands (M18).
 //! * [`serialize`] — the deterministic binary spine for reproduction bundles and round-trips.
 //! * [`probe`] — the cross-target determinism blob for the data model.
 //!
@@ -25,9 +28,12 @@
 
 pub mod arena;
 pub mod content;
+pub mod context;
 pub mod descriptor;
 pub mod events;
 pub mod fingerprint;
+pub mod fixtures;
+pub mod mechanic;
 pub mod node;
 pub mod object;
 pub mod probe;
@@ -35,12 +41,17 @@ pub mod serialize;
 
 pub use arena::{Arena, Handle};
 pub use content::{ContentEntry, ContentKind, ContentRegistry, RegistryError};
+pub use context::Context;
 pub use descriptor::{
     DescriptorBuilder, InstanceRecord, MeshRecord, Placement, PlacementReason, Rationale,
     ScopeRecord, ScopeRef, Socket, WorldDescriptor,
 };
 pub use events::{EventLog, GenEvent, Verbosity};
 pub use fingerprint::{Fingerprint, FingerprintBuilder, ReproductionBundle, ReproductionError};
+pub use mechanic::{
+    Constraint, Constraints, DefaultMechanic, FlowKind, Mechanic, MechanicRegistry, Request,
+    Traversal, TraversalKind, Volume,
+};
 pub use node::{Node, NodeError, NodeGraph, NodeKind, NodeResult, NodeState};
 pub use object::{IdAllocator, Object, ObjectHeader, ObjectId};
 pub use serialize::{Deserialize, Reader, SerError, SerResult, Serialize, Writer};

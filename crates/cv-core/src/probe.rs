@@ -16,20 +16,25 @@
 //! The blob covers: arenas with vacant slots and cyclic handle references, object identity, the scope
 //! graph across every kind and lifecycle state, the content registry, a fingerprint computed from it,
 //! the host-facing `WorldDescriptor` (both placement forms, mirroring, sockets, tags, rationale), and
-//! the event stream. The descriptor especially matters here — it is the artifact that actually *ships*
-//! to a host, so it differing between targets would be a shipped bug rather than an internal one.
+//! the event stream, and the mechanic-interface values (traversals, volumes, per-flow answers) taken
+//! from the fixtures rather than written by hand. The descriptor especially matters here — it is the
+//! artifact that actually *ships* to a host, so it differing between targets would be a shipped bug
+//! rather than an internal one.
 //!
 //! `scripts/wasm-golden.cjs` compares the wasm32 output of `examples/core_probe.rs` against the same
 //! fixture `tests/cross_target.rs` checks natively.
 
 use crate::arena::{Arena, Handle};
 use crate::content::{ContentKind, ContentRegistry};
+use crate::context::Context;
 use crate::descriptor::{
     DescriptorBuilder, InstanceRecord, MeshRecord, Placement, PlacementReason, Rationale, ScopeRef,
     Socket, WorldDescriptor,
 };
 use crate::events::GenEvent;
 use crate::fingerprint::{Fingerprint, FingerprintBuilder, ReproductionBundle};
+use crate::fixtures::{Deflective, Door, Glass, KeyItem, Ledge, MovementCapability};
+use crate::mechanic::{FlowKind, Mechanic, Traversal, TraversalKind, Volume};
 use crate::node::{NodeGraph, NodeState};
 use crate::object::{IdAllocator, ObjectHeader, ObjectId};
 use crate::serialize::{to_bytes, Deserialize, Reader, SerResult, Serialize, Writer};
@@ -84,6 +89,9 @@ struct ProbeWorld {
     bundle: ReproductionBundle,
     descriptor: WorldDescriptor,
     events: Vec<GenEvent>,
+    traversals: Vec<Traversal>,
+    volumes: Vec<Volume>,
+    flows: Vec<FlowKind>,
 }
 
 impl Serialize for ProbeWorld {
@@ -96,6 +104,9 @@ impl Serialize for ProbeWorld {
         w.write(&self.bundle);
         w.write(&self.descriptor);
         w.write(&self.events);
+        w.write(&self.traversals);
+        w.write(&self.volumes);
+        w.write(&self.flows);
     }
 }
 
@@ -251,6 +262,7 @@ fn build() -> ProbeWorld {
     let scopes = build_scopes();
     let descriptor = build_descriptor(&scopes, bundle.fingerprint, bundle.seed);
     let events = build_events(bundle.fingerprint, bundle.seed);
+    let (traversals, volumes, flows) = build_mechanic_values();
     ProbeWorld {
         ids,
         nodes,
@@ -260,6 +272,9 @@ fn build() -> ProbeWorld {
         bundle,
         descriptor,
         events,
+        traversals,
+        volumes,
+        flows,
     }
 }
 
@@ -322,6 +337,45 @@ fn build_descriptor(scopes: &NodeGraph, fingerprint: Fingerprint, seed: u64) -> 
         rationale: Rationale::new(PlacementReason::Connector),
     });
     b.finish()
+}
+
+/// The mechanic-interface value types, exercised through the fixtures rather than by hand — so the
+/// probe covers what a mechanic actually *returns*, not just that the types encode.
+fn build_mechanic_values() -> (Vec<Traversal>, Vec<Volume>, Vec<FlowKind>) {
+    let ctx = Context::detached();
+    let dash = ObjectId::derived("capability", "blink_dash");
+
+    let mut traversals = Vec::new();
+    traversals.extend(Door::locked_by(dash).affords(&ctx));
+    traversals.extend(Ledge.affords(&ctx));
+    traversals.extend(MovementCapability::new("Blink Dash", TraversalKind::Blink).affords(&ctx));
+    traversals.push(Traversal::gated(TraversalKind::Custom(9), [dash]).one_way());
+
+    let volumes: Vec<Volume> = [
+        Door::locked_by(dash).footprint(&ctx),
+        KeyItem::granting(dash).footprint(&ctx),
+        Some(Volume::with_clearance(
+            Aabb::new(Vec3::new(-0.1, 0.0, 3.3), Vec3::new(1.9, 4.25, 4.0)),
+            0.125,
+        )),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+
+    // Which flows each surface stops — the per-flow answers, not just the enum tags.
+    let mut flows = Vec::new();
+    for f in FlowKind::CORE {
+        if Glass.blocks(&ctx, f) {
+            flows.push(f);
+        }
+        if Deflective::facing(Vec3::Z).blocks(&ctx, f) {
+            flows.push(f);
+        }
+    }
+    flows.push(FlowKind::Custom(77));
+
+    (traversals, volumes, flows)
 }
 
 /// One of every event variant, in a fixed order.
