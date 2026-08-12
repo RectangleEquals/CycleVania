@@ -18,6 +18,7 @@
 //! * [`schedule`] — L0 content resolution and the L1 plan, including `AdaptiveRange` (M08).
 //! * [`mission`] — the L2 mission graph, the `Rule` grammar, and sphere reachability (M09).
 //! * [`solver`] — assumed-fill placement, cycle generation, and the linearity dials (M09).
+//! * [`softlock`] — the un-softlockable guarantee: no reachable state strands the goal (M10).
 //! * [`serialize`] — the deterministic binary spine for reproduction bundles and round-trips.
 //! * [`probe`] — the cross-target determinism blob for the data model.
 //!
@@ -43,6 +44,7 @@ pub mod object;
 pub mod probe;
 pub mod schedule;
 pub mod serialize;
+pub mod softlock;
 pub mod solver;
 
 pub use arena::{Arena, Handle};
@@ -67,6 +69,9 @@ pub use schedule::{
     TargetOutcome, TargetReasoning, WorldLimit,
 };
 pub use serialize::{Deserialize, Reader, SerError, SerResult, Serialize, Writer};
+pub use softlock::{
+    AnalysisLimit, Repair, Softlock, SoftlockAnalysis, SoftlockAnalyzer, SoftlockKind,
+};
 pub use solver::{
     Linearity, LinearityOverride, LinearityResolver, PlacementTrace, Solution, SolveError, Solver,
 };
