@@ -16,6 +16,8 @@
 //! * [`context`] — the per-call lens handed into every mechanic callback.
 //! * [`fixtures`] — hand-written mechanics standing in for CVScript until the VM lands (M18).
 //! * [`schedule`] — L0 content resolution and the L1 plan, including `AdaptiveRange` (M08).
+//! * [`mission`] — the L2 mission graph, the `Rule` grammar, and sphere reachability (M09).
+//! * [`solver`] — assumed-fill placement, cycle generation, and the linearity dials (M09).
 //! * [`serialize`] — the deterministic binary spine for reproduction bundles and round-trips.
 //! * [`probe`] — the cross-target determinism blob for the data model.
 //!
@@ -35,11 +37,13 @@ pub mod events;
 pub mod fingerprint;
 pub mod fixtures;
 pub mod mechanic;
+pub mod mission;
 pub mod node;
 pub mod object;
 pub mod probe;
 pub mod schedule;
 pub mod serialize;
+pub mod solver;
 
 pub use arena::{Arena, Handle};
 pub use content::{ContentEntry, ContentKind, ContentRegistry, RegistryError};
@@ -54,6 +58,7 @@ pub use mechanic::{
     Constraint, Constraints, DefaultMechanic, FlowKind, Mechanic, MechanicRegistry, Request,
     Traversal, TraversalKind, Volume,
 };
+pub use mission::{Location, LocationId, MissionEdge, MissionGraph, Reachability, Rule, Sphere};
 pub use node::{Node, NodeError, NodeGraph, NodeKind, NodeResult, NodeState};
 pub use object::{IdAllocator, Object, ObjectHeader, ObjectId};
 pub use schedule::{
@@ -62,6 +67,9 @@ pub use schedule::{
     TargetOutcome, TargetReasoning, WorldLimit,
 };
 pub use serialize::{Deserialize, Reader, SerError, SerResult, Serialize, Writer};
+pub use solver::{
+    Linearity, LinearityOverride, LinearityResolver, PlacementTrace, Solution, SolveError, Solver,
+};
 
 /// This crate's version.
 pub fn version() -> &'static str {
