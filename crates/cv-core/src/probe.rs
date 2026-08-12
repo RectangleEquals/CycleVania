@@ -14,17 +14,26 @@
 //! from the serializer being portable — so the registry and a reproduction bundle are in here too.
 //!
 //! The blob covers: arenas with vacant slots and cyclic handle references, object identity, the scope
-//! graph across every kind and lifecycle state, the content registry, and a fingerprint computed from
-//! it. `scripts/wasm-golden.cjs` compares the wasm32 output of `examples/core_probe.rs` against the
-//! same fixture `tests/cross_target.rs` checks natively.
+//! graph across every kind and lifecycle state, the content registry, a fingerprint computed from it,
+//! the host-facing `WorldDescriptor` (both placement forms, mirroring, sockets, tags, rationale), and
+//! the event stream. The descriptor especially matters here — it is the artifact that actually *ships*
+//! to a host, so it differing between targets would be a shipped bug rather than an internal one.
+//!
+//! `scripts/wasm-golden.cjs` compares the wasm32 output of `examples/core_probe.rs` against the same
+//! fixture `tests/cross_target.rs` checks natively.
 
 use crate::arena::{Arena, Handle};
 use crate::content::{ContentKind, ContentRegistry};
-use crate::fingerprint::{FingerprintBuilder, ReproductionBundle};
+use crate::descriptor::{
+    DescriptorBuilder, InstanceRecord, MeshRecord, Placement, PlacementReason, Rationale, ScopeRef,
+    Socket, WorldDescriptor,
+};
+use crate::events::GenEvent;
+use crate::fingerprint::{Fingerprint, FingerprintBuilder, ReproductionBundle};
 use crate::node::{NodeGraph, NodeState};
 use crate::object::{IdAllocator, ObjectHeader, ObjectId};
 use crate::serialize::{to_bytes, Deserialize, Reader, SerResult, Serialize, Writer};
-use cv_determinism::{Aabb, Vec3};
+use cv_determinism::{Aabb, Mat4, Quat, Transform, Vec3};
 
 /// A probe node: carries every primitive the format supports, plus handles that form cycles.
 #[derive(Clone, Debug, PartialEq)]
@@ -73,6 +82,8 @@ struct ProbeWorld {
     scopes: NodeGraph,
     registry: ContentRegistry,
     bundle: ReproductionBundle,
+    descriptor: WorldDescriptor,
+    events: Vec<GenEvent>,
 }
 
 impl Serialize for ProbeWorld {
@@ -83,6 +94,8 @@ impl Serialize for ProbeWorld {
         w.write(&self.scopes);
         w.write(&self.registry);
         w.write(&self.bundle);
+        w.write(&self.descriptor);
+        w.write(&self.events);
     }
 }
 
@@ -235,14 +248,113 @@ fn build() -> ProbeWorld {
     ];
 
     let (registry, bundle) = build_registry_and_bundle();
+    let scopes = build_scopes();
+    let descriptor = build_descriptor(&scopes, bundle.fingerprint, bundle.seed);
+    let events = build_events(bundle.fingerprint, bundle.seed);
     ProbeWorld {
         ids,
         nodes,
         derived,
-        scopes: build_scopes(),
+        scopes,
         registry,
         bundle,
+        descriptor,
+        events,
     }
+}
+
+/// A descriptor covering both placement forms, mirroring, sockets, tags and rationale — the
+/// host-facing output has to be byte-identical across targets too, since it is what ships.
+fn build_descriptor(scopes: &NodeGraph, fingerprint: Fingerprint, seed: u64) -> WorldDescriptor {
+    let mut b = DescriptorBuilder::new(scopes, fingerprint, seed);
+    let space = ScopeRef(3);
+
+    b.place(InstanceRecord {
+        id: ObjectId::derived("instance", "door_1"),
+        content: ObjectId::derived("actor", "crawler/door_heavy"),
+        scope: space,
+        placement: Placement::Trs(Transform::new(
+            Vec3::new(1.5, -2.25, 3.125),
+            Quat::from_axis_angle(Vec3::new(0.3, -0.6, 0.75), 1.234_567),
+            Vec3::new(2.0, 0.5, 1.25),
+        )),
+        rationale: Rationale::detailed(PlacementReason::SolverRequired, "gate on edge 0→1"),
+    });
+    b.place(InstanceRecord {
+        id: ObjectId::derived("instance", "key_1"),
+        content: ObjectId::derived("item", "crawler/key_bronze"),
+        scope: ScopeRef(4),
+        // A mirrored placement: negative scale, still TRS.
+        placement: Placement::Trs(Transform::from_scale(Vec3::new(-1.0, 1.0, 1.0))),
+        rationale: Rationale::new(PlacementReason::Scheduled),
+    });
+
+    b.place_mesh(MeshRecord {
+        id: ObjectId::derived("meshinst", "door_1_mesh"),
+        mesh: ObjectId::derived("mesh", "kit/door_a"),
+        scope: space,
+        // A sheared placement, which can only be carried as a matrix.
+        placement: Placement::from_matrix(
+            Mat4::from(Transform::from_scale(Vec3::new(2.0, 1.0, 1.0)))
+                * Mat4::from(Transform::from_rotation(Quat::from_axis_angle(
+                    Vec3::Z,
+                    0.7,
+                ))),
+        ),
+        collision: vec![
+            Aabb::new(Vec3::ZERO, Vec3::new(1.0, 0.2, 2.5)),
+            Aabb::new(Vec3::new(-0.1, 0.0, 0.0), Vec3::new(0.9, 3.3, 0.7)),
+        ],
+        sockets: vec![
+            Socket {
+                name: "hinge".into(),
+                transform: Transform::from_translation(Vec3::new(0.0, 0.0, 1.25)),
+            },
+            Socket {
+                name: "latch".into(),
+                transform: Transform::IDENTITY,
+            },
+        ],
+        tags: vec![
+            ObjectId::derived("surface", "portalable"),
+            ObjectId::derived("surface", "deflective"),
+        ],
+        rationale: Rationale::new(PlacementReason::Connector),
+    });
+    b.finish()
+}
+
+/// One of every event variant, in a fixed order.
+fn build_events(fingerprint: Fingerprint, seed: u64) -> Vec<GenEvent> {
+    vec![
+        GenEvent::Started { fingerprint, seed },
+        GenEvent::LayerProgress {
+            layer: 2,
+            fraction: 0.1,
+        }, // not representable in binary
+        GenEvent::ScopeAdvanced {
+            scope: ScopeRef(3),
+            state: NodeState::Realized,
+        },
+        GenEvent::Placed {
+            instance: ObjectId::derived("instance", "door_1"),
+            content: ObjectId::derived("actor", "crawler/door_heavy"),
+            scope: ScopeRef(3),
+        },
+        GenEvent::Rejected {
+            content: ObjectId::derived("actor", "statue"),
+            scope: ScopeRef(4),
+            reason: "footprint exceeds the space".into(),
+        },
+        GenEvent::Signal {
+            name: "door_opened".into(),
+            detail: "by key_bronze".into(),
+        },
+        GenEvent::Finished {
+            instances: 2,
+            meshes: 1,
+        },
+    ]
 }
 
 /// Compute the canonical cv-core determinism blob: the serialized probe world, envelope included.
