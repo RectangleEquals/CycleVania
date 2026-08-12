@@ -15,6 +15,7 @@
 //! * [`mechanic`] — the api-shaped callback seam that breaks the core↔CVScript cycle (M07).
 //! * [`context`] — the per-call lens handed into every mechanic callback.
 //! * [`fixtures`] — hand-written mechanics standing in for CVScript until the VM lands (M18).
+//! * [`schedule`] — L0 content resolution and the L1 plan, including `AdaptiveRange` (M08).
 //! * [`serialize`] — the deterministic binary spine for reproduction bundles and round-trips.
 //! * [`probe`] — the cross-target determinism blob for the data model.
 //!
@@ -37,6 +38,7 @@ pub mod mechanic;
 pub mod node;
 pub mod object;
 pub mod probe;
+pub mod schedule;
 pub mod serialize;
 
 pub use arena::{Arena, Handle};
@@ -54,6 +56,11 @@ pub use mechanic::{
 };
 pub use node::{Node, NodeError, NodeGraph, NodeKind, NodeResult, NodeState};
 pub use object::{IdAllocator, Object, ObjectHeader, ObjectId};
+pub use schedule::{
+    AdaptiveRange, Candidate, ContentPool, CountRule, Curve, PlannedSlot, PoolEntry, Progression,
+    Schedule, ScheduleBook, SchedulePlan, Scheduler, ScopeFilter, SeedPolicy, SlotRule, Span,
+    TargetOutcome, TargetReasoning, WorldLimit,
+};
 pub use serialize::{Deserialize, Reader, SerError, SerResult, Serialize, Writer};
 
 /// This crate's version.

@@ -93,6 +93,30 @@ impl ContentKind {
         )
     }
 
+    /// The scope kinds this content naturally fills.
+    ///
+    /// A `Biome` dresses an Area; an `Actor` goes in a room. Without this, scheduling a Space would
+    /// count Biomes among its available variety and inflate the target with content that could never
+    /// go there. A schedule may override it, but the default should already be right.
+    pub fn default_scopes(self) -> &'static [crate::node::NodeKind] {
+        use crate::node::NodeKind::*;
+        match self {
+            ContentKind::Actor | ContentKind::Item | ContentKind::Puzzle => &[Space, Spatial],
+            // A capability is scheduled as "when does this become available", which is a
+            // room-granularity question even though an Item is what physically grants it.
+            ContentKind::Capability => &[Space],
+            ContentKind::Biome => &[Area],
+            ContentKind::Motif => &[Area, Reach],
+            // Not schedulable: referenced or composed, never placed on their own.
+            ContentKind::Component
+            | ContentKind::Action
+            | ContentKind::Shape
+            | ContentKind::SurfaceProperty
+            | ContentKind::StaticMesh
+            | ContentKind::CurveTable => &[],
+        }
+    }
+
     /// The namespace used when deriving ids for this kind, so an Actor and an Item may share a path
     /// without colliding.
     pub fn namespace(self) -> &'static str {
