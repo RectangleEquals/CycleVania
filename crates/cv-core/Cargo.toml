@@ -8,6 +8,11 @@ description = "Data model, L0–L6 pipeline, solver, scheduling, and the Context
 [lints]
 workspace = true
 
+# The data model's cross-target determinism probe (see cv-determinism's for the naming note).
+[[example]]
+name = "core_probe"
+crate-type = ["cdylib"]
+
 [dependencies]
 cv-determinism = { workspace = true }
 cv-vm = { workspace = true }

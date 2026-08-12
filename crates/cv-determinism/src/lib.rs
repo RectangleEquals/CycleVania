@@ -7,9 +7,11 @@
 //! * [`Rng`] — the forkable, label-addressed PRNG (M01).
 //! * [`math`] — owned exact + transcendental scalar math, and the float contract (M02).
 //! * [`geom`] — `Vec3`/`Quat`/`Transform`/`Mat4`/`Aabb` kernels built on `math` (M02).
+//! * [`hash`] — stable target-independent hashing (RNG forking, content-derived ids).
 //! * [`probe`] — the canonical cross-target determinism blob (M02).
 
 pub mod geom;
+pub mod hash;
 pub mod math;
 pub mod probe;
 mod rng;

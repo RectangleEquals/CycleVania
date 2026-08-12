@@ -8,24 +8,10 @@
 //! is called. All arithmetic is fixed-width integer (plus a power-of-two float scale for `[0, 1)`), so
 //! output is bit-identical on native and WASM.
 
-/// SplitMix64 finalizer — a strong 64-bit avalanche mix.
-#[inline]
-fn mix64(mut z: u64) -> u64 {
-    z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
-    z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
-    z ^ (z >> 31)
-}
-
-/// FNV-1a 64-bit over raw bytes — deterministic, platform-independent label hashing.
-#[inline]
-fn fnv1a(bytes: &[u8]) -> u64 {
-    let mut h: u64 = 0xCBF2_9CE4_8422_2325;
-    for &b in bytes {
-        h ^= b as u64;
-        h = h.wrapping_mul(0x0000_0100_0000_01B3);
-    }
-    h
-}
+// The mixing/hashing primitives live in `crate::hash` so object identity (cv-core) and RNG forking
+// share one stable implementation. Moving them there was behaviour-preserving — the M01 golden
+// fixtures still pass unchanged, which is the check that matters.
+use crate::hash::{fnv1a_64 as fnv1a, mix64};
 
 /// The SplitMix64 increment (odd, ~golden ratio).
 const GAMMA: u64 = 0x9E37_79B9_7F4A_7C15;

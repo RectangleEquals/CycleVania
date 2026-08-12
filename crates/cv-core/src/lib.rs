@@ -2,7 +2,29 @@
 //! pipeline, the scheduling engine (L1), the solver (L2, incl. the no-softlock guarantee), and the
 //! Context API. Pure computation, no I/O; the VM (cv-vm) is embedded here for api-dispatch.
 //!
-//! **M00: skeleton only.** The arena + node graph land in M03/M04; the pipeline in M06–M14.
+//! **M03: the data model's foundation.**
+//!
+//! * [`arena`] — the generational [`Arena`] and typed [`Handle`]s every object lives in.
+//! * [`object`] — [`ObjectId`] identity, [`ObjectHeader`], and the [`Object`] trait.
+//! * [`serialize`] — the deterministic binary spine for reproduction bundles and round-trips.
+//! * [`probe`] — the cross-target determinism blob for the data model.
+//!
+//! The pipeline (M06–M14) and the node graph (M04) build on these.
+
+// No `unsafe` anywhere in the core. The arena's stale-handle guarantee is an explicit generation
+// check rather than a pointer trick, so it is enforced by the compiler and by tests — which is a
+// stronger statement than "miri found no UB", and it holds on the pinned stable toolchain where miri
+// is not available.
+#![forbid(unsafe_code)]
+
+pub mod arena;
+pub mod object;
+pub mod probe;
+pub mod serialize;
+
+pub use arena::{Arena, Handle};
+pub use object::{IdAllocator, Object, ObjectHeader, ObjectId};
+pub use serialize::{Deserialize, Reader, SerError, SerResult, Serialize, Writer};
 
 /// This crate's version.
 pub fn version() -> &'static str {

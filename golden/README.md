@@ -11,19 +11,31 @@ freshly computed output — any drift is a determinism regression.
 | `m00_placeholder.bin` | the harness itself | `cv-determinism/tests/golden.rs` |
 | `m01_root_seed_c0ffee.bin` | the root PRNG stream | `cv-determinism/tests/prng.rs` |
 | `m01_fork_tree_seed42.bin` | labelled + indexed fork streams | `cv-determinism/tests/prng.rs` |
-| `m02_determinism_probe.bin` | **the cross-target probe** — owned math, RNG, geometry, and `Mat4` affine/mirror math | `tests/cross_target.rs` **and** `scripts/wasm-golden.cjs` |
+| `m02_determinism_probe.bin` | **cross-target probe** — owned math, RNG, geometry, `Mat4` affine/mirror math | `cv-determinism/tests/cross_target.rs` **and** `scripts/wasm-golden.cjs` |
+| `m03_core_probe.bin` | **cross-target probe** — arena layout, object identity, binary serialization | `cv-core/tests/cross_target.rs` **and** `scripts/wasm-golden.cjs` |
 
-## Why `m02_determinism_probe.bin` is the important one
+## Why the cross-target probes are the important ones
 
-It is checked **twice, against two targets**:
+Each is checked **twice, against two targets**:
 
-1. `cargo test -p cv-determinism` computes the blob natively (x86-64) and compares it to the file.
+1. `cargo test` computes the blob natively (x86-64) and compares it to the file.
 2. `node scripts/wasm-golden.cjs` loads the same code compiled to **wasm32**, reads the blob out of
    linear memory, and compares it to the *same* file.
 
 Either check alone proves nothing about portability. Both passing means native and WASM agree
-byte-for-byte across every transcendental, every RNG stream, and the geometry kernels — which is the
-actual cross-machine guarantee. Run both with `npm run verify:determinism`.
+byte-for-byte. Run both with `npm run verify:determinism`.
+
+What each probe is really guarding:
+
+* **`m02`** — that no platform transcendental (`f64::sin` and friends, which round differently per
+  libm) reached the math layer.
+* **`m03`** — that no **`usize`** reached the serialized form. `usize` is 64-bit on native and
+  **32-bit on wasm32**, so writing one would silently produce different bytes per target while every
+  single-target test still passed. `Writer` structurally omits `usize`; this probe is what turns that
+  design choice into a verified fact.
+
+Adding a probe to a new crate: give its example a **workspace-unique name** (all examples share one
+output directory) and add a row to `PROBES` in `scripts/wasm-golden.cjs`.
 
 Values are stored as raw little-endian IEEE-754 bit patterns, never formatted text, so a one-ULP
 difference cannot hide behind decimal rounding.
