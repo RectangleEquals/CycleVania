@@ -541,6 +541,49 @@ impl<'a> Solver<'a> {
         (scored[index].0, Some(scored[index].1), locality)
     }
 
+    /// Turn a fraction of edges into **one-way commits** — a drop you cannot climb back up.
+    ///
+    /// These are what make a world feel like it has consequences, and they are also the only way a
+    /// player can strand themselves (capabilities are monotone, so collecting never hurts). The
+    /// un-softlockable pass (M10) exists to check exactly what this introduces, and should be run
+    /// afterwards — generating commits without validating them is how a shipped softlock happens.
+    ///
+    /// Shortcuts are left alone: a loop-closing edge that only worked one way would defeat its purpose.
+    pub fn add_one_way_commits(
+        &self,
+        mission: &mut MissionGraph,
+        fraction: f64,
+        rng: &Rng,
+    ) -> usize {
+        let distances = mission.distances_from(mission.start());
+        let decide = rng.fork("one_way");
+
+        // Only edges leading *away* from the start, so a commit always sits between the player and
+        // something new rather than sealing the route behind them at the door.
+        let candidates: Vec<usize> = mission
+            .edges()
+            .iter()
+            .enumerate()
+            .filter(|(_, e)| e.reversible && !e.is_shortcut)
+            .filter(
+                |(_, e)| match (distances.get(&e.from), distances.get(&e.to)) {
+                    (Some(a), Some(b)) => a != b,
+                    _ => false,
+                },
+            )
+            .map(|(i, _)| i)
+            .collect();
+
+        let mut made = 0;
+        for index in candidates {
+            if decide.fork(&index.to_string()).chance(fraction) {
+                mission.make_one_way(index);
+                made += 1;
+            }
+        }
+        made
+    }
+
     /// Gate edges so the world has progression at all.
     ///
     /// Walks the graph outward from the start and gates a fraction of the edges that lead *away* from

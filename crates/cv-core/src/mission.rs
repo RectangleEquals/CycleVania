@@ -315,6 +315,14 @@ impl Reachability {
 #[derive(Clone, Debug, PartialEq)]
 pub struct MissionGraph {
     start: Handle<Node>,
+    /// Where the world is considered complete. The un-softlockable guarantee (M10) is stated against
+    /// this: from every reachable state, *the goal* must stay reachable.
+    goal: Option<Handle<Node>>,
+    /// Scopes from which a stranded player can get back — a warp, a checkpoint, a hub return.
+    ///
+    /// Reaching one is what makes an otherwise-trapping one-way transition safe, which is exactly how
+    /// real games handle it (Metroid's elevators, a dungeon's warp-out pedestal).
+    recovery: BTreeSet<Handle<Node>>,
     edges: Vec<MissionEdge>,
     locations: BTreeMap<LocationId, Location>,
     /// Adjacency built from `edges`, rebuilt whenever they change.
@@ -326,10 +334,34 @@ impl MissionGraph {
     pub fn new(start: Handle<Node>) -> Self {
         MissionGraph {
             start,
+            goal: None,
+            recovery: BTreeSet::new(),
             edges: Vec::new(),
             locations: BTreeMap::new(),
             adjacency: BTreeMap::new(),
         }
+    }
+
+    /// Set where the world is considered complete.
+    pub fn set_goal(&mut self, scope: Handle<Node>) -> &mut Self {
+        self.goal = Some(scope);
+        self
+    }
+
+    /// Where the world is considered complete, if declared.
+    pub fn goal(&self) -> Option<Handle<Node>> {
+        self.goal
+    }
+
+    /// Mark a scope as a recovery point — reaching it un-strands a player.
+    pub fn add_recovery(&mut self, scope: Handle<Node>) -> &mut Self {
+        self.recovery.insert(scope);
+        self
+    }
+
+    /// The recovery points, in handle order.
+    pub fn recovery_points(&self) -> &BTreeSet<Handle<Node>> {
+        &self.recovery
     }
 
     /// Build the base topology from a scope graph's **spatial adjacency**.
@@ -376,6 +408,38 @@ impl MissionGraph {
         }
         self.edges.push(edge);
         index
+    }
+
+    /// Make a one-way edge two-way. Returns whether anything changed.
+    ///
+    /// The blunt repair for a softlock: a commit you can undo is not a commit.
+    pub fn make_reversible(&mut self, index: usize) -> bool {
+        match self.edges.get_mut(index) {
+            Some(edge) if !edge.reversible => {
+                edge.reversible = true;
+                let to = edge.to;
+                self.adjacency.entry(to).or_default().push(index);
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// Make a two-way edge one-way, oriented `from → to`. Returns whether anything changed.
+    pub fn make_one_way(&mut self, index: usize) -> bool {
+        let Some(edge) = self.edges.get(index) else {
+            return false;
+        };
+        if !edge.reversible {
+            return false;
+        }
+        let to = edge.to;
+        self.edges[index].reversible = false;
+        // The destination can no longer walk back along this edge.
+        if let Some(list) = self.adjacency.get_mut(&to) {
+            list.retain(|i| *i != index);
+        }
+        true
     }
 
     /// Replace an edge's rule — how L2 gates a connection.
@@ -429,13 +493,27 @@ impl MissionGraph {
         placements: &BTreeMap<LocationId, ObjectId>,
         grants: &BTreeMap<ObjectId, ObjectId>,
     ) -> Reachability {
+        self.sweep_from(self.start, initial, placements, grants)
+    }
+
+    /// A sweep starting somewhere other than the world's start.
+    ///
+    /// This is what the un-softlockable analysis needs: "the player has just dropped through a one-way
+    /// transition into `origin` holding only these capabilities — what can they still reach?"
+    pub fn sweep_from(
+        &self,
+        origin: Handle<Node>,
+        initial: &BTreeSet<ObjectId>,
+        placements: &BTreeMap<LocationId, ObjectId>,
+        grants: &BTreeMap<ObjectId, ObjectId>,
+    ) -> Reachability {
         let mut held = initial.clone();
         let mut scopes: BTreeSet<Handle<Node>> = BTreeSet::new();
         let mut locations: BTreeSet<LocationId> = BTreeSet::new();
         let mut spheres: Vec<Sphere> = Vec::new();
 
         loop {
-            let round_scopes = self.traverse(&held);
+            let round_scopes = self.traverse_from(origin, &held);
             let new_scopes: Vec<Handle<Node>> = round_scopes
                 .iter()
                 .filter(|s| !scopes.contains(s))
@@ -489,11 +567,20 @@ impl MissionGraph {
     ///
     /// Deterministic: a `VecDeque` frontier and edges visited in index order, so the same graph and
     /// capabilities always yield the same set — and, more importantly, the same *sphere boundaries*.
-    fn traverse(&self, held: &BTreeSet<ObjectId>) -> BTreeSet<Handle<Node>> {
+    pub fn traverse(&self, held: &BTreeSet<ObjectId>) -> BTreeSet<Handle<Node>> {
+        self.traverse_from(self.start, held)
+    }
+
+    /// One breadth-first traversal from an arbitrary origin with a fixed capability set.
+    pub fn traverse_from(
+        &self,
+        origin: Handle<Node>,
+        held: &BTreeSet<ObjectId>,
+    ) -> BTreeSet<Handle<Node>> {
         let mut seen: BTreeSet<Handle<Node>> = BTreeSet::new();
         let mut queue: VecDeque<Handle<Node>> = VecDeque::new();
-        seen.insert(self.start);
-        queue.push_back(self.start);
+        seen.insert(origin);
+        queue.push_back(origin);
 
         while let Some(at) = queue.pop_front() {
             let Some(edge_indices) = self.adjacency.get(&at) else {
