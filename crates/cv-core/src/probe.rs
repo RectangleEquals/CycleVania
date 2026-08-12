@@ -37,8 +37,11 @@ use crate::fixtures::{Deflective, Door, Glass, KeyItem, Ledge, MovementCapabilit
 use crate::mechanic::{FlowKind, Mechanic, Traversal, TraversalKind, Volume};
 use crate::node::{NodeGraph, NodeState};
 use crate::object::{IdAllocator, ObjectHeader, ObjectId};
+use crate::schedule::{
+    AdaptiveRange, Curve, Progression, Schedule, ScheduleBook, SeedPolicy, Span, TargetOutcome,
+};
 use crate::serialize::{to_bytes, Deserialize, Reader, SerResult, Serialize, Writer};
-use cv_determinism::{Aabb, Mat4, Quat, Transform, Vec3};
+use cv_determinism::{Aabb, Mat4, Quat, Rng, Transform, Vec3};
 
 /// A probe node: carries every primitive the format supports, plus handles that form cycles.
 #[derive(Clone, Debug, PartialEq)]
@@ -92,6 +95,9 @@ struct ProbeWorld {
     traversals: Vec<Traversal>,
     volumes: Vec<Volume>,
     flows: Vec<FlowKind>,
+    schedules: ScheduleBook,
+    seed_policy: SeedPolicy,
+    schedule_math: Vec<u8>,
 }
 
 impl Serialize for ProbeWorld {
@@ -107,6 +113,9 @@ impl Serialize for ProbeWorld {
         w.write(&self.traversals);
         w.write(&self.volumes);
         w.write(&self.flows);
+        w.write(&self.schedules);
+        w.write(&self.seed_policy);
+        w.bytes(&self.schedule_math);
     }
 }
 
@@ -263,6 +272,7 @@ fn build() -> ProbeWorld {
     let descriptor = build_descriptor(&scopes, bundle.fingerprint, bundle.seed);
     let events = build_events(bundle.fingerprint, bundle.seed);
     let (traversals, volumes, flows) = build_mechanic_values();
+    let (schedules, seed_policy, schedule_math) = build_schedule_values();
     ProbeWorld {
         ids,
         nodes,
@@ -275,6 +285,9 @@ fn build() -> ProbeWorld {
         traversals,
         volumes,
         flows,
+        schedules,
+        seed_policy,
+        schedule_math,
     }
 }
 
@@ -376,6 +389,68 @@ fn build_mechanic_values() -> (Vec<Traversal>, Vec<Volume>, Vec<FlowKind>) {
     flows.push(FlowKind::Custom(77));
 
     (traversals, volumes, flows)
+}
+
+/// Scheduling config plus the **computed** results of the AdaptiveRange formula.
+///
+/// The config types matter because they are project data and therefore fingerprint inputs. The
+/// computed values matter more: the formula does floating-point multiplication and a `floor`, so a
+/// target landing on a boundary could in principle differ per target. Pinning the outputs — not just
+/// the inputs — is what makes that checkable.
+fn build_schedule_values() -> (ScheduleBook, SeedPolicy, Vec<u8>) {
+    let mut book = ScheduleBook::new();
+    book.set(
+        ObjectId::derived("actor", "crawler/door_heavy"),
+        Schedule::during(Span::new(0.2, 0.9)).weighted(Curve::from_points([
+            (0.0, 0.1),
+            (0.35, 0.75),
+            (1.0, 0.9),
+        ])),
+    );
+    book.set(
+        ObjectId::derived("item", "crawler/key_bronze"),
+        Schedule::during(Span::from(0.5)).weighted(Curve::ramp(0.05, 1.0)),
+    );
+    book.set(ObjectId::derived("biome", "caverns"), Schedule::always());
+
+    let policy = SeedPolicy {
+        lookahead: 3,
+        lookbehind: 1,
+        length: AdaptiveRange::new(4, 9)
+            .with_repeat_tol(1.75)
+            .with_jitter(2),
+    };
+
+    // Sweep the formula across all three regimes and awkward weights.
+    let range = AdaptiveRange::new(3, 6).with_repeat_tol(1.5).with_jitter(2);
+    let mut w = Writer::new();
+    let mut rng = Rng::new(0x5C_1ED0_0001);
+    for unique in [0u32, 1, 2, 3, 5, 10, 40] {
+        for weight in [0.0, 0.1, 0.333_333_333_333_333_3, 0.5, 0.75, 1.0] {
+            let r = range.resolve(unique, weight, &mut rng);
+            w.u32(r.unique);
+            w.u32(r.supported);
+            w.u32(r.target);
+            w.i32(r.jitter);
+            w.f64(r.weight);
+            w.f64(r.repeat_tol);
+            w.u8(match r.outcome {
+                TargetOutcome::Abundant => 0,
+                TargetOutcome::Moderate => 1,
+                TargetOutcome::Scarce => 2,
+                TargetOutcome::Fixed => 3,
+                TargetOutcome::Sampled => 4,
+                TargetOutcome::Curved => 5,
+            });
+        }
+    }
+    // Curve evaluation at awkward fractions, where interpolation could drift.
+    let curve = Curve::from_points([(0.0, 0.0), (0.3, 1.0), (0.55, 0.25), (1.0, 0.9)]);
+    for i in 0..=20 {
+        w.f64(curve.eval(Progression::new(i as f64 / 20.0)));
+    }
+
+    (book, policy, w.finish())
 }
 
 /// One of every event variant, in a fixed order.
