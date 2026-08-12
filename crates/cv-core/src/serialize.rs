@@ -27,6 +27,7 @@
 
 use crate::arena::{Arena, Handle};
 use crate::object::{IdAllocator, ObjectHeader, ObjectId};
+use cv_determinism::{Aabb, Mat4, Quat, Transform, Vec3};
 use std::fmt;
 
 /// Magic bytes beginning every serialized artifact: "CycleVania Data Stream".
@@ -470,6 +471,92 @@ impl<T: Deserialize> Deserialize for Vec<T> {
             out.push(r.read()?);
         }
         Ok(out)
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Geometry value types
+// ---------------------------------------------------------------------------------------------
+//
+// Implemented here rather than in cv-determinism because the trait is local to cv-core, and because
+// keeping every geometry type serializable in one block stops the set fragmenting as later milestones
+// need them. All are plain sequences of `f64` bit patterns, so they inherit the exactness guarantee.
+
+impl Serialize for Vec3 {
+    fn serialize(&self, w: &mut Writer) {
+        w.f64(self.x);
+        w.f64(self.y);
+        w.f64(self.z);
+    }
+}
+
+impl Deserialize for Vec3 {
+    fn deserialize(r: &mut Reader<'_>) -> SerResult<Self> {
+        Ok(Vec3::new(r.f64()?, r.f64()?, r.f64()?))
+    }
+}
+
+impl Serialize for Quat {
+    fn serialize(&self, w: &mut Writer) {
+        w.f64(self.x);
+        w.f64(self.y);
+        w.f64(self.z);
+        w.f64(self.w);
+    }
+}
+
+impl Deserialize for Quat {
+    fn deserialize(r: &mut Reader<'_>) -> SerResult<Self> {
+        Ok(Quat::new(r.f64()?, r.f64()?, r.f64()?, r.f64()?))
+    }
+}
+
+impl Serialize for Transform {
+    fn serialize(&self, w: &mut Writer) {
+        w.write(&self.translation);
+        w.write(&self.rotation);
+        w.write(&self.scale);
+    }
+}
+
+impl Deserialize for Transform {
+    fn deserialize(r: &mut Reader<'_>) -> SerResult<Self> {
+        Ok(Transform::new(r.read()?, r.read()?, r.read()?))
+    }
+}
+
+impl Serialize for Mat4 {
+    fn serialize(&self, w: &mut Writer) {
+        for v in self.m {
+            w.f64(v);
+        }
+    }
+}
+
+impl Deserialize for Mat4 {
+    fn deserialize(r: &mut Reader<'_>) -> SerResult<Self> {
+        let mut m = [0.0f64; 16];
+        for slot in m.iter_mut() {
+            *slot = r.f64()?;
+        }
+        Ok(Mat4::from_cols_array(m))
+    }
+}
+
+impl Serialize for Aabb {
+    fn serialize(&self, w: &mut Writer) {
+        w.write(&self.min);
+        w.write(&self.max);
+    }
+}
+
+impl Deserialize for Aabb {
+    fn deserialize(r: &mut Reader<'_>) -> SerResult<Self> {
+        // Read the corners verbatim rather than via `Aabb::new`, which sorts them — an `Aabb::empty()`
+        // sentinel (min = +inf, max = -inf) must survive a round-trip unchanged.
+        let min = r.read::<Vec3>()?;
+        let max = r.read::<Vec3>()?;
+        Ok(Aabb { min, max })
     }
 }
 
