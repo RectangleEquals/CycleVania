@@ -35,7 +35,8 @@ use crate::events::GenEvent;
 use crate::fingerprint::{Fingerprint, FingerprintBuilder, ReproductionBundle};
 use crate::fixtures::{Deflective, Door, Glass, KeyItem, Ledge, MovementCapability};
 use crate::mechanic::{FlowKind, Mechanic, Traversal, TraversalKind, Volume};
-use crate::node::{NodeGraph, NodeState};
+use crate::mission::{MissionEdge, Rule};
+use crate::node::{NodeGraph, NodeKind, NodeState};
 use crate::object::{IdAllocator, ObjectHeader, ObjectId};
 use crate::schedule::{
     AdaptiveRange, Curve, Progression, Schedule, ScheduleBook, SeedPolicy, Span, TargetOutcome,
@@ -98,6 +99,8 @@ struct ProbeWorld {
     schedules: ScheduleBook,
     seed_policy: SeedPolicy,
     schedule_math: Vec<u8>,
+    rules: Vec<Rule>,
+    mission_edges: Vec<MissionEdge>,
 }
 
 impl Serialize for ProbeWorld {
@@ -116,6 +119,8 @@ impl Serialize for ProbeWorld {
         w.write(&self.schedules);
         w.write(&self.seed_policy);
         w.bytes(&self.schedule_math);
+        w.write(&self.rules);
+        w.write(&self.mission_edges);
     }
 }
 
@@ -273,6 +278,7 @@ fn build() -> ProbeWorld {
     let events = build_events(bundle.fingerprint, bundle.seed);
     let (traversals, volumes, flows) = build_mechanic_values();
     let (schedules, seed_policy, schedule_math) = build_schedule_values();
+    let (rules, mission_edges) = build_mission_values();
     ProbeWorld {
         ids,
         nodes,
@@ -288,6 +294,8 @@ fn build() -> ProbeWorld {
         schedules,
         seed_policy,
         schedule_math,
+        rules,
+        mission_edges,
     }
 }
 
@@ -451,6 +459,40 @@ fn build_schedule_values() -> (ScheduleBook, SeedPolicy, Vec<u8>) {
     }
 
     (book, policy, w.finish())
+}
+
+/// L2 rules and edges, including a nested combinator — the grammar is script-authored at M16, so its
+/// encoding has to be stable across targets before anything writes one.
+fn build_mission_values() -> (Vec<Rule>, Vec<MissionEdge>) {
+    let dash = ObjectId::derived("capability", "blink_dash");
+    let grapple = ObjectId::derived("capability", "grapple");
+    let key = ObjectId::derived("capability", "key_bronze");
+
+    let rules = vec![
+        Rule::Always,
+        Rule::Never,
+        Rule::has(dash),
+        Rule::all_of([dash, key]),
+        Rule::any_of([dash, grapple]),
+        Rule::All(vec![
+            Rule::has(key),
+            Rule::Any(vec![
+                Rule::has(dash),
+                Rule::Not(Box::new(Rule::has(grapple))),
+            ]),
+        ]),
+    ];
+
+    // Edges need scope handles; the probe scope graph supplies real ones.
+    let g = build_scopes();
+    let spaces: Vec<_> = g.of_kind(NodeKind::Space).map(|(h, _)| h).collect();
+    let edges = vec![
+        MissionEdge::open(spaces[0], spaces[1]),
+        MissionEdge::gated(spaces[1], spaces[2], Rule::has(dash)),
+        MissionEdge::open(spaces[0], spaces[2]).one_way(),
+        MissionEdge::gated(spaces[2], spaces[0], Rule::any_of([dash, grapple])).shortcut(),
+    ];
+    (rules, edges)
 }
 
 /// One of every event variant, in a fixed order.

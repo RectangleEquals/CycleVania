@@ -1,0 +1,864 @@
+//! **L2's data model** — the mission graph, the rule grammar edges are gated by, and the reachability
+//! analysis everything else rests on.
+//!
+//! # The mission graph is not the scope graph
+//!
+//! [`NodeGraph`](crate::node) says which rooms are *next to* each other. The mission graph says which
+//! rooms you can *get to*, and what that costs. They deliberately differ: two adjacent rooms with a
+//! locked door between them are neighbours in space and worlds apart in progression, and conflating
+//! the two is how a generator ends up unable to reason about gating at all.
+//!
+//! So L2 takes the spatial adjacency as its starting topology, then decides what each connection
+//! *requires*.
+//!
+//! # Spheres: the shape of progression
+//!
+//! Reachability is not a single set — it is a sequence. With nothing, some rooms are reachable; the
+//! items in them grant capabilities; those open more rooms; and so on. Each round is a **sphere**
+//! ([`Sphere`]), and the sphere sequence *is* the progression structure:
+//!
+//! ```text
+//! sphere 0: start, hall            (nothing needed)
+//! sphere 1: vault, ledge           (after the bronze key found in sphere 0)
+//! sphere 2: treasury                (after the dash found in sphere 1)
+//! ```
+//!
+//! A world whose spheres are all size 1 is a corridor. One with a single enormous sphere is wide open.
+//! Everything the linearity dials do shows up here, which makes spheres the natural thing to assert
+//! against in tests and to show a dev in the editor.
+//!
+//! Computing them is a fixed point: sweep for what is reachable, collect what is there, sweep again,
+//! until nothing new appears.
+
+use crate::node::{Node, NodeGraph, NodeKind};
+use crate::object::ObjectId;
+use crate::serialize::{Deserialize, Reader, SerError, SerResult, Serialize, Writer};
+use crate::Handle;
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::fmt;
+
+// ---------------------------------------------------------------------------------------------
+// Rule grammar
+// ---------------------------------------------------------------------------------------------
+
+/// A predicate over the player's state — what it takes to cross an edge or satisfy a placement.
+///
+/// ▶ This is the first cut of the `Rule` grammar the design left open. It is deliberately small: every
+/// variant exists because the solver evaluates it, and combinators are here because gating genuinely
+/// composes ("the dash **or** the grapple"). Anything speculative was left out — a grammar invented
+/// ahead of its consumer fits nothing.
+///
+/// The shape is chosen so M16's checker can validate a script's rule expressions structurally, and so
+/// the editor can render one as a tree.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum Rule {
+    /// Always satisfied — an open passage. The default: connections are open until L2 gates them.
+    #[default]
+    Always,
+    /// Never satisfied. Useful as a placeholder for "sealed until L3 decides".
+    Never,
+    /// The player holds this capability.
+    Has(ObjectId),
+    /// Every sub-rule holds.
+    All(Vec<Rule>),
+    /// At least one sub-rule holds — genuine alternate routes.
+    Any(Vec<Rule>),
+    /// The sub-rule does not hold.
+    Not(Box<Rule>),
+}
+
+impl Rule {
+    /// Requires holding a capability.
+    pub fn has(capability: ObjectId) -> Rule {
+        Rule::Has(capability)
+    }
+
+    /// Requires all of a set of capabilities.
+    pub fn all_of(capabilities: impl IntoIterator<Item = ObjectId>) -> Rule {
+        let rules: Vec<Rule> = capabilities.into_iter().map(Rule::Has).collect();
+        match rules.len() {
+            0 => Rule::Always,
+            1 => rules.into_iter().next().expect("length checked"),
+            _ => Rule::All(rules),
+        }
+    }
+
+    /// Requires any one of a set of capabilities.
+    pub fn any_of(capabilities: impl IntoIterator<Item = ObjectId>) -> Rule {
+        let rules: Vec<Rule> = capabilities.into_iter().map(Rule::Has).collect();
+        match rules.len() {
+            0 => Rule::Never, // "any of nothing" is unsatisfiable, not free
+            1 => rules.into_iter().next().expect("length checked"),
+            _ => Rule::Any(rules),
+        }
+    }
+
+    /// Is this satisfied by a set of held capabilities?
+    pub fn is_satisfied(&self, held: &BTreeSet<ObjectId>) -> bool {
+        match self {
+            Rule::Always => true,
+            Rule::Never => false,
+            Rule::Has(c) => held.contains(c),
+            Rule::All(rules) => rules.iter().all(|r| r.is_satisfied(held)),
+            Rule::Any(rules) => rules.iter().any(|r| r.is_satisfied(held)),
+            Rule::Not(r) => !r.is_satisfied(held),
+        }
+    }
+
+    /// Is this trivially satisfied regardless of state?
+    pub fn is_open(&self) -> bool {
+        matches!(self, Rule::Always)
+    }
+
+    /// Every capability mentioned anywhere in the rule.
+    ///
+    /// What the solver needs to know which items gate this edge — and therefore which locks a key is
+    /// "for" when [`crate::solver`] applies the locality dial.
+    pub fn capabilities(&self) -> BTreeSet<ObjectId> {
+        let mut out = BTreeSet::new();
+        self.collect_capabilities(&mut out);
+        out
+    }
+
+    fn collect_capabilities(&self, out: &mut BTreeSet<ObjectId>) {
+        match self {
+            Rule::Always | Rule::Never => {}
+            Rule::Has(c) => {
+                out.insert(*c);
+            }
+            Rule::All(rules) | Rule::Any(rules) => {
+                for r in rules {
+                    r.collect_capabilities(out);
+                }
+            }
+            Rule::Not(r) => r.collect_capabilities(out),
+        }
+    }
+
+    /// How deeply nested this rule is — a cheap complexity measure for the trace and for bounding
+    /// pathological script-authored rules.
+    pub fn depth(&self) -> u32 {
+        match self {
+            Rule::Always | Rule::Never | Rule::Has(_) => 1,
+            Rule::All(rules) | Rule::Any(rules) => {
+                1 + rules.iter().map(Rule::depth).max().unwrap_or(0)
+            }
+            Rule::Not(r) => 1 + r.depth(),
+        }
+    }
+}
+
+impl fmt::Display for Rule {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Rule::Always => write!(f, "open"),
+            Rule::Never => write!(f, "sealed"),
+            Rule::Has(c) => write!(f, "{c}"),
+            Rule::All(rules) => {
+                write!(f, "(")?;
+                for (i, r) in rules.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, " and ")?;
+                    }
+                    write!(f, "{r}")?;
+                }
+                write!(f, ")")
+            }
+            Rule::Any(rules) => {
+                write!(f, "(")?;
+                for (i, r) in rules.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, " or ")?;
+                    }
+                    write!(f, "{r}")?;
+                }
+                write!(f, ")")
+            }
+            Rule::Not(r) => write!(f, "not {r}"),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Locations
+// ---------------------------------------------------------------------------------------------
+
+/// A place an item can be put — a slot the schedule planned.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct LocationId(pub u32);
+
+impl fmt::Display for LocationId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "loc[{}]", self.0)
+    }
+}
+
+/// Where a location is.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Location {
+    /// The scope holding it.
+    pub scope: Handle<Node>,
+    /// Which slot within that scope.
+    pub slot: u32,
+}
+
+// ---------------------------------------------------------------------------------------------
+// Edges and the graph
+// ---------------------------------------------------------------------------------------------
+
+/// A traversable connection between scopes, and what it costs.
+#[derive(Clone, Debug, PartialEq)]
+pub struct MissionEdge {
+    /// Where it starts.
+    pub from: Handle<Node>,
+    /// Where it leads.
+    pub to: Handle<Node>,
+    /// What the player must hold to cross.
+    pub rule: Rule,
+    /// Can it be crossed back the other way?
+    ///
+    /// A one-way edge is a **commit**: everything behind it becomes unreachable unless another route
+    /// exists. M10's un-softlockable pass is what proves that never strands the goal.
+    pub reversible: bool,
+    /// Was this added to create a loop, rather than being part of the base topology?
+    pub is_shortcut: bool,
+}
+
+impl MissionEdge {
+    /// An open, reversible connection.
+    pub fn open(from: Handle<Node>, to: Handle<Node>) -> Self {
+        MissionEdge {
+            from,
+            to,
+            rule: Rule::Always,
+            reversible: true,
+            is_shortcut: false,
+        }
+    }
+
+    /// A connection gated by a rule.
+    pub fn gated(from: Handle<Node>, to: Handle<Node>, rule: Rule) -> Self {
+        MissionEdge {
+            from,
+            to,
+            rule,
+            reversible: true,
+            is_shortcut: false,
+        }
+    }
+
+    /// Mark this edge one-way.
+    pub fn one_way(mut self) -> Self {
+        self.reversible = false;
+        self
+    }
+
+    /// Mark this edge a shortcut (a loop-closing addition).
+    pub fn shortcut(mut self) -> Self {
+        self.is_shortcut = true;
+        self
+    }
+
+    /// Is this edge gated at all?
+    pub fn is_gated(&self) -> bool {
+        !self.rule.is_open()
+    }
+}
+
+/// One round of progression: what became reachable, and what it yielded.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Sphere {
+    /// How deep this sphere is; sphere 0 needs nothing.
+    pub index: u32,
+    /// Scopes that became reachable in this round.
+    pub scopes: Vec<Handle<Node>>,
+    /// Locations that became available in this round.
+    pub locations: Vec<LocationId>,
+    /// Capabilities obtained from those locations, opening the next sphere.
+    pub granted: Vec<ObjectId>,
+}
+
+/// The outcome of a reachability sweep.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Reachability {
+    /// Every reachable scope.
+    pub scopes: BTreeSet<Handle<Node>>,
+    /// Every reachable location.
+    pub locations: BTreeSet<LocationId>,
+    /// Every capability obtainable.
+    pub held: BTreeSet<ObjectId>,
+    /// The progression, round by round.
+    pub spheres: Vec<Sphere>,
+}
+
+impl Reachability {
+    /// Is a scope reachable?
+    pub fn reaches(&self, scope: Handle<Node>) -> bool {
+        self.scopes.contains(&scope)
+    }
+
+    /// How many rounds of progression this world has — a direct measure of how gated it is.
+    pub fn depth(&self) -> u32 {
+        self.spheres.len() as u32
+    }
+
+    /// Which sphere a scope first became reachable in.
+    pub fn sphere_of(&self, scope: Handle<Node>) -> Option<u32> {
+        self.spheres
+            .iter()
+            .find(|s| s.scopes.contains(&scope))
+            .map(|s| s.index)
+    }
+}
+
+/// **The mission graph** — the world as progression rather than as space.
+#[derive(Clone, Debug, PartialEq)]
+pub struct MissionGraph {
+    start: Handle<Node>,
+    edges: Vec<MissionEdge>,
+    locations: BTreeMap<LocationId, Location>,
+    /// Adjacency built from `edges`, rebuilt whenever they change.
+    adjacency: BTreeMap<Handle<Node>, Vec<usize>>,
+}
+
+impl MissionGraph {
+    /// An empty graph rooted at `start`.
+    pub fn new(start: Handle<Node>) -> Self {
+        MissionGraph {
+            start,
+            edges: Vec::new(),
+            locations: BTreeMap::new(),
+            adjacency: BTreeMap::new(),
+        }
+    }
+
+    /// Build the base topology from a scope graph's **spatial adjacency**.
+    ///
+    /// Every connection starts open; gating is L2's decision, made later. Building on the spatial
+    /// graph rather than inventing a topology is what keeps the mission structure and the eventual
+    /// geometry describing the same world.
+    pub fn from_scopes(graph: &NodeGraph, start: Handle<Node>) -> Self {
+        let mut mission = MissionGraph::new(start);
+        // Deterministic: walk order, and each node's neighbours in insertion order. Each undirected
+        // spatial link becomes one edge, deduplicated by only taking pairs once.
+        for scope in graph.walk() {
+            let Some(node) = graph.get(scope) else {
+                continue;
+            };
+            if node.kind() != NodeKind::Space {
+                continue;
+            }
+            for peer in node.neighbors() {
+                if scope < *peer {
+                    mission.add_edge(MissionEdge::open(scope, *peer));
+                }
+            }
+        }
+        mission
+    }
+
+    /// Where the player begins.
+    pub fn start(&self) -> Handle<Node> {
+        self.start
+    }
+
+    /// Every edge, in insertion order.
+    pub fn edges(&self) -> &[MissionEdge] {
+        &self.edges
+    }
+
+    /// Add an edge.
+    pub fn add_edge(&mut self, edge: MissionEdge) -> usize {
+        let index = self.edges.len();
+        self.adjacency.entry(edge.from).or_default().push(index);
+        if edge.reversible {
+            self.adjacency.entry(edge.to).or_default().push(index);
+        }
+        self.edges.push(edge);
+        index
+    }
+
+    /// Replace an edge's rule — how L2 gates a connection.
+    pub fn gate_edge(&mut self, index: usize, rule: Rule) -> bool {
+        match self.edges.get_mut(index) {
+            Some(edge) => {
+                edge.rule = rule;
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Register a location.
+    pub fn add_location(&mut self, id: LocationId, location: Location) {
+        self.locations.insert(id, location);
+    }
+
+    /// Every location, in id order.
+    pub fn locations(&self) -> impl Iterator<Item = (LocationId, Location)> + '_ {
+        self.locations.iter().map(|(id, l)| (*id, *l))
+    }
+
+    /// How many locations exist.
+    pub fn location_count(&self) -> usize {
+        self.locations.len()
+    }
+
+    /// Locations inside a scope, in id order.
+    pub fn locations_in(&self, scope: Handle<Node>) -> impl Iterator<Item = LocationId> + '_ {
+        self.locations
+            .iter()
+            .filter(move |(_, l)| l.scope == scope)
+            .map(|(id, _)| *id)
+    }
+
+    /// Edges that are gated on a capability — the "locks" a key opens.
+    pub fn locks_for(&self, capability: ObjectId) -> impl Iterator<Item = &MissionEdge> + '_ {
+        self.edges
+            .iter()
+            .filter(move |e| e.rule.capabilities().contains(&capability))
+    }
+
+    /// **Sweep**: what is reachable, given a starting capability set and what sits at each location.
+    ///
+    /// A fixed point rather than a single traversal: reaching a room may yield an item that opens
+    /// another room, so the search repeats until a round adds nothing. Each round is a [`Sphere`].
+    pub fn sweep(
+        &self,
+        initial: &BTreeSet<ObjectId>,
+        placements: &BTreeMap<LocationId, ObjectId>,
+        grants: &BTreeMap<ObjectId, ObjectId>,
+    ) -> Reachability {
+        let mut held = initial.clone();
+        let mut scopes: BTreeSet<Handle<Node>> = BTreeSet::new();
+        let mut locations: BTreeSet<LocationId> = BTreeSet::new();
+        let mut spheres: Vec<Sphere> = Vec::new();
+
+        loop {
+            let round_scopes = self.traverse(&held);
+            let new_scopes: Vec<Handle<Node>> = round_scopes
+                .iter()
+                .filter(|s| !scopes.contains(s))
+                .copied()
+                .collect();
+            let new_locations: Vec<LocationId> = new_scopes
+                .iter()
+                .flat_map(|s| self.locations_in(*s))
+                .filter(|l| !locations.contains(l))
+                .collect();
+
+            // Whatever sits in the newly opened rooms is now obtainable.
+            let mut granted: Vec<ObjectId> = Vec::new();
+            for loc in &new_locations {
+                if let Some(item) = placements.get(loc) {
+                    if let Some(cap) = grants.get(item) {
+                        if !held.contains(cap) {
+                            granted.push(*cap);
+                        }
+                    }
+                }
+            }
+            granted.sort();
+            granted.dedup();
+
+            let progressed = !new_scopes.is_empty() || !granted.is_empty();
+            if !progressed {
+                break;
+            }
+
+            scopes.extend(&new_scopes);
+            locations.extend(&new_locations);
+            held.extend(&granted);
+            spheres.push(Sphere {
+                index: spheres.len() as u32,
+                scopes: new_scopes,
+                locations: new_locations,
+                granted,
+            });
+        }
+
+        Reachability {
+            scopes,
+            locations,
+            held,
+            spheres,
+        }
+    }
+
+    /// One breadth-first traversal with a fixed capability set.
+    ///
+    /// Deterministic: a `VecDeque` frontier and edges visited in index order, so the same graph and
+    /// capabilities always yield the same set — and, more importantly, the same *sphere boundaries*.
+    fn traverse(&self, held: &BTreeSet<ObjectId>) -> BTreeSet<Handle<Node>> {
+        let mut seen: BTreeSet<Handle<Node>> = BTreeSet::new();
+        let mut queue: VecDeque<Handle<Node>> = VecDeque::new();
+        seen.insert(self.start);
+        queue.push_back(self.start);
+
+        while let Some(at) = queue.pop_front() {
+            let Some(edge_indices) = self.adjacency.get(&at) else {
+                continue;
+            };
+            for &i in edge_indices {
+                let edge = &self.edges[i];
+                // A reversible edge may be walked from either end; a one-way only from `from`.
+                let next = if edge.from == at {
+                    edge.to
+                } else if edge.reversible && edge.to == at {
+                    edge.from
+                } else {
+                    continue;
+                };
+                if seen.contains(&next) || !edge.rule.is_satisfied(held) {
+                    continue;
+                }
+                seen.insert(next);
+                queue.push_back(next);
+            }
+        }
+        seen
+    }
+
+    /// Hop distance from `origin` to every scope, ignoring gating.
+    ///
+    /// Ignoring gates is deliberate: this measures **spatial** separation, which is what the locality
+    /// dial is about. Whether you currently *can* walk it is a different question, answered by
+    /// [`MissionGraph::sweep`].
+    pub fn distances_from(&self, origin: Handle<Node>) -> BTreeMap<Handle<Node>, u32> {
+        let mut dist: BTreeMap<Handle<Node>, u32> = BTreeMap::new();
+        let mut queue: VecDeque<Handle<Node>> = VecDeque::new();
+        dist.insert(origin, 0);
+        queue.push_back(origin);
+
+        while let Some(at) = queue.pop_front() {
+            let d = dist[&at];
+            let Some(edge_indices) = self.adjacency.get(&at) else {
+                continue;
+            };
+            for &i in edge_indices {
+                let edge = &self.edges[i];
+                let next = if edge.from == at { edge.to } else { edge.from };
+                if let std::collections::btree_map::Entry::Vacant(slot) = dist.entry(next) {
+                    slot.insert(d + 1);
+                    queue.push_back(next);
+                }
+            }
+        }
+        dist
+    }
+
+    /// Is there an edge between these two scopes already?
+    pub fn connects(&self, a: Handle<Node>, b: Handle<Node>) -> bool {
+        self.edges
+            .iter()
+            .any(|e| (e.from == a && e.to == b) || (e.from == b && e.to == a))
+    }
+
+    /// How many edges were added as loop-closing shortcuts.
+    pub fn shortcut_count(&self) -> usize {
+        self.edges.iter().filter(|e| e.is_shortcut).count()
+    }
+
+    /// How many edges are gated.
+    pub fn gated_count(&self) -> usize {
+        self.edges.iter().filter(|e| e.is_gated()).count()
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Serialization
+// ---------------------------------------------------------------------------------------------
+
+impl Serialize for Rule {
+    fn serialize(&self, w: &mut Writer) {
+        match self {
+            Rule::Always => w.u8(0),
+            Rule::Never => w.u8(1),
+            Rule::Has(c) => {
+                w.u8(2);
+                w.write(c);
+            }
+            Rule::All(rules) => {
+                w.u8(3);
+                w.write(rules);
+            }
+            Rule::Any(rules) => {
+                w.u8(4);
+                w.write(rules);
+            }
+            Rule::Not(r) => {
+                w.u8(5);
+                w.write(r.as_ref());
+            }
+        }
+    }
+}
+
+impl Deserialize for Rule {
+    fn deserialize(r: &mut Reader<'_>) -> SerResult<Self> {
+        Ok(match r.u8()? {
+            0 => Rule::Always,
+            1 => Rule::Never,
+            2 => Rule::Has(r.read()?),
+            3 => Rule::All(r.read()?),
+            4 => Rule::Any(r.read()?),
+            5 => Rule::Not(Box::new(r.read()?)),
+            _ => return Err(SerError::InvalidValue("unknown Rule tag")),
+        })
+    }
+}
+
+impl Serialize for LocationId {
+    fn serialize(&self, w: &mut Writer) {
+        w.u32(self.0);
+    }
+}
+
+impl Deserialize for LocationId {
+    fn deserialize(r: &mut Reader<'_>) -> SerResult<Self> {
+        Ok(LocationId(r.u32()?))
+    }
+}
+
+impl Serialize for MissionEdge {
+    fn serialize(&self, w: &mut Writer) {
+        w.write(&self.from);
+        w.write(&self.to);
+        w.write(&self.rule);
+        w.bool(self.reversible);
+        w.bool(self.is_shortcut);
+    }
+}
+
+impl Deserialize for MissionEdge {
+    fn deserialize(r: &mut Reader<'_>) -> SerResult<Self> {
+        Ok(MissionEdge {
+            from: r.read()?,
+            to: r.read()?,
+            rule: r.read()?,
+            reversible: r.bool()?,
+            is_shortcut: r.bool()?,
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::serialize::{from_bytes, to_bytes};
+
+    fn cap(name: &str) -> ObjectId {
+        ObjectId::derived("capability", name)
+    }
+
+    #[test]
+    fn rules_evaluate_and_compose() {
+        let dash = cap("dash");
+        let grapple = cap("grapple");
+        let held: BTreeSet<ObjectId> = [dash].into_iter().collect();
+
+        assert!(Rule::Always.is_satisfied(&held));
+        assert!(!Rule::Never.is_satisfied(&held));
+        assert!(Rule::has(dash).is_satisfied(&held));
+        assert!(!Rule::has(grapple).is_satisfied(&held));
+
+        // Alternate routes: either traversal works.
+        assert!(Rule::any_of([dash, grapple]).is_satisfied(&held));
+        // Both required: not yet.
+        assert!(!Rule::all_of([dash, grapple]).is_satisfied(&held));
+        assert!(Rule::Not(Box::new(Rule::has(grapple))).is_satisfied(&held));
+    }
+
+    #[test]
+    fn degenerate_rule_sets_mean_what_they_say() {
+        // "All of nothing" is free; "any of nothing" is impossible. Getting these backwards would
+        // silently open or seal every edge built from an empty list.
+        assert_eq!(Rule::all_of([]), Rule::Always);
+        assert_eq!(Rule::any_of([]), Rule::Never);
+        // A single requirement does not need a wrapper.
+        assert_eq!(Rule::all_of([cap("a")]), Rule::Has(cap("a")));
+    }
+
+    #[test]
+    fn rules_report_what_they_depend_on() {
+        let rule = Rule::All(vec![
+            Rule::has(cap("dash")),
+            Rule::Any(vec![Rule::has(cap("grapple")), Rule::has(cap("blink"))]),
+        ]);
+        assert_eq!(rule.capabilities().len(), 3);
+        assert!(rule.capabilities().contains(&cap("blink")));
+        assert_eq!(rule.depth(), 3);
+        assert_eq!(Rule::Always.depth(), 1);
+    }
+
+    #[test]
+    fn rules_read_well_in_a_trace() {
+        let rule = Rule::Any(vec![Rule::has(cap("dash")), Rule::has(cap("grapple"))]);
+        let text = rule.to_string();
+        assert!(text.contains(" or "), "{text}");
+        assert_eq!(Rule::Always.to_string(), "open");
+        assert_eq!(Rule::Never.to_string(), "sealed");
+    }
+
+    /// A four-room chain: start → a → b → c, with a gate before `c`.
+    fn chain() -> (NodeGraph, MissionGraph, Vec<Handle<Node>>) {
+        let mut g = NodeGraph::new(1.0, 1);
+        let reach = g.add_child(g.root(), "reach").unwrap();
+        let area = g.add_child(reach, "area").unwrap();
+        let rooms: Vec<Handle<Node>> = (0..4)
+            .map(|i| g.add_child(area, format!("room_{i}")).unwrap())
+            .collect();
+        for w in rooms.windows(2) {
+            g.connect(w[0], w[1]).unwrap();
+        }
+        let mission = MissionGraph::from_scopes(&g, rooms[0]);
+        (g, mission, rooms)
+    }
+
+    #[test]
+    fn the_base_topology_comes_from_spatial_adjacency() {
+        let (_, mission, rooms) = chain();
+        assert_eq!(mission.edges().len(), 3, "three links in a four-room chain");
+        assert!(mission.connects(rooms[0], rooms[1]));
+        assert!(!mission.connects(rooms[0], rooms[2]));
+        assert_eq!(
+            mission.gated_count(),
+            0,
+            "connections start open; gating is a later decision"
+        );
+    }
+
+    #[test]
+    fn a_gate_splits_the_world_into_spheres() {
+        let (_, mut mission, rooms) = chain();
+        let key = ObjectId::derived("item", "key");
+        let dash = cap("dash");
+
+        // Gate the last hop, and put the key in room 1.
+        let last = mission.edges().len() - 1;
+        mission.gate_edge(last, Rule::has(dash));
+        mission.add_location(
+            LocationId(0),
+            Location {
+                scope: rooms[1],
+                slot: 0,
+            },
+        );
+
+        let grants: BTreeMap<ObjectId, ObjectId> = [(key, dash)].into_iter().collect();
+        let placements: BTreeMap<LocationId, ObjectId> =
+            [(LocationId(0), key)].into_iter().collect();
+
+        let r = mission.sweep(&BTreeSet::new(), &placements, &grants);
+        assert!(
+            r.reaches(rooms[3]),
+            "the key is findable, so the gate opens"
+        );
+        assert_eq!(r.depth(), 2, "one sphere before the key, one after");
+        assert_eq!(r.sphere_of(rooms[0]), Some(0));
+        assert_eq!(r.sphere_of(rooms[3]), Some(1));
+        assert_eq!(r.spheres[0].granted, vec![dash]);
+    }
+
+    #[test]
+    fn a_key_behind_its_own_gate_is_unreachable() {
+        // The circular dependency the solver exists to prevent. Sweeping must *notice*, not loop.
+        let (_, mut mission, rooms) = chain();
+        let key = ObjectId::derived("item", "key");
+        let dash = cap("dash");
+        let last = mission.edges().len() - 1;
+        mission.gate_edge(last, Rule::has(dash));
+        // Key placed *behind* the gate it opens.
+        mission.add_location(
+            LocationId(0),
+            Location {
+                scope: rooms[3],
+                slot: 0,
+            },
+        );
+
+        let grants: BTreeMap<ObjectId, ObjectId> = [(key, dash)].into_iter().collect();
+        let placements: BTreeMap<LocationId, ObjectId> =
+            [(LocationId(0), key)].into_iter().collect();
+
+        let r = mission.sweep(&BTreeSet::new(), &placements, &grants);
+        assert!(
+            !r.reaches(rooms[3]),
+            "unreachable, and the sweep terminates rather than spinning"
+        );
+        assert!(r.held.is_empty());
+        assert_eq!(r.depth(), 1);
+    }
+
+    #[test]
+    fn one_way_edges_are_only_walkable_forwards() {
+        let mut g = NodeGraph::new(1.0, 1);
+        let reach = g.add_child(g.root(), "reach").unwrap();
+        let area = g.add_child(reach, "area").unwrap();
+        let a = g.add_child(area, "a").unwrap();
+        let b = g.add_child(area, "b").unwrap();
+
+        let mut forward = MissionGraph::new(a);
+        forward.add_edge(MissionEdge::open(a, b).one_way());
+        assert!(forward
+            .sweep(&BTreeSet::new(), &BTreeMap::new(), &BTreeMap::new())
+            .reaches(b));
+
+        // Starting at the far end, the same edge is impassable.
+        let mut backward = MissionGraph::new(b);
+        backward.add_edge(MissionEdge::open(a, b).one_way());
+        assert!(!backward
+            .sweep(&BTreeSet::new(), &BTreeMap::new(), &BTreeMap::new())
+            .reaches(a));
+    }
+
+    #[test]
+    fn distance_ignores_gating() {
+        // Locality is about spatial separation; whether you can currently walk it is a different
+        // question, and conflating them would make a gated-but-adjacent room look far away.
+        let (_, mut mission, rooms) = chain();
+        let last = mission.edges().len() - 1;
+        mission.gate_edge(last, Rule::has(cap("dash")));
+        let d = mission.distances_from(rooms[0]);
+        assert_eq!(d[&rooms[3]], 3, "still three hops, gated or not");
+        assert_eq!(d[&rooms[0]], 0);
+    }
+
+    #[test]
+    fn sweeping_is_deterministic() {
+        let (_, mut mission, rooms) = chain();
+        let key = ObjectId::derived("item", "key");
+        let dash = cap("dash");
+        mission.gate_edge(2, Rule::has(dash));
+        mission.add_location(
+            LocationId(0),
+            Location {
+                scope: rooms[1],
+                slot: 0,
+            },
+        );
+        let grants: BTreeMap<ObjectId, ObjectId> = [(key, dash)].into_iter().collect();
+        let placements: BTreeMap<LocationId, ObjectId> =
+            [(LocationId(0), key)].into_iter().collect();
+
+        let a = mission.sweep(&BTreeSet::new(), &placements, &grants);
+        let b = mission.sweep(&BTreeSet::new(), &placements, &grants);
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn rules_and_edges_round_trip() {
+        let rule = Rule::All(vec![
+            Rule::has(cap("dash")),
+            Rule::Any(vec![
+                Rule::has(cap("a")),
+                Rule::Not(Box::new(Rule::has(cap("b")))),
+            ]),
+        ]);
+        assert_eq!(from_bytes::<Rule>(&to_bytes(&rule)).unwrap(), rule);
+
+        let (_, mission, _) = chain();
+        let edge = mission.edges()[0].clone();
+        assert_eq!(from_bytes::<MissionEdge>(&to_bytes(&edge)).unwrap(), edge);
+    }
+}
