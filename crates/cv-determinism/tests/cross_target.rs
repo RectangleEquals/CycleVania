@@ -12,7 +12,11 @@ use common::assert_golden_bytes;
 use cv_determinism::probe::determinism_probe;
 
 /// The canonical fixture both targets are checked against.
-pub const FIXTURE: &str = "m02_determinism_probe.bin";
+///
+/// Deliberately unprefixed by milestone: this is a *living* artifact that grows as the crate does
+/// (M02 added the math and geometry; later milestones will extend it), so tying its name to one
+/// milestone would go stale immediately.
+pub const FIXTURE: &str = "determinism_probe.bin";
 
 #[test]
 fn probe_matches_the_golden_fixture() {

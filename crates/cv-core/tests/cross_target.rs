@@ -12,7 +12,10 @@ use common::assert_golden_bytes;
 use cv_core::probe::determinism_probe;
 
 /// The canonical fixture both targets are checked against.
-pub const FIXTURE: &str = "m03_core_probe.bin";
+///
+/// Unprefixed by milestone: a living artifact that grows with the crate (M03 added the arena,
+/// identity and serialization; M04 the scope graph).
+pub const FIXTURE: &str = "core_probe.bin";
 
 #[test]
 fn probe_matches_the_golden_fixture() {

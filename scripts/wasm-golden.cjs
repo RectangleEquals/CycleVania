@@ -23,14 +23,14 @@ const PROBES = [
   {
     crate: "cv-determinism",
     example: "determinism_probe",
-    fixture: "m02_determinism_probe.bin",
+    fixture: "determinism_probe.bin",
     covers: "owned math, RNG streams, geometry + Mat4 kernels",
   },
   {
     crate: "cv-core",
     example: "core_probe",
-    fixture: "m03_core_probe.bin",
-    covers: "arena layout, object identity, binary serialization",
+    fixture: "core_probe.bin",
+    covers: "arena layout, object identity, serialization, scope graph",
   },
 ];
 

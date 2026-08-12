@@ -14,8 +14,10 @@
 //! `examples/wasm_probe.rs` against the same fixture `tests/cross_target.rs` checks natively.
 
 use crate::arena::{Arena, Handle};
+use crate::node::{NodeGraph, NodeState};
 use crate::object::{IdAllocator, ObjectHeader, ObjectId};
 use crate::serialize::{to_bytes, Deserialize, Reader, SerResult, Serialize, Writer};
+use cv_determinism::{Aabb, Vec3};
 
 /// A probe node: carries every primitive the format supports, plus handles that form cycles.
 #[derive(Clone, Debug, PartialEq)]
@@ -55,11 +57,12 @@ impl Deserialize for ProbeNode {
     }
 }
 
-/// The probe world: an allocator plus an arena containing holes and cycles.
+/// The probe world: an allocator plus an arena containing holes and cycles, and a scope graph.
 struct ProbeWorld {
     ids: IdAllocator,
     nodes: Arena<ProbeNode>,
     derived: Vec<ObjectId>,
+    scopes: NodeGraph,
 }
 
 impl Serialize for ProbeWorld {
@@ -67,7 +70,61 @@ impl Serialize for ProbeWorld {
         w.write(&self.ids);
         w.write(&self.nodes);
         w.write(&self.derived);
+        w.write(&self.scopes);
     }
+}
+
+/// A scope graph spanning every kind, every lifecycle state, adjacency, and envelopes — so node
+/// serialization is covered by the cross-target check too.
+fn build_scopes() -> NodeGraph {
+    let mut g = NodeGraph::new(1.5, 0x0BAD_C0DE);
+    let world = g.root();
+    g.set_envelope(world, Aabb::new(Vec3::splat(-500.0), Vec3::splat(500.0)))
+        .unwrap();
+
+    // A realized branch...
+    let near = g.add_child(world, "reach_near").unwrap();
+    let area = g.add_child(near, "area_entry").unwrap();
+    let spaces: Vec<_> = (0..3)
+        .map(|i| g.add_child(area, format!("space_{i}")).unwrap())
+        .collect();
+    let ledge = g.add_child(spaces[1], "ledge").unwrap();
+    for w in spaces.windows(2) {
+        g.connect(w[0], w[1]).unwrap();
+    }
+    g.connect(spaces[2], spaces[0]).unwrap(); // a loop
+
+    for (i, h) in [world, near, area].iter().enumerate() {
+        let s = 100.0 / (i as f64 + 1.0);
+        g.set_envelope(*h, Aabb::new(Vec3::splat(-s), Vec3::splat(s)))
+            .unwrap();
+    }
+    for (i, s) in spaces.iter().enumerate() {
+        // Deliberately awkward values: negative, fractional, non-representable in binary.
+        let lo = Vec3::new(i as f64 * 12.5, -0.1, 3.3);
+        g.set_envelope(*s, Aabb::new(lo, lo + Vec3::new(10.0, 4.25, 0.7)))
+            .unwrap();
+    }
+    g.set_envelope(
+        ledge,
+        Aabb::new(Vec3::new(1.0, 2.0, 3.0), Vec3::new(2.0, 3.0, 4.0)),
+    )
+    .unwrap();
+    for h in [world, near, area] {
+        g.advance(h, NodeState::Realized).unwrap();
+    }
+    g.advance(spaces[0], NodeState::Realized).unwrap();
+    g.advance(spaces[1], NodeState::Reserved).unwrap(); // mid-lifecycle
+    g.advance(ledge, NodeState::Reserved).unwrap();
+    // spaces[2] stays Projected.
+
+    // ...and a wholly projected branch, as lazy generation leaves it.
+    let far = g.add_child(world, "reach_far").unwrap();
+    let far_area = g.add_child(far, "area_deep").unwrap();
+    g.add_child(far_area, "space_unknown").unwrap();
+
+    debug_assert!(g.check_invariants().is_none());
+    g
 }
 
 /// Build the canonical probe world. Deterministic and free of any target-dependent input.
@@ -131,6 +188,7 @@ fn build() -> ProbeWorld {
         ids,
         nodes,
         derived,
+        scopes: build_scopes(),
     }
 }
 

@@ -2,14 +2,16 @@
 //! pipeline, the scheduling engine (L1), the solver (L2, incl. the no-softlock guarantee), and the
 //! Context API. Pure computation, no I/O; the VM (cv-vm) is embedded here for api-dispatch.
 //!
-//! **M03: the data model's foundation.**
+//! **M03–M04: the data model's foundation.**
 //!
 //! * [`arena`] — the generational [`Arena`] and typed [`Handle`]s every object lives in.
 //! * [`object`] — [`ObjectId`] identity, [`ObjectHeader`], and the [`Object`] trait.
+//! * [`node`] — the `World → Reach → Area → Space → Spatial` scope graph and its
+//!   projected→reserved→realized lifecycle.
 //! * [`serialize`] — the deterministic binary spine for reproduction bundles and round-trips.
 //! * [`probe`] — the cross-target determinism blob for the data model.
 //!
-//! The pipeline (M06–M14) and the node graph (M04) build on these.
+//! The pipeline (M06–M14) builds on these.
 
 // No `unsafe` anywhere in the core. The arena's stale-handle guarantee is an explicit generation
 // check rather than a pointer trick, so it is enforced by the compiler and by tests — which is a
@@ -18,11 +20,13 @@
 #![forbid(unsafe_code)]
 
 pub mod arena;
+pub mod node;
 pub mod object;
 pub mod probe;
 pub mod serialize;
 
 pub use arena::{Arena, Handle};
+pub use node::{Node, NodeError, NodeGraph, NodeKind, NodeResult, NodeState};
 pub use object::{IdAllocator, Object, ObjectHeader, ObjectId};
 pub use serialize::{Deserialize, Reader, SerError, SerResult, Serialize, Writer};
 

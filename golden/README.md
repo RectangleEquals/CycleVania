@@ -11,8 +11,12 @@ freshly computed output — any drift is a determinism regression.
 | `m00_placeholder.bin` | the harness itself | `cv-determinism/tests/golden.rs` |
 | `m01_root_seed_c0ffee.bin` | the root PRNG stream | `cv-determinism/tests/prng.rs` |
 | `m01_fork_tree_seed42.bin` | labelled + indexed fork streams | `cv-determinism/tests/prng.rs` |
-| `m02_determinism_probe.bin` | **cross-target probe** — owned math, RNG, geometry, `Mat4` affine/mirror math | `cv-determinism/tests/cross_target.rs` **and** `scripts/wasm-golden.cjs` |
-| `m03_core_probe.bin` | **cross-target probe** — arena layout, object identity, binary serialization | `cv-core/tests/cross_target.rs` **and** `scripts/wasm-golden.cjs` |
+| `determinism_probe.bin` | **cross-target probe** — owned math, RNG, geometry, `Mat4` affine/mirror math | `cv-determinism/tests/cross_target.rs` **and** `scripts/wasm-golden.cjs` |
+| `core_probe.bin` | **cross-target probe** — arena layout, object identity, serialization, scope graph | `cv-core/tests/cross_target.rs` **and** `scripts/wasm-golden.cjs` |
+
+The `m0N_` prefix marks a fixture pinned to one milestone's specific behaviour. The **cross-target
+probes carry no prefix**, because they are living artifacts that grow as their crate does — naming one
+after the milestone that introduced it would be stale by the next.
 
 ## Why the cross-target probes are the important ones
 
