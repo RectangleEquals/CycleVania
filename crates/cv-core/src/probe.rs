@@ -22,9 +22,11 @@
 //! rather than an internal one.
 //!
 //! A third class sits alongside those: **arithmetic that decides structure**. `AdaptiveRange`'s target
-//! formula and the spine's coverage and surplus distribution do not merely encode differently if they
-//! drift — they put the boss room somewhere else. Those are swept across their input ranges here, not
-//! sampled at one point.
+//! formula, the spine's coverage and surplus distribution, and M11's spatial primitives do not merely
+//! encode differently if they drift — they put the boss room somewhere else, or the laser on the wrong
+//! side of the glass. Those are swept across their input ranges here, not sampled at one point; the
+//! ray sweep deliberately includes the origins that sit *exactly* on a slab boundary, which is where
+//! the naive slab test produces NaN.
 //!
 //! `scripts/wasm-golden.cjs` compares the wasm32 output of `examples/core_probe.rs` against the same
 //! fixture `tests/cross_target.rs` checks natively.
@@ -39,6 +41,7 @@ use crate::descriptor::{
 use crate::events::GenEvent;
 use crate::fingerprint::{Fingerprint, FingerprintBuilder, ReproductionBundle};
 use crate::fixtures::{Deflective, Door, Glass, KeyItem, Ledge, MovementCapability};
+use crate::geometry::{CoarseGeometry, Collider, Face, Hit};
 use crate::mechanic::{FlowKind, Mechanic, Traversal, TraversalKind, Volume};
 use crate::mission::{MissionEdge, Rule};
 use crate::node::{NodeGraph, NodeKind, NodeState};
@@ -112,6 +115,9 @@ struct ProbeWorld {
     strictness: Vec<Strictness>,
     capability_refs: Vec<CapabilityRef>,
     spine_math: Vec<u8>,
+    faces: Vec<Face>,
+    hits: Vec<Hit>,
+    geometry_math: Vec<u8>,
 }
 
 impl Serialize for ProbeWorld {
@@ -135,6 +141,9 @@ impl Serialize for ProbeWorld {
         w.write(&self.strictness);
         w.write(&self.capability_refs);
         w.bytes(&self.spine_math);
+        w.write(&self.faces);
+        w.write(&self.hits);
+        w.bytes(&self.geometry_math);
     }
 }
 
@@ -294,6 +303,7 @@ fn build() -> ProbeWorld {
     let (schedules, seed_policy, schedule_math) = build_schedule_values();
     let (rules, mission_edges) = build_mission_values();
     let (strictness, capability_refs, spine_math) = build_spine_values();
+    let (faces, hits, geometry_math) = build_geometry_values();
     ProbeWorld {
         ids,
         nodes,
@@ -314,7 +324,105 @@ fn build() -> ProbeWorld {
         strictness,
         capability_refs,
         spine_math,
+        faces,
+        hits,
+        geometry_math,
     }
+}
+
+/// Spatial primitives across the cases where float behaviour actually differs (M11).
+///
+/// These decide *where a beam stops* and *where a body ends up*, so a drift between targets would not
+/// merely encode differently — it would put the laser on the wrong side of the glass. The sweep covers
+/// the two hazards the module calls out (axis-parallel rays whose origin sits exactly on a slab
+/// boundary, and distance ties between coincident boxes) plus the sweep/slide arithmetic, whose contact
+/// distances are the ones a movement mechanic acts on.
+fn build_geometry_values() -> (Vec<Face>, Vec<Hit>, Vec<u8>) {
+    let mut geometry = CoarseGeometry::new();
+    for i in 0..6 {
+        let x = f64::from(i) * 2.5 - 3.75;
+        geometry.add(
+            Collider::new(
+                ObjectId::derived("actor", &format!("box_{i}")),
+                Aabb::new(Vec3::new(x, 0.0, 0.0), Vec3::new(x + 1.5, 2.0, 2.0)),
+            )
+            .tagged_face(Face::NegX, ObjectId::derived("surface", "portalable")),
+        );
+    }
+    // Two coincident boxes, so the tie-break is in the blob rather than merely asserted.
+    geometry.add(Collider::new(
+        ObjectId::derived("actor", "twin_a"),
+        Aabb::new(Vec3::new(20.0, 0.0, 0.0), Vec3::new(21.0, 2.0, 2.0)),
+    ));
+    geometry.add(Collider::new(
+        ObjectId::derived("actor", "twin_b"),
+        Aabb::new(Vec3::new(20.0, 0.0, 0.0), Vec3::new(21.0, 2.0, 2.0)),
+    ));
+
+    let origins = [
+        Vec3::new(-20.0, 1.0, 1.0),
+        Vec3::new(-20.0, 0.0, 1.0), // exactly on the -Y boundary: the NaN case
+        Vec3::new(-20.0, 2.0, 1.0), // exactly on the +Y boundary
+        Vec3::new(-20.0, 0.5, 0.125), // an awkward, non-representable offset
+        Vec3::new(0.25, 1.0, 1.0),  // starting inside a box
+    ];
+    let directions = [
+        Vec3::X,
+        Vec3::new(1.0, 0.0, 0.0),
+        Vec3::new(3.0, 0.0, 0.0), // un-normalized: must answer identically to the unit case
+        Vec3::new(1.0, 0.25, 0.0),
+        Vec3::new(1.0, -0.1, 0.05),
+        Vec3::Y,
+    ];
+
+    let mut hits = Vec::new();
+    let mut w = Writer::new();
+    for origin in origins {
+        for direction in directions {
+            let all = geometry.raycast_all(origin, direction, 100.0);
+            w.u32(all.len() as u32);
+            for hit in &all {
+                w.f64(hit.distance);
+                w.write(&hit.point);
+                w.write(&hit.collider);
+                w.u8(u8::from(hit.from_inside));
+            }
+            if let Some(first) = all.first() {
+                hits.push(*first);
+            }
+            w.bool(geometry.line_of_sight(origin, origin + direction * 40.0));
+        }
+    }
+
+    // Sweep and slide: the contact distances a movement mechanic acts on.
+    for half in [0.25f64, 0.5, 0.75] {
+        for direction in [
+            Vec3::X,
+            Vec3::new(1.0, 0.0, 1.0),
+            Vec3::new(2.0, 1.0, 0.0),
+            Vec3::new(-1.0, 0.0, 0.0),
+        ] {
+            let body = Aabb::from_center_extents(Vec3::new(-10.0, 1.0, 1.0), Vec3::splat(half));
+            let swept = geometry.sweep(body, direction, 50.0);
+            w.f64(swept.distance);
+            w.write(&swept.end);
+            let slid = geometry.slide_to_collision(body, direction, 50.0);
+            w.f64(slid.distance);
+            w.write(&slid.end);
+        }
+    }
+
+    // Reflection about each face normal — the mirror rule, per axis.
+    for face in Face::ALL {
+        for incoming in [
+            Vec3::new(1.0, -1.0, 0.0).normalized(),
+            Vec3::new(0.3, 0.7, -0.2),
+        ] {
+            w.write(&CoarseGeometry::reflect(incoming, face.normal()));
+        }
+    }
+
+    (Face::ALL.to_vec(), hits, w.finish())
 }
 
 /// Spine encodings and the arithmetic that decides structure (M10a).

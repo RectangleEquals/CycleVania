@@ -30,7 +30,7 @@ const PROBES = [
     crate: "cv-core",
     example: "core_probe",
     fixture: "core_probe.bin",
-    covers: "arena layout, object identity, serialization, scope graph, structure math",
+    covers: "arena layout, identity, serialization, scope graph, structure + spatial math",
   },
 ];
 

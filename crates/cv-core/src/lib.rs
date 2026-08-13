@@ -20,6 +20,7 @@
 //! * [`solver`] — assumed-fill placement, cycle generation, and the linearity dials (M09).
 //! * [`softlock`] — the un-softlockable guarantee: no reachable state strands the goal (M10).
 //! * [`spine`] — opt-in macro-structure: guaranteed slots, free-form segments (M10a).
+//! * [`geometry`] — coarse colliders and the spatial primitives mechanics reason through (M11).
 //! * [`serialize`] — the deterministic binary spine for reproduction bundles and round-trips.
 //! * [`probe`] — the cross-target determinism blob for the data model.
 //!
@@ -38,6 +39,7 @@ pub mod descriptor;
 pub mod events;
 pub mod fingerprint;
 pub mod fixtures;
+pub mod geometry;
 pub mod mechanic;
 pub mod mission;
 pub mod node;
@@ -58,6 +60,7 @@ pub use descriptor::{
 };
 pub use events::{EventLog, GenEvent, Verbosity};
 pub use fingerprint::{Fingerprint, FingerprintBuilder, ReproductionBundle, ReproductionError};
+pub use geometry::{CoarseGeometry, Collider, ColliderId, Face, Hit, Sweep};
 pub use mechanic::{
     Constraint, Constraints, DefaultMechanic, FlowKind, Mechanic, MechanicRegistry, Request,
     Traversal, TraversalKind, Volume,
