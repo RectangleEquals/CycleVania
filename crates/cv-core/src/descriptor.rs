@@ -279,6 +279,21 @@ pub struct ScopeRecord {
     pub envelope: Option<Aabb>,
     /// Spatially adjacent peers.
     pub neighbors: Vec<ScopeRef>,
+    /// The spine slot this scope was allocated to, if any (M10a).
+    ///
+    /// **This is how a host finds the room a spine guaranteed.** Example must know *which* Space is
+    /// the Rest Treasury in order to place its Beacon interaction; a Zelda-like must know which is the
+    /// boss arena. Being told beats re-deriving structure the generator already knew.
+    pub spine_slot: Option<SpineSlotTag>,
+}
+
+/// Identifies which spine slot a scope was allocated to.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SpineSlotTag {
+    /// The template that placed it.
+    pub template: ObjectId,
+    /// The slot's declared name — `"capstone"`, `"terminal"`.
+    pub slot: String,
 }
 
 /// A placed piece of content.
@@ -408,6 +423,32 @@ impl WorldDescriptor {
     /// Every mesh placed in a scope.
     pub fn meshes_in(&self, r: ScopeRef) -> impl Iterator<Item = &MeshRecord> + '_ {
         self.meshes.iter().filter(move |m| m.scope == r)
+    }
+
+    /// The scope allocated to a named spine slot, if a spine ran (M10a).
+    ///
+    /// This is the host's entry point to a guarantee: `spine_slot(template, "terminal")` answers
+    /// "which room is the treasury?" without re-deriving structure the generator already knew.
+    pub fn spine_slot(&self, template: ObjectId, slot: &str) -> Option<(ScopeRef, &ScopeRecord)> {
+        self.spine_slots(template, slot).next()
+    }
+
+    /// Every scope allocated to a named spine slot — one per covered instance.
+    pub fn spine_slots(
+        &self,
+        template: ObjectId,
+        slot: &str,
+    ) -> impl Iterator<Item = (ScopeRef, &ScopeRecord)> + '_ {
+        let slot = slot.to_string();
+        self.scopes
+            .iter()
+            .enumerate()
+            .filter(move |(_, s)| {
+                s.spine_slot
+                    .as_ref()
+                    .is_some_and(|t| t.template == template && t.slot == slot)
+            })
+            .map(|(i, s)| (ScopeRef(i as u32), s))
     }
 
     /// Scopes a host can build right now — everything not still a forecast.
@@ -540,6 +581,8 @@ impl DescriptorBuilder {
                         n.sort();
                         n
                     },
+                    // Filled in by the spine pass (M10a) if one ran; `None` is the normal case.
+                    spine_slot: None,
                 }
             })
             .collect();
@@ -573,6 +616,21 @@ impl DescriptorBuilder {
     pub fn place_mesh(&mut self, record: MeshRecord) -> &mut Self {
         self.descriptor.meshes.push(record);
         self
+    }
+
+    /// Tag a scope as the one a spine slot was allocated to (M10a).
+    ///
+    /// Returns `false` if the handle is not in this descriptor. Hosts read the tag back through
+    /// [`WorldDescriptor::spine_slot`]: a guaranteed room is only useful if the host can *find* it.
+    pub fn tag_spine_slot(&mut self, h: Handle<Node>, tag: SpineSlotTag) -> bool {
+        let Some(r) = self.scope_ref(h) else {
+            return false;
+        };
+        let Some(record) = self.descriptor.scopes.get_mut(r.0 as usize) else {
+            return false;
+        };
+        record.spine_slot = Some(tag);
+        true
     }
 
     /// Finish, yielding the descriptor.
@@ -660,6 +718,7 @@ impl Serialize for ScopeRecord {
         w.write(&self.parent);
         w.write(&self.envelope);
         w.write(&self.neighbors);
+        w.write(&self.spine_slot);
     }
 }
 
@@ -673,6 +732,23 @@ impl Deserialize for ScopeRecord {
             parent: r.read()?,
             envelope: r.read()?,
             neighbors: r.read()?,
+            spine_slot: r.read()?,
+        })
+    }
+}
+
+impl Serialize for SpineSlotTag {
+    fn serialize(&self, w: &mut Writer) {
+        w.write(&self.template);
+        w.str(&self.slot);
+    }
+}
+
+impl Deserialize for SpineSlotTag {
+    fn deserialize(r: &mut Reader<'_>) -> SerResult<Self> {
+        Ok(SpineSlotTag {
+            template: r.read()?,
+            slot: r.str()?,
         })
     }
 }

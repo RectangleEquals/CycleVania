@@ -327,6 +327,24 @@ pub struct MissionGraph {
     locations: BTreeMap<LocationId, Location>,
     /// Adjacency built from `edges`, rebuilt whenever they change.
     adjacency: BTreeMap<Handle<Node>, Vec<usize>>,
+    /// The most connections a scope may have. Absent means unlimited, which is the normal case.
+    ///
+    /// **Enforced in [`add_edge`](MissionGraph::add_edge) rather than trusted to callers.** A cap is
+    /// declared by something that already ran — a spine promising a dead-end treasury — and has to
+    /// survive every pass that comes later. Making each pass remember to check would work until the
+    /// first one forgot, and the failure would be a shipped world with the wrong shape.
+    ///
+    /// ▶ Whenever `MissionGraph` itself becomes serializable, **this field must go with it**: a cap is
+    /// a promise, and a round-trip that drops it would let the next pass widen a dead end.
+    degree_caps: BTreeMap<Handle<Node>, u32>,
+    /// Scopes the generator must not put content in — the host owns their interiors.
+    ///
+    /// Enforced in [`add_location`](MissionGraph::add_location) for the same reason as `degree_caps`:
+    /// an exclusion declared once has to survive every pass that comes after it, and the only way to
+    /// guarantee that is to make the graph refuse rather than ask each pass to check.
+    ///
+    /// ▶ Must be serialized alongside `degree_caps` when the graph becomes serializable.
+    content_excluded: BTreeSet<Handle<Node>>,
 }
 
 impl MissionGraph {
@@ -339,7 +357,75 @@ impl MissionGraph {
             edges: Vec::new(),
             locations: BTreeMap::new(),
             adjacency: BTreeMap::new(),
+            degree_caps: BTreeMap::new(),
+            content_excluded: BTreeSet::new(),
         }
+    }
+
+    /// Move where the run begins.
+    ///
+    /// Exists so a spine slot declared [`SlotRole::Start`](crate::spine::SlotRole::Start) can *be* the
+    /// start rather than merely claim to be. A world always has one — the graph cannot be built
+    /// without it — so this relocates it, never introduces it.
+    pub fn set_start(&mut self, scope: Handle<Node>) -> &mut Self {
+        self.start = scope;
+        self
+    }
+
+    /// Forbid the generator from placing content in a scope.
+    ///
+    /// The scope keeps its connections and stays part of progression; what it loses is *contents*. No
+    /// item location can be added to it, so nothing can be found there and nothing can gate on
+    /// anything inside it. The host furnishes it however it likes.
+    ///
+    /// L1 has to be told separately — pass the same scopes to
+    /// [`Scheduler::excluding`](crate::schedule::Scheduler::excluding) — because scheduling runs
+    /// against the scope graph and never sees this one.
+    pub fn exclude_content(&mut self, scope: Handle<Node>) -> &mut Self {
+        self.content_excluded.insert(scope);
+        self
+    }
+
+    /// Is the generator barred from placing content here?
+    pub fn excludes_content(&self, scope: Handle<Node>) -> bool {
+        self.content_excluded.contains(&scope)
+    }
+
+    /// Every scope the generator must leave empty, in handle order.
+    pub fn content_excluded_scopes(&self) -> &BTreeSet<Handle<Node>> {
+        &self.content_excluded
+    }
+
+    /// Cap how many connections a scope may have.
+    ///
+    /// This is how "the treasury is a dead end" survives `cycle_density`: once declared, no later pass
+    /// can exceed it, because [`add_edge`](Self::add_edge) refuses rather than each pass being asked to
+    /// remember. Capping below the current degree does **not** remove existing edges — it freezes the
+    /// scope where it is.
+    pub fn set_degree_cap(&mut self, scope: Handle<Node>, max: u32) -> &mut Self {
+        self.degree_caps.insert(scope, max);
+        self
+    }
+
+    /// The declared cap for a scope, if any.
+    pub fn degree_cap(&self, scope: Handle<Node>) -> Option<u32> {
+        self.degree_caps.get(&scope).copied()
+    }
+
+    /// How many edges touch a scope.
+    pub fn degree(&self, scope: Handle<Node>) -> u32 {
+        self.edges
+            .iter()
+            .filter(|e| e.from == scope || e.to == scope)
+            .count() as u32
+    }
+
+    /// Would adding an edge between these two exceed either one's declared cap?
+    pub fn would_exceed_cap(&self, a: Handle<Node>, b: Handle<Node>) -> bool {
+        [a, b].iter().any(|h| {
+            self.degree_cap(*h)
+                .is_some_and(|cap| self.degree(*h) >= cap)
+        })
     }
 
     /// Set where the world is considered complete.
@@ -371,6 +457,20 @@ impl MissionGraph {
     /// geometry describing the same world.
     pub fn from_scopes(graph: &NodeGraph, start: Handle<Node>) -> Self {
         let mut mission = MissionGraph::new(start);
+        mission.connect_scopes(graph);
+        mission
+    }
+
+    /// Add the scope graph's spatial adjacency to an existing mission graph, **respecting degree
+    /// caps**. Returns how many edges were added.
+    ///
+    /// Separate from [`from_scopes`](Self::from_scopes) because a spined pipeline needs the other
+    /// order: the spine seeds its guaranteed structure into an empty graph *first*, declares its caps,
+    /// and only then is the free-form adjacency poured in around it. Pouring first and constraining
+    /// afterwards cannot work — a cap is forward-looking, and edges already placed would have to be
+    /// torn out, which would invalidate every index the solver and the softlock pass hold.
+    pub fn connect_scopes(&mut self, graph: &NodeGraph) -> usize {
+        let mut added = 0;
         // Deterministic: walk order, and each node's neighbours in insertion order. Each undirected
         // spatial link becomes one edge, deduplicated by only taking pairs once.
         for scope in graph.walk() {
@@ -381,12 +481,15 @@ impl MissionGraph {
                 continue;
             }
             for peer in node.neighbors() {
-                if scope < *peer {
-                    mission.add_edge(MissionEdge::open(scope, *peer));
+                if scope < *peer
+                    && !self.connects(scope, *peer)
+                    && self.add_edge(MissionEdge::open(scope, *peer)).is_some()
+                {
+                    added += 1;
                 }
             }
         }
-        mission
+        added
     }
 
     /// Where the player begins.
@@ -399,15 +502,24 @@ impl MissionGraph {
         &self.edges
     }
 
-    /// Add an edge.
-    pub fn add_edge(&mut self, edge: MissionEdge) -> usize {
+    /// Add an edge, unless a declared degree cap refuses it.
+    ///
+    /// Returns the new edge's index, or `None` when either endpoint is already at its cap. The
+    /// `Option` is the point: an edge request is a *request*, and a graph carrying structural promises
+    /// is entitled to decline. Passes that must not be refused — a spine wiring its own guaranteed
+    /// adjacency — should run before the caps are set, which is the order
+    /// [`SpineInstantiator`](crate::spine::SpineInstantiator) uses.
+    pub fn add_edge(&mut self, edge: MissionEdge) -> Option<usize> {
+        if self.would_exceed_cap(edge.from, edge.to) {
+            return None;
+        }
         let index = self.edges.len();
         self.adjacency.entry(edge.from).or_default().push(index);
         if edge.reversible {
             self.adjacency.entry(edge.to).or_default().push(index);
         }
         self.edges.push(edge);
-        index
+        Some(index)
     }
 
     /// Make a one-way edge two-way. Returns whether anything changed.
@@ -453,9 +565,16 @@ impl MissionGraph {
         }
     }
 
-    /// Register a location.
-    pub fn add_location(&mut self, id: LocationId, location: Location) {
+    /// Register a location, unless its scope is barred from holding content.
+    ///
+    /// Returns whether it was added. Refusal is the point: a scope declared empty stays empty however
+    /// many later passes try to fill it, without any of them having to know why.
+    pub fn add_location(&mut self, id: LocationId, location: Location) -> bool {
+        if self.excludes_content(location.scope) {
+            return false;
+        }
         self.locations.insert(id, location);
+        true
     }
 
     /// Every location, in id order.

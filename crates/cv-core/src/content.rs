@@ -58,11 +58,15 @@ pub enum ContentKind {
     StaticMesh,
     /// A disk-backed curve.
     CurveTable,
+    /// An **opt-in** macro-structure template constraining L2's topology (M10a).
+    ///
+    /// Not schedulable: a spine is not *placed*, it shapes where placement happens.
+    Spine,
 }
 
 impl ContentKind {
     /// Every kind, in declaration order — the canonical order for iteration and tags.
-    pub const ALL: [ContentKind; 12] = [
+    pub const ALL: [ContentKind; 13] = [
         ContentKind::Actor,
         ContentKind::Item,
         ContentKind::Puzzle,
@@ -75,6 +79,7 @@ impl ContentKind {
         ContentKind::SurfaceProperty,
         ContentKind::StaticMesh,
         ContentKind::CurveTable,
+        ContentKind::Spine,
     ];
 
     /// May L1 place or bias this?
@@ -113,7 +118,8 @@ impl ContentKind {
             | ContentKind::Shape
             | ContentKind::SurfaceProperty
             | ContentKind::StaticMesh
-            | ContentKind::CurveTable => &[],
+            | ContentKind::CurveTable
+            | ContentKind::Spine => &[],
         }
     }
 
@@ -133,6 +139,7 @@ impl ContentKind {
             ContentKind::SurfaceProperty => "surface",
             ContentKind::StaticMesh => "mesh",
             ContentKind::CurveTable => "curve",
+            ContentKind::Spine => "spine",
         }
     }
 

@@ -67,7 +67,7 @@ use crate::object::{Object, ObjectId};
 use crate::serialize::{Deserialize, Reader, SerError, SerResult, Serialize, Writer};
 use crate::Handle;
 use cv_determinism::{math, Rng};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
 // ---------------------------------------------------------------------------------------------
@@ -998,6 +998,7 @@ pub struct Scheduler<'a> {
     graph: &'a NodeGraph,
     pool: &'a ContentPool,
     rules: Vec<SlotRule>,
+    excluded: BTreeSet<Handle<Node>>,
 }
 
 impl<'a> Scheduler<'a> {
@@ -1007,6 +1008,7 @@ impl<'a> Scheduler<'a> {
             graph,
             pool,
             rules: Vec::new(),
+            excluded: BTreeSet::new(),
         }
     }
 
@@ -1014,6 +1016,26 @@ impl<'a> Scheduler<'a> {
     pub fn with_rule(mut self, rule: SlotRule) -> Self {
         self.rules.push(rule);
         self
+    }
+
+    /// Plan nothing for these scopes — their interiors belong to the host.
+    ///
+    /// The L1 half of an emptiness declaration; the L2 half is
+    /// [`MissionGraph::exclude_content`](crate::mission::MissionGraph::exclude_content). Both are
+    /// needed because a scope with no scheduled content could still be handed an item location, and a
+    /// scope with no locations could still be handed scenery. Feed both from
+    /// [`SpineInstance::empty_scopes`](crate::spine::SpineInstance::empty_scopes).
+    ///
+    /// An excluded scope is skipped entirely — no slot is planned for it, so it does not appear in the
+    /// plan at all rather than appearing with a target of zero.
+    pub fn excluding(mut self, scopes: impl IntoIterator<Item = Handle<Node>>) -> Self {
+        self.excluded.extend(scopes);
+        self
+    }
+
+    /// Is this scope excluded from scheduling?
+    pub fn excludes(&self, scope: Handle<Node>) -> bool {
+        self.excluded.contains(&scope)
     }
 
     /// How far through the world a scope sits.
@@ -1044,6 +1066,9 @@ impl<'a> Scheduler<'a> {
     pub fn plan(&self, rng: &Rng) -> SchedulePlan {
         let mut slots = Vec::new();
         for scope in self.graph.walk() {
+            if self.excludes(scope) {
+                continue;
+            }
             let Some(node) = self.graph.get(scope) else {
                 continue;
             };

@@ -21,6 +21,11 @@
 //! artifact that actually *ships* to a host, so it differing between targets would be a shipped bug
 //! rather than an internal one.
 //!
+//! A third class sits alongside those: **arithmetic that decides structure**. `AdaptiveRange`'s target
+//! formula and the spine's coverage and surplus distribution do not merely encode differently if they
+//! drift — they put the boss room somewhere else. Those are swept across their input ranges here, not
+//! sampled at one point.
+//!
 //! `scripts/wasm-golden.cjs` compares the wasm32 output of `examples/core_probe.rs` against the same
 //! fixture `tests/cross_target.rs` checks natively.
 
@@ -29,7 +34,7 @@ use crate::content::{ContentKind, ContentRegistry};
 use crate::context::Context;
 use crate::descriptor::{
     DescriptorBuilder, InstanceRecord, MeshRecord, Placement, PlacementReason, Rationale, ScopeRef,
-    Socket, WorldDescriptor,
+    Socket, SpineSlotTag, WorldDescriptor,
 };
 use crate::events::GenEvent;
 use crate::fingerprint::{Fingerprint, FingerprintBuilder, ReproductionBundle};
@@ -42,6 +47,9 @@ use crate::schedule::{
     AdaptiveRange, Curve, Progression, Schedule, ScheduleBook, SeedPolicy, Span, TargetOutcome,
 };
 use crate::serialize::{to_bytes, Deserialize, Reader, SerResult, Serialize, Writer};
+use crate::spine::{
+    CapabilityRef, Coverage, SlotRole, SpineSegment, SpineSlot, SpineTemplate, Strictness,
+};
 use cv_determinism::{Aabb, Mat4, Quat, Rng, Transform, Vec3};
 
 /// A probe node: carries every primitive the format supports, plus handles that form cycles.
@@ -101,6 +109,9 @@ struct ProbeWorld {
     schedule_math: Vec<u8>,
     rules: Vec<Rule>,
     mission_edges: Vec<MissionEdge>,
+    strictness: Vec<Strictness>,
+    capability_refs: Vec<CapabilityRef>,
+    spine_math: Vec<u8>,
 }
 
 impl Serialize for ProbeWorld {
@@ -121,6 +132,9 @@ impl Serialize for ProbeWorld {
         w.bytes(&self.schedule_math);
         w.write(&self.rules);
         w.write(&self.mission_edges);
+        w.write(&self.strictness);
+        w.write(&self.capability_refs);
+        w.bytes(&self.spine_math);
     }
 }
 
@@ -279,6 +293,7 @@ fn build() -> ProbeWorld {
     let (traversals, volumes, flows) = build_mechanic_values();
     let (schedules, seed_policy, schedule_math) = build_schedule_values();
     let (rules, mission_edges) = build_mission_values();
+    let (strictness, capability_refs, spine_math) = build_spine_values();
     ProbeWorld {
         ids,
         nodes,
@@ -296,7 +311,91 @@ fn build() -> ProbeWorld {
         schedule_math,
         rules,
         mission_edges,
+        strictness,
+        capability_refs,
+        spine_math,
     }
+}
+
+/// Spine encodings and the arithmetic that decides structure (M10a).
+///
+/// A spine's promises are *structural* — which scope is the boss arena, which instances are covered.
+/// If that arithmetic drifted between targets, two players on different platforms would get worlds
+/// laid out differently from the same seed, which is exactly the failure this whole crate exists to
+/// prevent. [`Coverage::Fraction`] is the sharp edge: it accumulates a curve, so it is float math
+/// deciding topology.
+fn build_spine_values() -> (Vec<Strictness>, Vec<CapabilityRef>, Vec<u8>) {
+    let strictness = vec![
+        Strictness::Required,
+        Strictness::Preferred,
+        Strictness::Optional,
+    ];
+    let capability_refs = vec![
+        CapabilityRef::Explicit(ObjectId::derived("capability", "blink_dash")),
+        CapabilityRef::GrantedBy("precursor".into()),
+        CapabilityRef::Explicit(ObjectId::NONE),
+    ];
+
+    let mut w = Writer::new();
+    // Adherence thresholds, and the keep/drop decision they drive across the whole dial.
+    for tier in [
+        Strictness::Required,
+        Strictness::Preferred,
+        Strictness::Optional,
+    ] {
+        w.f64(tier.adherence_threshold());
+        let template = SpineTemplate::new(ObjectId::derived("spine", "probe"), NodeKind::Reach);
+        for step in 0..=10 {
+            let adherence = f64::from(step) / 10.0;
+            let slot = SpineSlot::new("probe").strictness(tier);
+            w.bool(template.clone().adherence(adherence).keeps(&slot));
+        }
+    }
+    // Coverage patterns over several totals — the pattern-not-lottery guarantee, in bytes.
+    let coverages = [
+        Coverage::All,
+        Coverage::Every(3),
+        Coverage::Indices(vec![0, 2, 5, 99]),
+        Coverage::Fraction(Curve::constant(0.5)),
+        Coverage::Fraction(Curve::ramp(0.0, 1.0)),
+        Coverage::Fraction(Curve::from_points([(0.0, 0.2), (0.5, 0.9), (1.0, 0.3)])),
+    ];
+    for coverage in &coverages {
+        for total in [0usize, 1, 2, 7, 13] {
+            let selected = coverage.selected(total);
+            w.u32(selected.len() as u32);
+            for i in selected {
+                w.u32(i as u32);
+            }
+        }
+    }
+    // The budget floor: required slots plus the minimums of segments joining them.
+    let crawl = SpineTemplate::new(ObjectId::derived("spine", "loop"), NodeKind::Reach)
+        .slot(SpineSlot::new("start").role(SlotRole::Start))
+        .slot(SpineSlot::new("capstone"))
+        .slot(
+            SpineSlot::new("terminal")
+                .role(SlotRole::Goal)
+                .adjacent_to("capstone"),
+        )
+        .segment(SpineSegment::new(
+            "start",
+            "capstone",
+            AdaptiveRange::new(2, 5),
+        ))
+        .segment(SpineSegment::direct("capstone", "terminal"));
+    w.u32(crawl.required_minimum());
+    w.u32(crawl.kept_slots().len() as u32);
+    // Surplus distribution — this decides how deep the capstone sits, so it is structure, not garnish.
+    let kept = crawl.kept_slots();
+    for capacity in [0usize, 3, 4, 5, 9, 17, 64] {
+        for length in crawl.segment_lengths(&kept, capacity) {
+            w.u32(length);
+        }
+        w.u32(u32::MAX); // separator, so differing lengths cannot alias
+    }
+
+    (strictness, capability_refs, w.finish())
 }
 
 /// A descriptor covering both placement forms, mirroring, sockets, tags and rationale — the
@@ -357,6 +456,16 @@ fn build_descriptor(scopes: &NodeGraph, fingerprint: Fingerprint, seed: u64) -> 
         ],
         rationale: Rationale::new(PlacementReason::Connector),
     });
+
+    // A spine tag, so the field a host reads a guarantee back through is in the blob too (M10a).
+    let spaces: Vec<_> = scopes.of_kind(NodeKind::Space).map(|(h, _)| h).collect();
+    b.tag_spine_slot(
+        spaces[0],
+        SpineSlotTag {
+            template: ObjectId::derived("spine", "reach_loop"),
+            slot: "capstone".into(),
+        },
+    );
     b.finish()
 }
 
