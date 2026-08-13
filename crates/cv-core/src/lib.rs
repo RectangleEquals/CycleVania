@@ -19,6 +19,7 @@
 //! * [`mission`] — the L2 mission graph, the `Rule` grammar, and sphere reachability (M09).
 //! * [`solver`] — assumed-fill placement, cycle generation, and the linearity dials (M09).
 //! * [`softlock`] — the un-softlockable guarantee: no reachable state strands the goal (M10).
+//! * [`spine`] — opt-in macro-structure: guaranteed slots, free-form segments (M10a).
 //! * [`serialize`] — the deterministic binary spine for reproduction bundles and round-trips.
 //! * [`probe`] — the cross-target determinism blob for the data model.
 //!
@@ -77,9 +78,9 @@ pub use solver::{
     Linearity, LinearityOverride, LinearityResolver, PlacementTrace, Solution, SolveError, Solver,
 };
 pub use spine::{
-    CapabilityRef, Coverage, GrantSpec, Relaxation, SlotAssignment, SlotRole, SpineError,
-    SpineInstance, SpineInstantiator, SpineSegment, SpineSlot, SpineTemplate, SpineValidation,
-    SpineWarning, Strictness,
+    CapabilityRef, Coverage, GrantSpec, Relaxation, SlotAssignment, SlotContents, SlotRole,
+    SlotShape, SpineError, SpineInstance, SpineInstantiator, SpineSegment, SpineSlot,
+    SpineTemplate, SpineValidation, SpineWarning, Strictness,
 };
 
 /// This crate's version.

@@ -23,7 +23,7 @@ use cv_core::{
     SpineSlot, SpineSlotTag, SpineTemplate, Strictness,
 };
 use cv_determinism::{Aabb, Rng, Vec3};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 fn cap(name: &str) -> ObjectId {
     ObjectId::derived("capability", name)
@@ -563,6 +563,148 @@ fn a_dead_end_sanctum_does_not_strand_anyone() {
         mission.degree(terminal),
         1,
         "repair must not have widened the dead end"
+    );
+}
+
+// ---------------------------------------------------------------------------------------------
+// Segments: "anything can go between these two, you decide"
+// ---------------------------------------------------------------------------------------------
+
+/// A world whose Spaces are richly interconnected rather than a single chain, so the algorithm has
+/// something to branch *with*. A corridor graph cannot branch however free the segment is.
+fn braided_world(spaces_per_reach: usize) -> (NodeGraph, Vec<Handle<Node>>) {
+    let mut g = NodeGraph::new(1.0, 1);
+    let reach = g.add_child(g.root(), "reach").unwrap();
+    let area = g.add_child(reach, "area").unwrap();
+    let rooms: Vec<_> = (0..spaces_per_reach)
+        .map(|s| g.add_child(area, format!("space_{s}")).unwrap())
+        .collect();
+    for w in rooms.windows(2) {
+        g.connect(w[0], w[1]).unwrap();
+    }
+    // Extra spatial links so branching is available to whoever wants it.
+    for w in rooms.windows(3) {
+        g.connect(w[0], w[2]).unwrap();
+    }
+    for h in g.walk() {
+        g.set_envelope(h, Aabb::new(Vec3::ZERO, Vec3::splat(10.0)))
+            .unwrap();
+    }
+    for h in g.walk() {
+        g.advance(h, NodeState::Realized).unwrap();
+    }
+    (g, rooms)
+}
+
+#[test]
+fn a_free_segment_takes_whatever_the_instance_can_spare() {
+    // "I don't care how long" stated explicitly, rather than faked with a big AdaptiveRange.
+    let spine = SpineTemplate::new(spine_id("free"), NodeKind::Reach)
+        .slot(SpineSlot::new("start").role(SlotRole::Start))
+        .slot(SpineSlot::new("finish").role(SlotRole::Goal))
+        .segment(SpineSegment::free("start", "finish"));
+    assert!(spine.segments[0].is_free());
+    // Two slots plus everything else as connective tissue, at any capacity.
+    let kept = spine.kept_slots();
+    assert_eq!(spine.segment_lengths(&kept, 12), vec![10]);
+    assert_eq!(spine.segment_lengths(&kept, 2), vec![0]);
+    // The floor is just the slots — a free segment demands nothing.
+    assert_eq!(spine.required_minimum(), 2);
+
+    // Several free segments split the surplus evenly rather than overflowing the apportionment.
+    let three = SpineTemplate::new(spine_id("free3"), NodeKind::Reach)
+        .slot(SpineSlot::new("a"))
+        .slot(SpineSlot::new("b"))
+        .slot(SpineSlot::new("c"))
+        .segment(SpineSegment::free("a", "b"))
+        .segment(SpineSegment::free("b", "c"));
+    let kept = three.kept_slots();
+    assert_eq!(three.segment_lengths(&kept, 13), vec![5, 5]);
+}
+
+#[test]
+fn a_free_segment_may_branch_and_reconverge() {
+    // The claim the API makes: a segment guarantees *a* route, not the *only* route. If the interior
+    // could only ever be a corridor, "anything can go here" would be false advertising.
+    let (g, spaces) = braided_world(10);
+    let rng = Rng::new(21);
+    let spine = SpineTemplate::new(spine_id("open"), NodeKind::Reach)
+        .slot(SpineSlot::new("start").role(SlotRole::Start))
+        .slot(SpineSlot::new("finish").role(SlotRole::Goal))
+        .segment(SpineSegment::free("start", "finish"));
+
+    let mut mission = MissionGraph::new(spaces[0]);
+    let instances = SpineInstantiator::new(&g)
+        .with_template(spine)
+        .instantiate(&mut mission, &rng);
+    mission.connect_scopes(&g);
+
+    let start = instances[0].scope_of("start").unwrap();
+    let finish = instances[0].scope_of("finish").unwrap();
+    assert!(
+        mission.distances_from(start).contains_key(&finish),
+        "the guaranteed route must exist before anything else is asserted"
+    );
+
+    // Nothing inside a segment is degree-capped — that is what leaves the shape open.
+    for s in &spaces {
+        assert!(
+            mission.degree_cap(*s).is_none(),
+            "a segment interior must not be capped; only slots that asked are"
+        );
+    }
+
+    let resolver = LinearityResolver::new(Linearity::new(0.5, 1.0));
+    Solver::new(&g, &resolver).add_cycles(&mut mission, &rng);
+
+    // Branching: some room has three or more ways out.
+    let branchiest = spaces.iter().map(|s| mission.degree(*s)).max().unwrap();
+    assert!(
+        branchiest >= 3,
+        "no room branched; the segment interior was a corridor after all (max degree {branchiest})"
+    );
+
+    // Reconvergence: more edges than a tree over the same rooms means at least one loop exists, so
+    // there is genuinely more than one way through.
+    let interior: BTreeSet<_> = spaces.iter().copied().collect();
+    let edges = mission
+        .edges()
+        .iter()
+        .filter(|e| interior.contains(&e.from) && interior.contains(&e.to))
+        .count();
+    assert!(
+        edges >= interior.len(),
+        "a tree has {} edges for {} rooms; found {edges}, so nothing reconverged",
+        interior.len() - 1,
+        interior.len()
+    );
+}
+
+#[test]
+fn segment_latitude_is_one_mechanism_with_three_settings() {
+    // direct / bounded / free are the same statement at different strengths, not three features.
+    let kept_of = |seg: SpineSegment| {
+        let t = SpineTemplate::new(spine_id("lat"), NodeKind::Reach)
+            .slot(SpineSlot::new("a"))
+            .slot(SpineSlot::new("b"))
+            .segment(seg);
+        let kept = t.kept_slots();
+        (t.segment_lengths(&kept, 10)[0], t.required_minimum())
+    };
+    assert_eq!(
+        kept_of(SpineSegment::direct("a", "b")),
+        (0, 2),
+        "no latitude"
+    );
+    assert_eq!(
+        kept_of(SpineSegment::new("a", "b", AdaptiveRange::new(2, 4))),
+        (4, 4),
+        "bounded: grows to its ceiling, floors at its minimum"
+    );
+    assert_eq!(
+        kept_of(SpineSegment::free("a", "b")),
+        (8, 2),
+        "free: takes the rest"
     );
 }
 

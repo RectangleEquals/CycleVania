@@ -175,21 +175,32 @@ impl GrantSpec {
 // Slots and segments
 // ---------------------------------------------------------------------------------------------
 
-/// One guaranteed node in the sequence.
-#[derive(Clone, Debug, PartialEq)]
-pub struct SpineSlot {
-    /// Referenceable name — `"capstone"`, `"terminal"`.
-    pub name: String,
-    /// A registered `SlotPurpose` resource (boss-arena, sanctum, …). Registered rather than a free
-    /// string so a rename is a compile error, not a spine that quietly stops matching.
-    pub purpose: Option<ObjectId>,
-    /// Structural role.
-    pub role: SlotRole,
-    /// Overrides the template's strictness for this slot.
-    pub strictness: Option<Strictness>,
-    /// Overrides the template's adherence for this slot.
-    pub adherence: Option<f64>,
-    // --- requirements (binding at `Required`) ---
+/// What a slot demands of its **topology** — consumed by L2.
+///
+/// Grouped rather than flattened onto [`SpineSlot`] because these are the constraints one *layer*
+/// reads, and because a slot that says nothing about shape should cost nothing to write or to read.
+/// The builder methods stay on `SpineSlot`, so authoring is unaffected by the grouping.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct SlotShape {
+    /// Minimum connections this scope must have ("four entrances").
+    ///
+    /// A **floor**: free-form growth and `cycle_density` may add more, and typically do. Satisfied
+    /// before the dials run, so a dev at zero cycles still gets their multi-entrance arena.
+    pub min_degree: Option<u32>,
+    /// Maximum connections this scope may have. `Some(1)` is a dead end.
+    ///
+    /// A **ceiling**, and the harder of the two, because every pass *after* the spine could violate it.
+    /// Recorded as a cap on the mission graph and enforced inside
+    /// [`MissionGraph::add_edge`](crate::mission::MissionGraph::add_edge), so it holds against
+    /// `cycle_density` at full tilt rather than merely preceding it.
+    pub max_degree: Option<u32>,
+    /// Slots this must be directly connected to ("the sanctum is an exit of the capstone").
+    pub adjacent_to: Vec<String>,
+}
+
+/// What a slot demands of its **contents** — consumed by L0/L1 and the solver.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct SlotContents {
     /// Content that must be placed here.
     pub must_contain: Vec<ObjectId>,
     /// Content preferred here — the soft counterpart.
@@ -198,13 +209,6 @@ pub struct SpineSlot {
     pub requires: Option<CapabilityRef>,
     /// What the content placed here grants.
     pub grants: Option<GrantSpec>,
-    /// Minimum connections this scope must have ("four entrances").
-    pub min_degree: Option<u32>,
-    /// Maximum connections this scope may have. `Some(1)` is a dead end.
-    ///
-    /// Enforced as a cap on the mission graph, so it holds against `cycle_density` and every later
-    /// pass — not merely at the moment the spine runs.
-    pub max_degree: Option<u32>,
     /// **The generator places nothing here.** No scheduled content, no item locations, no gates
     /// inside — the scope's interior belongs entirely to the host.
     ///
@@ -216,12 +220,45 @@ pub struct SpineSlot {
     /// A host finds it by slot name through [`WorldDescriptor::spine_slot`](crate::WorldDescriptor::spine_slot)
     /// and furnishes it itself.
     pub empty: bool,
-    /// Slots this must be directly connected to ("the sanctum is an exit of the capstone").
-    pub adjacent_to: Vec<String>,
+}
+
+/// One guaranteed node in the sequence.
+///
+/// # Why the fields are grouped
+///
+/// A slot accumulates constraints from several directions — topology, contents, and (later) pacing and
+/// spatial hints. Flattening them all would produce a struct of twenty-odd optional fields where
+/// nothing indicates *which layer reads what*, and where every addition lengthens one undifferentiated
+/// list.
+///
+/// So constraints live in small groups named after the layer that consumes them ([`SlotShape`],
+/// [`SlotContents`]), each independently defaultable — a dev pays only for the axes they use.
+/// **The builder surface stays flat**: `SpineSlot::new("x").min_degree(3).empty()` works regardless of
+/// which group a field lives in. The grouping is for the type and for readers, not for authors.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SpineSlot {
+    /// Referenceable name — `"capstone"`, `"sanctum"`, whatever the dev calls it. The core attaches no
+    /// meaning to it; see [`SlotRole`] for the two positions it *does* have an opinion about.
+    pub name: String,
+    /// A registered `SlotPurpose` resource (boss-arena, sanctum, …). Registered rather than a free
+    /// string so a rename is a compile error, not a spine that quietly stops matching.
+    pub purpose: Option<ObjectId>,
+    /// Structural role.
+    pub role: SlotRole,
+    /// Overrides the template's strictness for this slot.
+    pub strictness: Option<Strictness>,
+    /// Overrides the template's adherence for this slot.
+    pub adherence: Option<f64>,
+    /// Topology demands — what this scope connects to, and how much.
+    pub shape: SlotShape,
+    /// Content demands — what goes in it, or that nothing does.
+    pub contents: SlotContents,
+    // ▶ Future groups land here rather than lengthening the list above: `pacing` (sphere bounds, gate
+    // budget) and `space` (volume, biome, motif hints for L3/L4).
 }
 
 impl SpineSlot {
-    /// A plain waypoint slot.
+    /// A plain interior slot, demanding nothing.
     pub fn new(name: impl Into<String>) -> Self {
         SpineSlot {
             name: name.into(),
@@ -229,14 +266,8 @@ impl SpineSlot {
             role: SlotRole::Interior,
             strictness: None,
             adherence: None,
-            must_contain: Vec::new(),
-            prefer_contain: Vec::new(),
-            requires: None,
-            grants: None,
-            min_degree: None,
-            max_degree: None,
-            empty: false,
-            adjacent_to: Vec::new(),
+            shape: SlotShape::default(),
+            contents: SlotContents::default(),
         }
     }
 
@@ -260,31 +291,37 @@ impl SpineSlot {
 
     /// Require content here.
     pub fn must_contain(mut self, content: impl IntoIterator<Item = ObjectId>) -> Self {
-        self.must_contain.extend(content);
+        self.contents.must_contain.extend(content);
+        self
+    }
+
+    /// Prefer content here — the soft counterpart of [`must_contain`](Self::must_contain).
+    pub fn prefer_contain(mut self, content: impl IntoIterator<Item = ObjectId>) -> Self {
+        self.contents.prefer_contain.extend(content);
         self
     }
 
     /// Require state to reach here.
     pub fn requires(mut self, requirement: CapabilityRef) -> Self {
-        self.requires = Some(requirement);
+        self.contents.requires = Some(requirement);
         self
     }
 
     /// Declare that this slot grants a capability.
     pub fn grants(mut self, spec: GrantSpec) -> Self {
-        self.grants = Some(spec);
+        self.contents.grants = Some(spec);
         self
     }
 
     /// Require a minimum number of connections.
     pub fn min_degree(mut self, degree: u32) -> Self {
-        self.min_degree = Some(degree);
+        self.shape.min_degree = Some(degree);
         self
     }
 
     /// Allow at most this many connections.
     pub fn max_degree(mut self, degree: u32) -> Self {
-        self.max_degree = Some(degree);
+        self.shape.max_degree = Some(degree);
         self
     }
 
@@ -296,7 +333,7 @@ impl SpineSlot {
         self.max_degree(1)
     }
 
-    /// The generator places nothing here — see [`empty`](SpineSlot::empty).
+    /// The generator places nothing here — see [`SlotContents::empty`].
     ///
     /// Pairs naturally with [`dead_end`](Self::dead_end) for a room the host owns outright:
     ///
@@ -304,13 +341,13 @@ impl SpineSlot {
     /// SpineSlot::new("sanctum").adjacent_to("capstone").dead_end().empty()
     /// ```
     pub fn empty(mut self) -> Self {
-        self.empty = true;
+        self.contents.empty = true;
         self
     }
 
     /// Require a direct connection to another slot.
     pub fn adjacent_to(mut self, slot: impl Into<String>) -> Self {
-        self.adjacent_to.push(slot.into());
+        self.shape.adjacent_to.push(slot.into());
         self
     }
 
@@ -321,6 +358,23 @@ impl SpineSlot {
 }
 
 /// The free-form stretch between two consecutive slots.
+///
+/// # What a segment guarantees, and what it leaves open
+///
+/// A segment promises exactly one thing: **a route exists from `from` to `to`**. It does *not* promise
+/// that route is the only one, and it does not describe the shape of what fills the gap.
+///
+/// That distinction is the whole point of the slot/segment split. Slots are where a dev takes a
+/// decision away from the generator; segments are where they hand one back. So the interior of a
+/// segment may **branch and reconverge** freely — the scopes inside it are never degree-capped, and
+/// `cycle_density`, the spatial adjacency, and every later pass are all entitled to add connections
+/// through it. A dev who wants "*something* between the boss and the exit, I don't care what" writes
+/// [`free`](Self::free) and is answered by the algorithm rather than by their own diagram.
+///
+/// ▶ **v0.1 limitation.** The *shape* of the interior is decided by the dials and the spatial graph,
+/// not stated by the dev. There is no way yet to say "branch into exactly two wings here and rejoin";
+/// that wants the parallel-slot work recorded in the depth-ladder design notes. What exists today is
+/// the honest version of "anything can go here" — not a promise of any particular topology.
 #[derive(Clone, Debug, PartialEq)]
 pub struct SpineSegment {
     /// The slot it leaves.
@@ -350,6 +404,32 @@ impl SpineSegment {
     /// A direct connection — no intervening scopes.
     pub fn direct(from: impl Into<String>, to: impl Into<String>) -> Self {
         SpineSegment::new(from, to, AdaptiveRange::new(0, 0))
+    }
+
+    /// **Anything may go here — the algorithm decides how much, and what shape.**
+    ///
+    /// The explicit way to hand a stretch of the world back to the generator: no declared length, no
+    /// declared topology, just "get me from `from` to `to`". Whatever scopes the instance has spare
+    /// are available to it, and the interior may branch and reconverge as the dials and the spatial
+    /// graph see fit.
+    ///
+    /// Contrast [`new`](Self::new), which bounds the length, and [`direct`](Self::direct), which
+    /// forbids any. All three say the same *kind* of thing — how much latitude the generator has —
+    /// which is why there is one mechanism rather than three.
+    pub fn free(from: impl Into<String>, to: impl Into<String>) -> Self {
+        SpineSegment::new(from, to, AdaptiveRange::new(0, Self::UNBOUNDED))
+    }
+
+    /// The ceiling [`free`](Self::free) uses — "as much as the instance can spare".
+    ///
+    /// Not `u32::MAX`: headroom is summed across segments to apportion surplus, and a value that
+    /// large would overflow that sum for no benefit. This is far past any plausible scope count while
+    /// staying comfortably summable.
+    pub const UNBOUNDED: u32 = u32::MAX / 1024;
+
+    /// Is this segment's length unconstrained?
+    pub fn is_free(&self) -> bool {
+        self.length.hard_max >= Self::UNBOUNDED
     }
 
     /// Gate the path through this segment.
@@ -594,21 +674,24 @@ impl SpineTemplate {
                     .unwrap_or(0)
             })
             .collect();
-        let total: u32 = headroom.iter().sum();
+        // Summed as `u64`: a `free` segment declares an enormous ceiling, and several of them together
+        // would wrap a `u32` — silently, and into a *smaller* number, which would look like a spine
+        // that mysteriously stopped using its budget.
+        let total: u64 = headroom.iter().map(|h| u64::from(*h)).sum();
         if total == 0 {
             return lengths;
         }
-        surplus = surplus.min(total);
+        surplus = surplus.min(total.min(u64::from(u32::MAX)) as u32);
 
         // Proportional shares, then the remainder by largest fractional part.
-        let mut remainders: Vec<(u32, usize)> = Vec::with_capacity(headroom.len());
+        let mut remainders: Vec<(u64, usize)> = Vec::with_capacity(headroom.len());
         let mut handed_out = 0u32;
         for (i, h) in headroom.iter().enumerate() {
             let exact = u64::from(surplus) * u64::from(*h);
-            let share = (exact / u64::from(total)) as u32;
+            let share = (exact / total) as u32;
             lengths[i] += share;
             handed_out += share;
-            remainders.push(((exact % u64::from(total)) as u32, i));
+            remainders.push((exact % total, i));
         }
         // Descending remainder, ascending index — a total order, so the outcome is one value.
         remainders.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
@@ -822,7 +905,7 @@ impl SpineTemplate {
             let required = slot.effective_strictness(self.strictness).is_required();
 
             // Content must exist to be demanded.
-            for content in &slot.must_contain {
+            for content in &slot.contents.must_contain {
                 if !registry.contains(*content) {
                     if required {
                         v.errors.push(SpineError::ContentUnavailable {
@@ -839,7 +922,7 @@ impl SpineTemplate {
                     }
                 }
             }
-            for content in &slot.prefer_contain {
+            for content in &slot.contents.prefer_contain {
                 if !registry.contains(*content) {
                     v.warnings.push(SpineWarning {
                         subject: slot.name.clone(),
@@ -850,11 +933,11 @@ impl SpineTemplate {
 
             // An empty slot cannot also be told what to hold. Choosing a winner silently would drop
             // one of the dev's own statements; saying so lets them decide which they meant.
-            if slot.empty {
+            if slot.contents.empty {
                 let demands = [
-                    (!slot.must_contain.is_empty()).then_some("must_contain"),
-                    (!slot.prefer_contain.is_empty()).then_some("prefer_contain"),
-                    slot.grants.is_some().then_some("grants"),
+                    (!slot.contents.must_contain.is_empty()).then_some("must_contain"),
+                    (!slot.contents.prefer_contain.is_empty()).then_some("prefer_contain"),
+                    slot.contents.grants.is_some().then_some("grants"),
                 ];
                 for what in demands.into_iter().flatten() {
                     v.errors.push(SpineError::EmptyContradiction {
@@ -865,7 +948,7 @@ impl SpineTemplate {
             }
 
             // Adjacency and grant references must name real slots...
-            for target in &slot.adjacent_to {
+            for target in &slot.shape.adjacent_to {
                 if index_of(target).is_none() {
                     v.errors.push(SpineError::UnknownSlot {
                         referenced_by: slot.name.clone(),
@@ -874,7 +957,7 @@ impl SpineTemplate {
                 }
             }
             // ...and a requirement must be granted by something *earlier*, or no route satisfies it.
-            if let Some(CapabilityRef::GrantedBy(source)) = &slot.requires {
+            if let Some(CapabilityRef::GrantedBy(source)) = &slot.contents.requires {
                 match index_of(source) {
                     None => v.errors.push(SpineError::UnknownSlot {
                         referenced_by: slot.name.clone(),
@@ -890,18 +973,14 @@ impl SpineTemplate {
 
             // A ceiling has to fit everything the same slot also asked for. Counting, in order: the
             // route in (every slot but the first has one), each declared adjacency, and any floor.
-            if let Some(max) = slot.max_degree {
+            if let Some(max) = slot.shape.max_degree {
                 let inbound = u32::from(i > 0);
                 // Adjacencies already implied by the spine's own chain are not additional edges.
                 let extra_adjacent = slot
+                    .shape
                     .adjacent_to
                     .iter()
                     .filter(|t| index_of(t).is_some_and(|j| j + 1 != i && i + 1 != j))
-                    .count() as u32;
-                let chained_adjacent = slot
-                    .adjacent_to
-                    .iter()
-                    .filter(|t| index_of(t).is_some_and(|j| j + 1 == i || i + 1 == j))
                     .count() as u32;
                 let needed = inbound + extra_adjacent;
                 if needed > max {
@@ -915,7 +994,7 @@ impl SpineTemplate {
                         ),
                     });
                 }
-                if let Some(min) = slot.min_degree {
+                if let Some(min) = slot.shape.min_degree {
                     if min > max {
                         v.errors.push(SpineError::DegreeContradiction {
                             slot: slot.name.clone(),
@@ -925,11 +1004,10 @@ impl SpineTemplate {
                         });
                     }
                 }
-                let _ = chained_adjacent;
             }
 
             // A degree requirement implies that many neighbours must exist.
-            if let Some(degree) = slot.min_degree {
+            if let Some(degree) = slot.shape.min_degree {
                 if required && degree >= available_scopes {
                     v.errors.push(SpineError::DegreeInfeasible {
                         slot: slot.name.clone(),
@@ -1301,7 +1379,7 @@ impl<'a> SpineInstantiator<'a> {
         // Emptiness: the L2 half. L1 is told via `SpineInstance::empty_scopes`, since scheduling runs
         // against the scope graph and never sees this.
         let mut empty = Vec::new();
-        for slot in template.slots.iter().filter(|s| s.empty) {
+        for slot in template.slots.iter().filter(|s| s.contents.empty) {
             if let Some(scope) = placed(&slot.name) {
                 mission.exclude_content(scope);
                 empty.push(scope);
@@ -1332,7 +1410,7 @@ impl<'a> SpineInstantiator<'a> {
 
     /// Allocate a slot, resolving its grant.
     fn assign(&self, slot: &SpineSlot, scope: Handle<Node>, rng: &Rng) -> SlotAssignment {
-        let granted = slot.grants.as_ref().and_then(|spec| {
+        let granted = slot.contents.grants.as_ref().and_then(|spec| {
             if spec.any_of.is_empty() {
                 return None;
             }
@@ -1364,7 +1442,7 @@ impl<'a> SpineInstantiator<'a> {
             let Some(from) = placed.get(slot.name.as_str()) else {
                 continue;
             };
-            for target in &slot.adjacent_to {
+            for target in &slot.shape.adjacent_to {
                 if let Some(to) = placed.get(target.as_str()) {
                     if !mission.connects(*from, *to) {
                         mission.add_edge(MissionEdge::open(*from, *to));
@@ -1429,7 +1507,7 @@ impl<'a> SpineInstantiator<'a> {
         mission: &mut MissionGraph,
     ) {
         for slot in &template.slots {
-            let Some(degree) = slot.min_degree else {
+            let Some(degree) = slot.shape.min_degree else {
                 continue;
             };
             let Some(assignment) = assignments.iter().find(|a| a.slot == slot.name) else {
@@ -1472,7 +1550,9 @@ impl<'a> SpineInstantiator<'a> {
         relaxations: &mut Vec<Relaxation>,
     ) {
         for slot in &template.slots {
-            let Some(cap) = slot.max_degree else { continue };
+            let Some(cap) = slot.shape.max_degree else {
+                continue;
+            };
             let Some(assignment) = assignments.iter().find(|a| a.slot == slot.name) else {
                 continue;
             };
