@@ -12,7 +12,7 @@
 //!
 //! | Channel | Who decides | Example |
 //! |---|---|---|
-//! | **Query** | reads committed fact | `ctx.count_realized(kind)` |
+//! | **Query** | reads committed fact | `ctx.count_realized(kind)`, `ctx.raycast(o, d, r)` |
 //! | **Assert** | the mechanic states ground truth | the *return value* of `footprint`/`constraints` |
 //! | **Request** | the algorithm may grant, adapt, or deny | `ctx.request(Request::PreferSpacing(4.0))` |
 //! | **Randomness** | deterministic, label-addressed | `ctx.rng("placement")` |
@@ -29,19 +29,33 @@
 //! `01-core/pipeline.md`. `count_projected` exists too, spelled explicitly so that reading speculative
 //! state is always a visible choice.
 //!
-//! # What this is at M07
+//! # Spatial queries are queries, not decisions
 //!
-//! Enough for L0–L2: identity, randomness, scope reads, committed-state counts, and requests. The
-//! geometric primitives (`raycast`, `reflect`, `sweep`, …) arrive at M11, and reactive dependency
-//! tracking at M12 — which is why reads funnel through methods here rather than letting callers hold a
-//! `&NodeGraph` directly. When M12 needs to record *what a call read*, there is one place to add it.
+//! The primitives added at M11 — `raycast`, `sweep`, `slide_to_collision`, `line_of_sight`, `overlap`,
+//! `reflect` — are **geometric only**. `raycast` reports what is *there*; it never reports whether that
+//! thing blocks the caller, because blocking depends on what is travelling. Glass stops a bullet and
+//! passes a laser: the glass knows that, the ray does not. A flow-selective question is therefore two
+//! steps — walk `raycast_all` (sorted nearest-first) and stop at the first surface whose mechanic says
+//! it blocks — and that split is what keeps `FlowKind` out of the geometry entirely.
+//!
+//! Geometry is optional on a context. Without it every primitive answers as an empty world would
+//! (nothing hit, sight unobstructed, sweeps run their full length) rather than panicking, so a mechanic
+//! written against a built world stays callable during L0–L2 when there is nothing to hit yet.
+//!
+//! # What this is at M11
+//!
+//! Identity, randomness, scope reads, committed-state counts, requests, and the spatial primitives.
+//! Reactive dependency tracking arrives at M12 — which is why reads funnel through methods here rather
+//! than letting callers hold a `&NodeGraph` or a `&CoarseGeometry` directly. When M12 needs to record
+//! *what a call read*, there is one place to add it, and the spatial reads are already inside it.
 
 use crate::content::ContentRegistry;
+use crate::geometry::{CoarseGeometry, ColliderId, Hit, Sweep};
 use crate::mechanic::Request;
 use crate::node::{Node, NodeGraph, NodeKind, NodeState};
 use crate::object::ObjectId;
 use crate::Handle;
-use cv_determinism::Rng;
+use cv_determinism::{Aabb, Rng, Vec3};
 
 /// The per-call generation lens.
 ///
@@ -63,6 +77,9 @@ struct WorldView<'a> {
     registry: &'a ContentRegistry,
     /// Content already placed, by scope — what the committed-state queries count.
     placed: &'a [(Handle<Node>, ObjectId)],
+    /// The coarse boxes the spatial primitives run against (M11). Absent until something builds them,
+    /// in which case every primitive answers "nothing there" rather than refusing to run.
+    geometry: Option<&'a CoarseGeometry>,
 }
 
 impl<'a> Context<'a> {
@@ -82,6 +99,7 @@ impl<'a> Context<'a> {
                 graph,
                 registry,
                 placed,
+                geometry: None,
             }),
             scope: None,
             rng: rng.fork(label),
@@ -106,6 +124,18 @@ impl<'a> Context<'a> {
     /// Point this context at a scope.
     pub fn at_scope(mut self, scope: Handle<Node>) -> Self {
         self.scope = Some(scope);
+        self
+    }
+
+    /// Give this context the coarse geometry the spatial primitives run against (M11).
+    ///
+    /// Optional on purpose: L0–L2 callbacks have no geometry to speak of, and a mechanic that asks
+    /// anyway gets an empty world rather than a panic — the same forgiving shape
+    /// [`detached`](Self::detached) has, for the same reason.
+    pub fn with_geometry(mut self, geometry: &'a CoarseGeometry) -> Self {
+        if let Some(world) = self.world.as_mut() {
+            world.geometry = Some(geometry);
+        }
         self
     }
 
@@ -215,6 +245,83 @@ impl<'a> Context<'a> {
                 .filter(|(_, n)| n.state() == state)
                 .count() as u32,
         }
+    }
+
+    // --- spatial primitives (M11) --------------------------------------------------------------
+
+    /// The coarse geometry behind this call, if it has any.
+    pub fn geometry(&self) -> Option<&CoarseGeometry> {
+        self.world.as_ref().and_then(|w| w.geometry)
+    }
+
+    /// The first thing in the way.
+    ///
+    /// **Geometric, not semantic.** It reports what is *there*, never whether that thing blocks the
+    /// caller — glass stops a bullet and passes a laser, and the glass knows that while the ray does
+    /// not. For a flow-selective answer, walk [`raycast_all`](Self::raycast_all) and stop at the first
+    /// surface whose mechanic says it blocks.
+    pub fn raycast(&self, origin: Vec3, direction: Vec3, max_distance: f64) -> Option<Hit> {
+        self.geometry()?.raycast(origin, direction, max_distance)
+    }
+
+    /// Everything the ray meets, nearest first — the building block for flow-selective queries.
+    pub fn raycast_all(&self, origin: Vec3, direction: Vec3, max_distance: f64) -> Vec<Hit> {
+        self.geometry()
+            .map(|g| g.raycast_all(origin, direction, max_distance))
+            .unwrap_or_default()
+    }
+
+    /// Is the straight line between two points unobstructed by anything at all?
+    ///
+    /// Returns `true` with no geometry: "nothing is in the way" is the honest answer to an empty world,
+    /// and it keeps a mechanic's logic identical whether or not geometry has been built yet.
+    pub fn line_of_sight(&self, from: Vec3, to: Vec3) -> bool {
+        self.geometry().is_none_or(|g| g.line_of_sight(from, to))
+    }
+
+    /// Move a box until it touches something.
+    pub fn sweep(&self, box_: Aabb, direction: Vec3, max_distance: f64) -> Sweep {
+        match self.geometry() {
+            Some(g) => g.sweep(box_, direction, max_distance),
+            None => Sweep {
+                distance: max_distance,
+                end: box_.center() + direction * max_distance,
+                hit: None,
+            },
+        }
+    }
+
+    /// Move a box until it touches something, then slide along the contact.
+    pub fn slide_to_collision(&self, box_: Aabb, direction: Vec3, max_distance: f64) -> Sweep {
+        match self.geometry() {
+            Some(g) => g.slide_to_collision(box_, direction, max_distance),
+            None => self.sweep(box_, direction, max_distance),
+        }
+    }
+
+    /// Every collider intersecting a box.
+    pub fn overlap(&self, bounds: Aabb) -> Vec<ColliderId> {
+        self.geometry()
+            .map(|g| g.overlap(bounds))
+            .unwrap_or_default()
+    }
+
+    /// Reflect a direction off a normal — the mirror rule a deflective surface applies.
+    ///
+    /// Pure arithmetic, so it works on a detached context: a mechanic computing a bounce should not
+    /// need a world to do it.
+    pub fn reflect(&self, incoming: Vec3, normal: Vec3) -> Vec3 {
+        CoarseGeometry::reflect(incoming, normal)
+    }
+
+    /// The surface tags at a hit.
+    pub fn tags_at(&self, hit: &Hit) -> Vec<ObjectId> {
+        self.geometry().map(|g| g.tags_at(hit)).unwrap_or_default()
+    }
+
+    /// Does the surface a hit landed on carry a tag?
+    pub fn has_tag_at(&self, hit: &Hit, tag: ObjectId) -> bool {
+        self.geometry().is_some_and(|g| g.has_tag_at(hit, tag))
     }
 
     // --- requests ---------------------------------------------------------------------------
@@ -337,6 +444,104 @@ mod tests {
             ctx.requests().is_empty(),
             "taking clears them for the next call"
         );
+    }
+
+    #[test]
+    fn spatial_primitives_answer_through_the_context() {
+        use crate::geometry::{CoarseGeometry, Collider, Face};
+        let (g, reg, placed) = world();
+        let mut geometry = CoarseGeometry::new();
+        let wall = ObjectId::derived("actor", "wall");
+        let portalable = ObjectId::derived("surface", "portalable");
+        geometry.add(
+            Collider::new(
+                wall,
+                Aabb::new(Vec3::new(2.0, 0.0, 0.0), Vec3::new(3.0, 2.0, 2.0)),
+            )
+            .tagged_face(Face::NegX, portalable),
+        );
+
+        let ctx = Context::new(&g, &reg, &placed, &Rng::new(1), "t").with_geometry(&geometry);
+        let hit = ctx
+            .raycast(Vec3::new(0.0, 1.0, 1.0), Vec3::X, 10.0)
+            .expect("the wall is in the way");
+        assert_eq!(hit.owner, wall);
+        assert_eq!(hit.distance, 2.0);
+        assert!(
+            ctx.has_tag_at(&hit, portalable),
+            "tags read back through the context"
+        );
+        assert!(!ctx.line_of_sight(Vec3::new(0.0, 1.0, 1.0), Vec3::new(5.0, 1.0, 1.0)));
+        assert!(ctx.line_of_sight(Vec3::new(0.0, 5.0, 1.0), Vec3::new(5.0, 5.0, 1.0)));
+        assert_eq!(
+            ctx.raycast_all(Vec3::new(0.0, 1.0, 1.0), Vec3::X, 10.0)
+                .len(),
+            1
+        );
+        assert_eq!(
+            ctx.overlap(Aabb::new(Vec3::ZERO, Vec3::splat(10.0))).len(),
+            1
+        );
+    }
+
+    #[test]
+    fn spatial_primitives_are_geometric_and_never_decide_what_blocks() {
+        // The property that keeps `FlowKind` out of the geometry: a ray reports what is *there*, and
+        // the caller decides whether it stops them. Two mechanics can disagree about the same hit.
+        use crate::geometry::{CoarseGeometry, Collider};
+        let (g, reg, placed) = world();
+        let glass = ObjectId::derived("actor", "glass");
+        let mut geometry = CoarseGeometry::new();
+        geometry.add(Collider::new(
+            glass,
+            Aabb::new(Vec3::new(2.0, 0.0, 0.0), Vec3::new(3.0, 2.0, 2.0)),
+        ));
+        geometry.add(Collider::new(
+            ObjectId::derived("actor", "stone"),
+            Aabb::new(Vec3::new(5.0, 0.0, 0.0), Vec3::new(6.0, 2.0, 2.0)),
+        ));
+
+        let ctx = Context::new(&g, &reg, &placed, &Rng::new(1), "t").with_geometry(&geometry);
+        let hits = ctx.raycast_all(Vec3::new(0.0, 1.0, 1.0), Vec3::X, 20.0);
+        assert_eq!(
+            hits.len(),
+            2,
+            "the ray reports both, blocking is not its call"
+        );
+
+        // A bullet stops at the glass; a laser passes it and stops at the stone. Same ray, same hits.
+        let bullet_stop = hits.iter().find(|h| h.owner == glass).unwrap();
+        let laser_stop = hits.iter().find(|h| h.owner != glass).unwrap();
+        assert_eq!(bullet_stop.distance, 2.0);
+        assert_eq!(laser_stop.distance, 5.0);
+    }
+
+    #[test]
+    fn without_geometry_the_primitives_answer_as_an_empty_world() {
+        // A mechanic written against a built world must stay callable during L0–L2, when there is
+        // nothing to hit yet — otherwise every mechanic needs a "has geometry?" branch.
+        let (g, reg, placed) = world();
+        let ctx = Context::new(&g, &reg, &placed, &Rng::new(1), "t");
+        assert!(ctx.geometry().is_none());
+        assert!(ctx.raycast(Vec3::ZERO, Vec3::X, 10.0).is_none());
+        assert!(ctx.raycast_all(Vec3::ZERO, Vec3::X, 10.0).is_empty());
+        assert!(
+            ctx.line_of_sight(Vec3::ZERO, Vec3::splat(9.0)),
+            "nothing in the way is the honest answer to an empty world"
+        );
+        let mover = Aabb::from_center_extents(Vec3::ZERO, Vec3::splat(0.5));
+        let sweep = ctx.sweep(mover, Vec3::X, 4.0);
+        assert!(sweep.is_clear());
+        assert_eq!(sweep.distance, 4.0);
+        assert!(ctx.overlap(Aabb::new(Vec3::ZERO, Vec3::ONE)).is_empty());
+    }
+
+    #[test]
+    fn reflect_works_without_a_world_at_all() {
+        // Pure arithmetic: computing a bounce should not require geometry to have been built.
+        let ctx = Context::detached();
+        let r = ctx.reflect(Vec3::new(1.0, -1.0, 0.0).normalized(), Vec3::Y);
+        assert!((r - Vec3::new(1.0, 1.0, 0.0).normalized()).length() < 1e-12);
     }
 
     #[test]
