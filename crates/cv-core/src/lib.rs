@@ -46,13 +46,14 @@ pub mod schedule;
 pub mod serialize;
 pub mod softlock;
 pub mod solver;
+pub mod spine;
 
 pub use arena::{Arena, Handle};
 pub use content::{ContentEntry, ContentKind, ContentRegistry, RegistryError};
 pub use context::Context;
 pub use descriptor::{
     DescriptorBuilder, InstanceRecord, MeshRecord, Placement, PlacementReason, Rationale,
-    ScopeRecord, ScopeRef, Socket, WorldDescriptor,
+    ScopeRecord, ScopeRef, Socket, SpineSlotTag, WorldDescriptor,
 };
 pub use events::{EventLog, GenEvent, Verbosity};
 pub use fingerprint::{Fingerprint, FingerprintBuilder, ReproductionBundle, ReproductionError};
@@ -74,6 +75,11 @@ pub use softlock::{
 };
 pub use solver::{
     Linearity, LinearityOverride, LinearityResolver, PlacementTrace, Solution, SolveError, Solver,
+};
+pub use spine::{
+    CapabilityRef, Coverage, GrantSpec, Relaxation, SlotAssignment, SlotRole, SpineError,
+    SpineInstance, SpineInstantiator, SpineSegment, SpineSlot, SpineTemplate, SpineValidation,
+    SpineWarning, Strictness,
 };
 
 /// This crate's version.
