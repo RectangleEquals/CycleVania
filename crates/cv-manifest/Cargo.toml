@@ -1,0 +1,11 @@
+[package]
+name = "cv-manifest"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "The tier-1 API manifest: the single hand-authored declaration of the core surface, and its validators."
+
+[lints]
+workspace = true
+
+[dependencies]

@@ -1,0 +1,4006 @@
+# CycleVania tier-1 API manifest
+#
+# THE single hand-authored declaration of tier-1. Every other surface is generated from this file:
+# the Rust trait skeletons, the TypeScript declarations, the editor's node palette, and the API
+# reference document itself. Editing any of those by hand is a bug.
+#
+# Schema (see .notes/Design/v0.2b/06-api/README.md):
+#
+#   [[class]]                path · extends · kind · sealed · abstract · status · doc
+#     [[class.field]]        name · type · exposed · mutable · api · final · status · doc · default
+#     [[class.method]]       name · args · returns · api · final · hook · status · doc · default
+#     [[class.value]]        name · doc                  (kind = "enum" only)
+#
+# `kind` is one of: object · struct · enum.
+# `status` is one of: proposed · stable · deprecated. Generated palettes ship only `stable`.
+# `hook = true` marks a question the core asks; it is what generates a schematic's OVERRIDES list.
+#
+# ⚠ `field` versus `method` is semantic, not cosmetic. A plain read of something already known is a
+# field and becomes a pure get node with no exec pins; anything that takes an argument, computes, or
+# mutates is a method and becomes a call node with them. The signal a method sends is COST.
+
+version = 1
+
+# =====================================================================================
+# Object — the root of the identity family
+# =====================================================================================
+
+[[class]]
+path = "/Core/Object"
+kind = "object"
+sealed = false
+status = "stable"
+doc = "The root of everything with identity. Has metadata, has a rationale, can be asked what it is."
+
+  [[class.field]]
+  name = "id"
+  type = "ObjectId"
+  api = true
+  final = true
+  status = "stable"
+  doc = "Opaque identity. A string or opaque handle — NEVER a u64, because TS integers alias past 2^53."
+
+  [[class.field]]
+  name = "type_path"
+  type = "String"
+  api = true
+  final = true
+  status = "stable"
+  doc = "The mount-pointed class path this object was instantiated from."
+
+  [[class.field]]
+  name = "rationale"
+  type = "Ref<Rationale>"
+  api = true
+  final = true
+  status = "stable"
+  doc = "Why the core did what it did with this object. Core-written."
+
+  [[class.field]]
+  name = "meta_keys"
+  type = "Array<String>"
+  api = true
+  final = true
+  status = "stable"
+  doc = "Every metadata key currently set."
+
+  [[class.method]]
+  name = "is_a"
+  args = [ { name = "kind", type = "Kind<Object>" } ]
+  returns = "bool"
+  api = true
+  final = true
+  status = "stable"
+  doc = "Class-membership test against a picked class path."
+
+  [[class.method]]
+  name = "equals"
+  args = [ { name = "other", type = "Ref<Object>" } ]
+  returns = "bool"
+  api = true
+  final = true
+  status = "stable"
+  doc = "Identity comparison. Never a float comparison."
+
+  [[class.method]]
+  name = "satisfied_by"
+  args = [ { name = "candidate", type = "Kind<Object>" } ]
+  returns = "bool"
+  api = true
+  final = false
+  status = "stable"
+  default = "candidate is-a my kind"
+  doc = "Does this candidate class satisfy a requirement for me? Runs on the CLASS DEFAULT, never an instance — which is how a longer rope satisfies a requirement for a shorter one without constructing either."
+
+  [[class.method]]
+  name = "format"
+  args = []
+  returns = "String"
+  api = true
+  final = false
+  status = "stable"
+  default = "TypeName#id"
+  doc = "Short display form."
+
+  [[class.method]]
+  name = "explain"
+  args = []
+  returns = "String"
+  api = true
+  final = false
+  status = "stable"
+  default = "format()"
+  doc = "Prose a developer reads in the trace."
+
+  [[class.method]]
+  name = "meta"
+  args = [ { name = "key", type = "String" } ]
+  returns = "MetaValue"
+  api = true
+  final = true
+  status = "stable"
+  doc = "Read one metadata value."
+
+  [[class.method]]
+  name = "set_meta"
+  args = [ { name = "key", type = "String" }, { name = "value", type = "MetaValue" } ]
+  returns = "void"
+  api = true
+  final = true
+  status = "stable"
+  doc = "Write one metadata value. The CV_ prefix is reserved for the core and rejected here."
+
+  [[class.method]]
+  name = "has_meta"
+  args = [ { name = "key", type = "String" } ]
+  returns = "bool"
+  api = true
+  final = true
+  status = "stable"
+  doc = "Is this key set?"
+
+  [[class.method]]
+  name = "remove_meta"
+  args = [ { name = "key", type = "String" } ]
+  returns = "void"
+  api = true
+  final = true
+  status = "stable"
+  doc = "Clear one metadata value."
+
+  [[class.method]]
+  name = "_configure"
+  args = []
+  returns = "void"
+  api = true
+  final = false
+  hook = true
+  status = "stable"
+  doc = "Setup phase 1. Own configuration only; other content may not exist yet."
+
+  [[class.method]]
+  name = "_resolve"
+  args = []
+  returns = "void"
+  api = true
+  final = false
+  hook = true
+  status = "stable"
+  doc = "Setup phase 2. Every registered content class now exists and may be referenced."
+
+# =====================================================================================
+# Actor — something placeable, and the sole point of contact (P11)
+# =====================================================================================
+
+[[class]]
+path = "/Core/Actor"
+extends = "/Core/Object"
+kind = "object"
+sealed = false
+status = "stable"
+doc = "Something placeable in a world. The only thing the core places, and the sole point of contact between content and generation."
+
+  [[class.field]]
+  name = "components"
+  type = "Array<Ref<Component>>"
+  api = true
+  final = true
+  status = "stable"
+  doc = "Attached components, in attach order — which is the order every aggregating hook walks."
+
+  [[class.field]]
+  name = "parent"
+  type = "Ref<Actor>"
+  api = true
+  final = true
+  status = "stable"
+  doc = "The actor this one is mounted on, if any."
+
+  [[class.field]]
+  name = "children"
+  type = "Array<Ref<Actor>>"
+  api = true
+  final = true
+  status = "stable"
+  doc = "Actors mounted on this one."
+
+  [[class.field]]
+  name = "transform"
+  type = "Transform"
+  api = true
+  final = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Local transform relative to the parent."
+
+  [[class.field]]
+  name = "skip_policy"
+  type = "SkipPolicy"
+  api = true
+  final = false
+  mutable = true
+  exposed = true
+  status = "stable"
+  default = "TOLERATED"
+  doc = "Whether alternative routes past this actor's gate are tolerated, reported, or actively forbidden. Inert unless gate() is non-trivial."
+
+  [[class.field]]
+  name = "discoverability"
+  type = "float"
+  api = true
+  final = false
+  mutable = true
+  exposed = true
+  status = "stable"
+  default = "1.0"
+  doc = "The declared likelihood a player finds this gate's solution unprompted. Declared because it is not derivable; above the threshold the solver treats the gate as open, conservatively, and names it in the trace."
+
+  [[class.method]]
+  name = "component"
+  args = [ { name = "kind", type = "Kind<Component>" } ]
+  returns = "Ref<Component>"
+  api = true
+  final = true
+  status = "stable"
+  doc = "First attached component of that kind."
+
+  [[class.method]]
+  name = "components_of"
+  args = [ { name = "kind", type = "Kind<Component>" } ]
+  returns = "Array<Ref<Component>>"
+  api = true
+  final = true
+  status = "stable"
+  doc = "Every attached component of that kind."
+
+  [[class.method]]
+  name = "add_component"
+  args = [ { name = "c", type = "Ref<Component>" } ]
+  returns = "void"
+  api = true
+  final = true
+  status = "stable"
+  doc = "Attach a component."
+
+  [[class.method]]
+  name = "remove_component"
+  args = [ { name = "c", type = "Ref<Component>" } ]
+  returns = "void"
+  api = true
+  final = true
+  status = "stable"
+  doc = "Detach a component."
+
+  [[class.method]]
+  name = "attach_to"
+  args = [ { name = "parent", type = "Ref<Actor>" }, { name = "mount", type = "Ref<MountComponent>" } ]
+  returns = "void"
+  api = true
+  final = true
+  status = "stable"
+  doc = "Mount this actor onto another at a named socket."
+
+  [[class.method]]
+  name = "world_transform"
+  args = []
+  returns = "Transform"
+  api = true
+  final = true
+  status = "stable"
+  doc = "Absolute transform. Walks the parent chain, so it is not free."
+
+  [[class.method]]
+  name = "pivot"
+  args = [ { name = "ctx", type = "Ref<Context>" } ]
+  returns = "Vec3"
+  api = true
+  final = false
+  hook = true
+  status = "stable"
+  default = "Vec3.ZERO"
+  doc = "The point this actor rotates and mounts about."
+
+  [[class.method]]
+  name = "bounds"
+  args = [ { name = "ctx", type = "Ref<Context>" } ]
+  returns = "Aabb"
+  api = true
+  final = false
+  hook = true
+  status = "stable"
+  default = "union of component bounds"
+  doc = "Axis-aligned extent."
+
+  [[class.method]]
+  name = "footprint"
+  args = [ { name = "ctx", type = "Ref<Context>" } ]
+  returns = "Ref<CollisionBody>"
+  api = true
+  final = false
+  hook = true
+  status = "stable"
+  default = "union of component collision"
+  doc = "The space this reserves during skeleton layout."
+
+  [[class.method]]
+  name = "clearance"
+  args = [ { name = "ctx", type = "Ref<Context>" } ]
+  returns = "Ref<CollisionBody>"
+  api = true
+  final = false
+  hook = true
+  status = "stable"
+  default = "empty"
+  doc = "Space that must stay empty around this actor. Called per candidate position, so it must stay cheap."
+
+  [[class.method]]
+  name = "collision"
+  args = [ { name = "ctx", type = "Ref<Context>" } ]
+  returns = "Ref<CollisionBody>"
+  api = true
+  final = false
+  hook = true
+  status = "stable"
+  default = "union of component collision"
+  doc = "What this actor physically blocks."
+
+  [[class.method]]
+  name = "mount_faces"
+  args = [ { name = "ctx", type = "Ref<Context>" } ]
+  returns = "Array<Face>"
+  api = true
+  final = false
+  hook = true
+  status = "stable"
+  default = "[ POS_Y ]"
+  doc = "Which faces this may be mounted against. Floor, wall or ceiling is what distinguishes a chest from a sconce from a chandelier."
+
+  [[class.method]]
+  name = "up_axis"
+  args = [ { name = "ctx", type = "Ref<Context>" } ]
+  returns = "Vec3"
+  api = true
+  final = false
+  hook = true
+  status = "stable"
+  default = "Vec3.UP"
+  doc = "Which direction is up for this actor."
+
+  [[class.method]]
+  name = "yaw_snap"
+  args = [ { name = "ctx", type = "Ref<Context>" } ]
+  returns = "int"
+  api = true
+  final = false
+  hook = true
+  status = "stable"
+  default = "4"
+  doc = "Rotational quantisation about the up axis. 0 = free, 4 = 90 degrees."
+
+  [[class.method]]
+  name = "allow_pitch"
+  args = [ { name = "ctx", type = "Ref<Context>" } ]
+  returns = "bool"
+  api = true
+  final = false
+  hook = true
+  status = "stable"
+  default = "false"
+  doc = "May the solver tilt this out of the up axis?"
+
+  [[class.method]]
+  name = "allow_roll"
+  args = [ { name = "ctx", type = "Ref<Context>" } ]
+  returns = "bool"
+  api = true
+  final = false
+  hook = true
+  status = "stable"
+  default = "false"
+  doc = "May the solver roll this about its forward axis?"
+
+  [[class.method]]
+  name = "scalable"
+  args = [ { name = "ctx", type = "Ref<Context>" } ]
+  returns = "Span"
+  api = true
+  final = false
+  hook = true
+  status = "stable"
+  default = "Span(1, 1)"
+  doc = "Permitted uniform scale range. A lever a fixed-template system cannot have; convexity is affine-invariant, so the collision cache survives it."
+
+  [[class.method]]
+  name = "uniform_scale_only"
+  args = [ { name = "ctx", type = "Ref<Context>" } ]
+  returns = "bool"
+  api = true
+  final = false
+  hook = true
+  status = "stable"
+  default = "true"
+  doc = "Forbid non-uniform scaling."
+
+  [[class.method]]
+  name = "embed_depth"
+  args = [ { name = "ctx", type = "Ref<Context>" } ]
+  returns = "Span"
+  api = true
+  final = false
+  hook = true
+  status = "stable"
+  default = "Span(0, 0)"
+  doc = "How far this may sink into the surface it mounts on."
+
+  [[class.method]]
+  name = "constraints"
+  args = [ { name = "ctx", type = "Ref<Context>" } ]
+  returns = "Array<Ref<Constraint>>"
+  api = true
+  final = false
+  hook = true
+  status = "stable"
+  default = "[]"
+  doc = "Hard placement constraints. A door names its own token here, which is where key-to-lock distance is written."
+
+  [[class.method]]
+  name = "preferences"
+  args = [ { name = "ctx", type = "Ref<Context>" } ]
+  returns = "Array<Ref<Preference>>"
+  api = true
+  final = false
+  hook = true
+  status = "stable"
+  default = "[]"
+  doc = "Soft placement biases. Relaxable, and reported when relaxed."
+
+  [[class.method]]
+  name = "eligible_roles"
+  args = [ { name = "ctx", type = "Ref<Context>" } ]
+  returns = "Array<Role>"
+  api = true
+  final = false
+  hook = true
+  status = "stable"
+  default = "all roles"
+  doc = "Which roles this actor may be assigned. Role is an output; this only narrows the candidate set."
+
+  [[class.method]]
+  name = "schedule"
+  args = [ { name = "ctx", type = "Ref<Context>" } ]
+  returns = "Array<Ref<ScheduleRule>>"
+  api = true
+  final = false
+  hook = true
+  status = "stable"
+  default = "[]"
+  doc = "Ordering rules relative to other content."
+
+  [[class.method]]
+  name = "quota"
+  args = [ { name = "ctx", type = "Ref<Context>" } ]
+  returns = "Quota"
+  api = true
+  final = false
+  hook = true
+  status = "stable"
+  doc = "How many of this may exist, per scope."
+
+  [[class.method]]
+  name = "weight"
+  args = [ { name = "ctx", type = "Ref<Context>" } ]
+  returns = "float"
+  api = true
+  final = false
+  hook = true
+  status = "stable"
+  default = "1.0"
+  doc = "Selection bias among eligible candidates."
+
+  [[class.method]]
+  name = "repulsion"
+  args = [ { name = "ctx", type = "Ref<Context>" } ]
+  returns = "float"
+  api = true
+  final = false
+  hook = true
+  status = "stable"
+  default = "0.0"
+  doc = "How strongly instances of this push away from each other. A pressure, never an obligation."
+
+  [[class.method]]
+  name = "enables"
+  args = [ { name = "ctx", type = "Ref<Context>" } ]
+  returns = "Array<Ref<Interaction>>"
+  api = true
+  final = false
+  hook = true
+  status = "stable"
+  default = "aggregate enabled components in attach order"
+  doc = "What can be done here."
+
+  [[class.method]]
+  name = "requires"
+  args = [ { name = "ctx", type = "Ref<Context>" } ]
+  returns = "Array<Ref<PlacementNeed>>"
+  api = true
+  final = false
+  hook = true
+  status = "stable"
+  default = "aggregate enabled components in attach order"
+  doc = "What must exist near me for my mechanic to work. This is the hook that makes the generator place enabling content."
+
+  [[class.method]]
+  name = "forbids"
+  args = [ { name = "ctx", type = "Ref<Context>" } ]
+  returns = "Array<Ref<Exclusion>>"
+  api = true
+  final = false
+  hook = true
+  status = "stable"
+  default = "aggregate enabled components in attach order"
+  doc = "What must NOT be near me. The negative half of an obligation."
+
+  [[class.method]]
+  name = "judge"
+  args = [ { name = "ctx", type = "Ref<Context>" }, { name = "path", type = "Ref<Path>" } ]
+  returns = "Ref<Verdict>"
+  api = true
+  final = false
+  hook = true
+  status = "stable"
+  default = "AcceptedVerdict"
+  doc = "Is this proposal good, and how wrong is it? The magnitude is the point: a boolean turns the placement search into a reroll."
+
+  [[class.method]]
+  name = "gate"
+  args = [ { name = "ctx", type = "Ref<Context>" } ]
+  returns = "Ref<Rule>"
+  api = true
+  final = false
+  hook = true
+  status = "stable"
+  default = "AlwaysRule"
+  doc = "What the occupant must hold to pass."
+
+  [[class.method]]
+  name = "harm"
+  args = [ { name = "ctx", type = "Ref<Context>" } ]
+  returns = "Harm"
+  api = true
+  final = false
+  hook = true
+  status = "stable"
+  default = "Harm.NONE"
+  doc = "Is this dangerous, how much, and is it avoidable?"
+
+  [[class.method]]
+  name = "grants"
+  args = [ { name = "ctx", type = "Ref<Context>" } ]
+  returns = "Array<Kind<Object>>"
+  api = true
+  final = false
+  hook = true
+  status = "stable"
+  default = "aggregate enabled components in attach order"
+  doc = "Tokens the occupant keeps after reaching this. CLASSES, never instances — the lattice is over identities, and a token class already is one."
+
+  [[class.method]]
+  name = "on_proposed"
+  args = [ { name = "ctx", type = "Ref<Context>" } ]
+  returns = "void"
+  api = true
+  final = false
+  hook = true
+  status = "stable"
+  doc = "Event: the solver is considering this position."
+
+  [[class.method]]
+  name = "on_placed"
+  args = [ { name = "ctx", type = "Ref<Context>" } ]
+  returns = "void"
+  api = true
+  final = false
+  hook = true
+  status = "stable"
+  doc = "Event: this actor was committed to a position."
+
+  [[class.method]]
+  name = "on_rejected"
+  args = [ { name = "ctx", type = "Ref<Context>" }, { name = "why", type = "Ref<Verdict>" } ]
+  returns = "void"
+  api = true
+  final = false
+  hook = true
+  status = "stable"
+  doc = "Event: a candidate position was refused, with the verdict that refused it."
+
+  [[class.method]]
+  name = "on_obtained"
+  args = [ { name = "ctx", type = "Ref<Context>" } ]
+  returns = "void"
+  api = true
+  final = false
+  hook = true
+  status = "stable"
+  doc = "Event: an occupant reached this and took what it grants."
+
+  [[class.method]]
+  name = "on_component_changed"
+  args = [ { name = "c", type = "Ref<Component>" } ]
+  returns = "void"
+  api = true
+  final = false
+  hook = true
+  status = "stable"
+  doc = "Event: an attached component invalidated itself."
+
+  [[class.method]]
+  name = "on_finalized"
+  args = [ { name = "ctx", type = "Ref<Context>" } ]
+  returns = "void"
+  api = true
+  final = false
+  hook = true
+  status = "stable"
+  doc = "Event: generation is complete and this actor is realized."
+
+  [[class.method]]
+  name = "reset"
+  args = [ { name = "ctx", type = "Ref<Context>" } ]
+  returns = "void"
+  api = true
+  final = false
+  hook = true
+  status = "stable"
+  doc = "Event: the solver is backtracking past this actor. Lets a rewind be clean."
+
+[[class]]
+path = "/Core/Item"
+extends = "/Core/Actor"
+kind = "object"
+sealed = false
+status = "stable"
+doc = "An obtainable actor. The thing that hands out tokens, as distinct from the tokens themselves."
+
+  [[class.method]]
+  name = "classification"
+  args = [ { name = "ctx", type = "Ref<Context>" } ]
+  returns = "ItemClass"
+  api = true
+  final = false
+  hook = true
+  status = "stable"
+  default = "PROGRESSION"
+  doc = "What kind of reward this is. An INPUT the developer declares, never an output — and it defaults to the conservative answer."
+
+  [[class.method]]
+  name = "quantity"
+  args = [ { name = "ctx", type = "Ref<Context>" } ]
+  returns = "Quantity"
+  api = true
+  final = false
+  hook = true
+  status = "stable"
+  default = "Quantity(1, 1, false)"
+  doc = "How many, and whether taking it consumes it."
+
+  [[class.method]]
+  name = "replenishes"
+  args = [ { name = "ctx", type = "Ref<Context>" } ]
+  returns = "Replenish"
+  api = true
+  final = false
+  hook = true
+  status = "stable"
+  default = "NEVER"
+  doc = "Whether and how this comes back."
+
+# =====================================================================================
+# Component — where logic is actually written
+# =====================================================================================
+
+[[class]]
+path = "/Core/Component"
+extends = "/Core/Object"
+kind = "object"
+sealed = false
+status = "stable"
+doc = "An attachable behaviour with its own transform. The seven hooks have the same signatures as Actor, and this is where a mechanic is written."
+
+  [[class.field]]
+  name = "owner"
+  type = "Ref<Actor>"
+  api = true
+  final = true
+  status = "stable"
+  doc = "The actor this is attached to."
+
+  [[class.field]]
+  name = "enabled"
+  type = "bool"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  default = "true"
+  doc = "Disabled components are skipped by every aggregating hook."
+
+  [[class.field]]
+  name = "transform"
+  type = "Transform"
+  api = true
+  final = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  default = "identity"
+  doc = "Local transform relative to the owner."
+
+  [[class.method]]
+  name = "world_transform"
+  args = []
+  returns = "Transform"
+  api = true
+  final = true
+  status = "stable"
+  doc = "Absolute transform. Walks the parent chain, so it is not free."
+
+  [[class.method]]
+  name = "invalidate"
+  args = []
+  returns = "void"
+  api = true
+  final = true
+  status = "stable"
+  doc = "Signal that this component changed; the owner receives on_component_changed."
+
+  [[class.method]]
+  name = "on_attached"
+  args = [ { name = "owner", type = "Ref<Actor>" } ]
+  returns = "void"
+  api = true
+  final = false
+  hook = true
+  status = "stable"
+  doc = "Event: attached to an actor."
+
+  [[class.method]]
+  name = "on_detached"
+  args = []
+  returns = "void"
+  api = true
+  final = false
+  hook = true
+  status = "stable"
+  doc = "Event: detached from an actor."
+
+  [[class.method]]
+  name = "validate"
+  args = []
+  returns = "Array<Diagnostic>"
+  api = true
+  final = false
+  hook = true
+  status = "stable"
+  default = "[]"
+  doc = "Editor-time self-check. Never blocks generation."
+
+  [[class.method]]
+  name = "replenishes"
+  args = [ { name = "ctx", type = "Ref<Context>" } ]
+  returns = "Replenish"
+  api = true
+  final = false
+  hook = true
+  status = "stable"
+  default = "NEVER"
+  doc = "Whether this component's supply comes back. Not only Items: a dispenser and an environmental source are not Items."
+
+[[class]]
+path = "/Core/MeshComponent"
+extends = "/Core/Component"
+kind = "object"
+status = "stable"
+doc = "Imported geometry, and the material-name to Surface mapping that gives it meaning."
+
+  [[class.field]]
+  name = "asset"
+  type = "Resource<MeshResource>"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "The mesh file this draws and derives collision from."
+
+  [[class.field]]
+  name = "surfaces"
+  type = "Map<String, Kind<Surface>>"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Submesh or material name to Surface class. This is how imported art acquires generation meaning."
+
+  [[class.field]]
+  name = "collision_mode"
+  type = "CollisionMode"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "How collision is derived from the mesh."
+
+  [[class.field]]
+  name = "visible"
+  type = "bool"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  default = "true"
+  doc = "Visible is not the same as collidable."
+
+  [[class.method]]
+  name = "collision"
+  args = []
+  returns = "Ref<CollisionBody>"
+  api = true
+  final = true
+  status = "stable"
+  doc = "The derived collision body."
+
+[[class]]
+path = "/Core/ShapeComponent"
+extends = "/Core/Component"
+kind = "object"
+status = "stable"
+doc = "A parametric shape. Collision is computed analytically from its parameters, never from tessellation."
+
+  [[class.field]]
+  name = "shape"
+  type = "Ref<Shape>"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "The parametric primitive."
+
+  [[class.field]]
+  name = "surface"
+  type = "Kind<Surface>"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "The Surface class this shape presents."
+
+  [[class.field]]
+  name = "collision_mode"
+  type = "CollisionMode"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "How collision is derived."
+
+  [[class.field]]
+  name = "visible"
+  type = "bool"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  default = "true"
+  doc = "Visible is not the same as collidable."
+
+  [[class.method]]
+  name = "collision"
+  args = []
+  returns = "Ref<CollisionBody>"
+  api = true
+  final = true
+  status = "stable"
+  doc = "The analytically derived collision body."
+
+[[class]]
+path = "/Core/MountComponent"
+extends = "/Core/Component"
+kind = "object"
+status = "stable"
+doc = "An attachment socket. What may mount here is a tag query, not a hand-maintained class list."
+
+  [[class.field]]
+  name = "name"
+  type = "String"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "A label for a developer reading the viewport. Deliberately not a lookup key."
+
+  [[class.field]]
+  name = "accepts"
+  type = "TagQuery"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Which content may mount here."
+
+  [[class.field]]
+  name = "faces"
+  type = "Array<Face>"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Which faces of the mounted thing may meet this socket."
+
+  [[class.field]]
+  name = "clearance"
+  type = "Ref<CollisionBody>"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Space that must stay empty around whatever mounts here."
+
+  [[class.method]]
+  name = "admits"
+  args = [ { name = "ctx", type = "Ref<Context>" }, { name = "candidate", type = "Ref<Actor>" } ]
+  returns = "Ref<Rule>"
+  api = true
+  final = false
+  hook = true
+  status = "stable"
+  default = "AlwaysRule"
+  doc = "Whether a specific candidate may mount, beyond the tag query."
+
+[[class]]
+path = "/Core/TraversalComponent"
+extends = "/Core/Component"
+kind = "object"
+status = "stable"
+doc = "Turns a spatial delta into a directed graph edge. The thing that makes a staircase a route rather than scenery."
+
+  [[class.method]]
+  name = "run"
+  args = [ { name = "ctx", type = "Ref<Context>" } ]
+  returns = "Span"
+  api = true
+  final = false
+  hook = true
+  status = "stable"
+  doc = "Horizontal distance this move covers."
+
+  [[class.method]]
+  name = "rise"
+  args = [ { name = "ctx", type = "Ref<Context>" } ]
+  returns = "Span"
+  api = true
+  final = false
+  hook = true
+  status = "stable"
+  doc = "Vertical delta this move covers. Negative is downward."
+
+  [[class.method]]
+  name = "direction"
+  args = [ { name = "ctx", type = "Ref<Context>" } ]
+  returns = "DirectionCone"
+  api = true
+  final = false
+  hook = true
+  status = "stable"
+  doc = "Permitted directions as a cone, so 'up, level or diagonally up, never down' is expressible."
+
+  [[class.method]]
+  name = "admits"
+  args = [ { name = "ctx", type = "Ref<Context>" }, { name = "occupant", type = "Occupant" }, { name = "dir", type = "Vec3" } ]
+  returns = "Ref<Rule>"
+  api = true
+  final = false
+  hook = true
+  status = "stable"
+  default = "AlwaysRule"
+  doc = "What the occupant must hold to make this move, IN THIS DIRECTION — so one edge can be open one way and gated the other."
+
+  [[class.method]]
+  name = "cost"
+  args = [ { name = "ctx", type = "Ref<Context>" } ]
+  returns = "float"
+  api = true
+  final = false
+  hook = true
+  status = "stable"
+  default = "1.0"
+  doc = "What traversing this spends against a route budget."
+
+  [[class.method]]
+  name = "approach"
+  args = [ { name = "ctx", type = "Ref<Context>" } ]
+  returns = "Approach"
+  api = true
+  final = false
+  hook = true
+  status = "stable"
+  doc = "What the occupant needs at the near end before the move is possible."
+
+  [[class.method]]
+  name = "clearance"
+  args = [ { name = "ctx", type = "Ref<Context>" } ]
+  returns = "Ref<CollisionBody>"
+  api = true
+  final = false
+  hook = true
+  status = "proposed"
+  default = "the box implied by run x rise"
+  doc = "PROPOSED. The swept volume that must be empty for the move to exist. run and rise describe only the endpoints, and admit a jump the real arc would not clear under a low ceiling."
+
+[[class]]
+path = "/Core/CheckpointComponent"
+extends = "/Core/Component"
+kind = "object"
+status = "stable"
+doc = "A place that returns the world to a known-good state. P15's second satisfaction route, and what lets the solver take an attractive one-way transition instead of refusing every irreversible edge."
+
+  [[class.field]]
+  name = "restores"
+  type = "Array<Kind<Object>>"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "What comes back here."
+
+  [[class.field]]
+  name = "restores_occupant"
+  type = "bool"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  default = "false"
+  doc = "Whether the occupant also returns here — which is what makes this a respawn point as well."
+
+  [[class.field]]
+  name = "scope"
+  type = "InstanceScope"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "How far this checkpoint's effect reaches."
+
+[[class]]
+path = "/Core/FastTravelComponent"
+extends = "/Core/Component"
+kind = "object"
+status = "stable"
+doc = "A node in a travel network. Not cosmetic: a network collapses traversal cost across the whole World, and difficulty here IS slack spent against a budget."
+
+  [[class.field]]
+  name = "network"
+  type = "String"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Nodes sharing a network name connect to each other."
+
+  [[class.field]]
+  name = "cost"
+  type = "Ref<Budget>"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "What one hop spends — in the same currency as the routes it competes with."
+
+  [[class.field]]
+  name = "unlocked_by"
+  type = "Ref<Rule>"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  default = "AlwaysRule"
+  doc = "What the occupant must hold before this node joins its network."
+
+[[class]]
+path = "/Core/StateSetterComponent"
+extends = "/Core/Component"
+kind = "object"
+status = "stable"
+doc = "Writes a world-state variable. The authoring surface for the non-monotone axis."
+
+  [[class.field]]
+  name = "variable"
+  type = "String"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Which declared state variable this writes."
+
+  [[class.field]]
+  name = "to_value"
+  type = "String"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "The value it writes."
+
+  [[class.field]]
+  name = "while_occupied_by"
+  type = "Kind<Component>"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "If set, the value holds only WHILE something carrying this component is present — which is what makes dwell an ordinary reading rather than a trigger kind."
+
+[[class]]
+path = "/Core/BlocksTraversalComponent"
+extends = "/Core/Component"
+kind = "object"
+status = "stable"
+doc = "Place me on an edge of this kind, and close it. Without this a barrier can only be authored as geometry, which violates gate-never-delete by construction."
+
+  [[class.field]]
+  name = "matching"
+  type = "Kind<TraversalComponent>"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Which kind of traversal edge this may be placed on."
+
+  [[class.field]]
+  name = "route"
+  type = "Ref<Route>"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "The route this blocker obliges or forbids."
+
+# =====================================================================================
+# Surface
+# =====================================================================================
+
+[[class]]
+path = "/Core/Surface"
+extends = "/Core/Object"
+kind = "object"
+sealed = false
+status = "stable"
+doc = "What a piece of geometry means to a mechanic. Answers who may be here and what works here."
+
+  [[class.field]]
+  name = "name"
+  type = "String"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Display name."
+
+  [[class.field]]
+  name = "tags"
+  type = "Array<Tag>"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Why an eligible-surface list is a TagQuery rather than a hand-maintained class list. The editor must show these on selected geometry."
+
+  [[class.method]]
+  name = "supports"
+  args = [ { name = "ctx", type = "Ref<Context>" }, { name = "occupant", type = "Occupant" } ]
+  returns = "Array<Support>"
+  api = true
+  final = false
+  hook = true
+  status = "stable"
+  default = "[ Support(AlwaysRule) ]"
+  doc = "Can something BE here? A state you are in, evaluated per occupant and per sphere."
+
+  [[class.method]]
+  name = "affords"
+  args = [ { name = "ctx", type = "Ref<Context>" }, { name = "attempt", type = "Ref<Interaction>" } ]
+  returns = "Ref<Rule>"
+  api = true
+  final = false
+  hook = true
+  status = "stable"
+  default = "AlwaysRule"
+  doc = "Does an ACTION work here? Covers transit THROUGH as well as action UPON, which is how one pane of glass blocks ballistics and walking while passing a laser and a sightline."
+
+  [[class.method]]
+  name = "friction"
+  args = [ { name = "ctx", type = "Ref<Context>" } ]
+  returns = "float"
+  api = true
+  final = false
+  hook = true
+  status = "stable"
+  default = "1.0"
+  doc = "Traversal resistance."
+
+  [[class.method]]
+  name = "harm"
+  args = [ { name = "ctx", type = "Ref<Context>" } ]
+  returns = "Harm"
+  api = true
+  final = false
+  hook = true
+  status = "stable"
+  default = "Harm.NONE"
+  doc = "Is standing here dangerous?"
+
+  [[class.method]]
+  name = "admits_mount"
+  args = [ { name = "ctx", type = "Ref<Context>" }, { name = "m", type = "Ref<MountComponent>" } ]
+  returns = "Ref<Rule>"
+  api = true
+  final = false
+  hook = true
+  status = "stable"
+  default = "AlwaysRule"
+  doc = "May something mount against this surface?"
+
+# =====================================================================================
+# Rule — SEALED. The cheap, provable half the solver walks.
+# =====================================================================================
+
+[[class]]
+path = "/Core/Rule"
+extends = "/Core/Object"
+kind = "object"
+sealed = true
+status = "stable"
+doc = "Sealed on purpose: the solver walks this tree as the analysable half of a gate, so a developer-defined rule would make the dependency walk impossible."
+
+  [[class.method]]
+  name = "is_open"
+  args = []
+  returns = "bool"
+  api = true
+  final = true
+  status = "stable"
+  doc = "Does this rule currently hold?"
+
+  [[class.method]]
+  name = "referenced"
+  args = []
+  returns = "Array<Kind<Object>>"
+  api = true
+  final = true
+  status = "stable"
+  doc = "Every token this rule mentions. The solver's dependency walk, and what lets requires() plant a source."
+
+  [[class.method]]
+  name = "explain"
+  args = []
+  returns = "String"
+  api = true
+  final = false
+  status = "stable"
+  doc = "Prose for a lock badge and the trace."
+
+[[class]]
+path = "/Core/AlwaysRule"
+extends = "/Core/Rule"
+kind = "object"
+sealed = true
+status = "stable"
+doc = "Trivially satisfied. The identity of AllOfRule."
+
+[[class]]
+path = "/Core/NeverRule"
+extends = "/Core/Rule"
+kind = "object"
+sealed = true
+status = "stable"
+doc = "Never satisfied. The identity of AnyOfRule. On a sole route this is an authoring error and is reported with the numbers, not silently accepted."
+
+[[class]]
+path = "/Core/HoldsRule"
+extends = "/Core/Rule"
+kind = "object"
+sealed = true
+status = "stable"
+doc = "The occupant holds something satisfying this kind."
+
+  [[class.field]]
+  name = "kind"
+  type = "Kind<Object>"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "The token class required."
+
+  [[class.field]]
+  name = "count"
+  type = "int"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  default = "1"
+  doc = "How many. Quantity lives here, not in a number of instances."
+
+[[class]]
+path = "/Core/HasComponentRule"
+extends = "/Core/Rule"
+kind = "object"
+sealed = true
+status = "stable"
+doc = "The occupant holds something CARRYING a matching component. Branching on components is sound where branching on tokens is not."
+
+  [[class.field]]
+  name = "kind"
+  type = "Kind<Component>"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "The component class required."
+
+[[class]]
+path = "/Core/AllOfRule"
+extends = "/Core/Rule"
+kind = "object"
+sealed = true
+status = "stable"
+doc = "Every child holds."
+
+  [[class.field]]
+  name = "children"
+  type = "Array<Ref<Rule>>"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "The conjuncts."
+
+[[class]]
+path = "/Core/AnyOfRule"
+extends = "/Core/Rule"
+kind = "object"
+sealed = true
+status = "stable"
+doc = "At least one child holds. This is what proves genuine alternate routes rather than one route the solver happened to pick."
+
+  [[class.field]]
+  name = "children"
+  type = "Array<Ref<Rule>>"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "The disjuncts."
+
+[[class]]
+path = "/Core/NegateRule"
+extends = "/Core/Rule"
+kind = "object"
+sealed = true
+status = "stable"
+doc = "The inner rule does NOT hold. Non-monotonic, so it is accepted and reported rather than refused."
+
+  [[class.field]]
+  name = "inner"
+  type = "Ref<Rule>"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "The negated rule."
+
+[[class]]
+path = "/Core/NearbyRule"
+extends = "/Core/Rule"
+kind = "object"
+sealed = true
+status = "stable"
+doc = "Something matching is accessible within range of this gate. The contextual half: a gate may depend on the WORLD rather than only the occupant, and because the dependency walk sees it, requires() can plant the source."
+
+  [[class.field]]
+  name = "kind"
+  type = "Kind<Object>"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "What must be nearby."
+
+  [[class.field]]
+  name = "within"
+  type = "Ref<Budget>"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "How near, in whatever currency the budget names."
+
+  [[class.field]]
+  name = "scope"
+  type = "InstanceScope"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "The scope searched."
+
+# =====================================================================================
+# Verdict — the fine half of propose-and-judge. The magnitude is the point.
+# =====================================================================================
+
+[[class]]
+path = "/Core/Verdict"
+extends = "/Core/Object"
+kind = "object"
+sealed = true
+status = "stable"
+doc = "What judge() returns. A boolean would tell the solver nothing and turn the placement search into a reroll."
+
+[[class]]
+path = "/Core/AcceptedVerdict"
+extends = "/Core/Verdict"
+kind = "object"
+sealed = true
+status = "stable"
+doc = "It fits. The slack says how comfortably, which feeds difficulty."
+
+  [[class.field]]
+  name = "slack"
+  type = "float"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Budget remaining after this placement."
+
+[[class]]
+path = "/Core/OverBudgetVerdict"
+extends = "/Core/Verdict"
+kind = "object"
+sealed = true
+status = "stable"
+doc = "Too far. Move the target closer by roughly this much — a direction the solver can act on."
+
+  [[class.field]]
+  name = "excess"
+  type = "float"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "How much over budget."
+
+[[class]]
+path = "/Core/BlockedVerdict"
+extends = "/Core/Verdict"
+kind = "object"
+sealed = true
+status = "stable"
+doc = "Something is in the way. Remove or reposition that, or route around it."
+
+  [[class.field]]
+  name = "by"
+  type = "Ref<Object>"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "What blocked it."
+
+[[class]]
+path = "/Core/UnsuitableVerdict"
+extends = "/Core/Verdict"
+kind = "object"
+sealed = true
+status = "stable"
+doc = "Wrong kind of thing. Do not retry this candidate."
+
+  [[class.field]]
+  name = "reason"
+  type = "String"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Prose for the trace."
+
+# =====================================================================================
+# Interaction — classified by WHAT RELOCATES
+# =====================================================================================
+
+[[class]]
+path = "/Core/Interaction"
+extends = "/Core/Object"
+kind = "object"
+sealed = false
+status = "stable"
+doc = "Something an occupant attempts. Subclassed by what relocates, which is what lets one surface answer four mechanics differently."
+
+  [[class.field]]
+  name = "range"
+  type = "Span"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "How far this reaches. NOT named 'reach' — Reach is a scope."
+
+  [[class.field]]
+  name = "line_of_sight"
+  type = "bool"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  default = "false"
+  doc = "Whether an unobstructed line is required."
+
+  [[class.field]]
+  name = "from_standing"
+  type = "bool"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  default = "true"
+  doc = "Whether the occupant must be supported to attempt this."
+
+  [[class.method]]
+  name = "consumes"
+  args = []
+  returns = "Array<Cost>"
+  api = true
+  final = false
+  hook = true
+  status = "stable"
+  default = "[]"
+  doc = "What performing this spends. What consumes a resource is the consumer, not the consumable."
+
+  [[class.method]]
+  name = "gate"
+  args = []
+  returns = "Ref<Rule>"
+  api = true
+  final = false
+  hook = true
+  status = "stable"
+  default = "AlwaysRule"
+  doc = "What the occupant must hold to perform this. Deliberately the same name and meaning as Actor.gate, and deliberately NOT 'requires', which on an Actor means something unrelated."
+
+  [[class.method]]
+  name = "explain"
+  args = []
+  returns = "String"
+  api = true
+  final = false
+  status = "stable"
+  doc = "Prose for the trace."
+
+[[class]]
+path = "/Core/Movement"
+extends = "/Core/Interaction"
+kind = "object"
+status = "stable"
+doc = "THE PLAYER relocates, so this is a directed graph edge."
+
+  [[class.field]]
+  name = "rise"
+  type = "Span"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Vertical delta."
+
+  [[class.field]]
+  name = "direction"
+  type = "DirectionCone"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Permitted directions."
+
+[[class]]
+path = "/Core/Displace"
+extends = "/Core/Interaction"
+kind = "object"
+status = "stable"
+doc = "AN OBJECT relocates, not the player. Push, carry and throw are authored subclasses of this."
+
+  [[class.field]]
+  name = "subject"
+  type = "Ref<Object>"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "What moves."
+
+[[class]]
+path = "/Core/RemoteUse"
+extends = "/Core/Interaction"
+kind = "object"
+status = "stable"
+doc = "NOTHING relocates — it acts at range. Sightlines, beams and ballistics are authored subclasses, which is how transit through a surface is expressed without a core enum."
+
+  [[class.field]]
+  name = "target"
+  type = "Kind<Object>"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "What it acts upon."
+
+# =====================================================================================
+# Shape — parametric primitives. Collision is ANALYTIC, never tessellated.
+# =====================================================================================
+
+[[class]]
+path = "/Core/Shape"
+extends = "/Core/Object"
+kind = "object"
+sealed = false
+status = "stable"
+doc = "A parametric primitive. Collision is computed from parameters, never from tessellation — otherwise a visual LOD change silently alters generation."
+
+  [[class.method]]
+  name = "bounds"
+  args = []
+  returns = "Aabb"
+  api = true
+  final = true
+  status = "stable"
+  doc = "Axis-aligned extent."
+
+  [[class.method]]
+  name = "volume"
+  args = []
+  returns = "float"
+  api = true
+  final = true
+  status = "stable"
+  doc = "Enclosed volume."
+
+  [[class.method]]
+  name = "is_convex"
+  args = []
+  returns = "bool"
+  api = true
+  final = true
+  status = "stable"
+  doc = "Convexity, which decides whether the collision cache survives scaling."
+
+  [[class.method]]
+  name = "contains"
+  args = [ { name = "p", type = "Vec3" } ]
+  returns = "bool"
+  api = true
+  final = true
+  status = "stable"
+  doc = "Point containment."
+
+  [[class.method]]
+  name = "closest_point"
+  args = [ { name = "p", type = "Vec3" } ]
+  returns = "Vec3"
+  api = true
+  final = true
+  status = "stable"
+  doc = "Nearest surface point."
+
+  [[class.method]]
+  name = "decompose"
+  args = []
+  returns = "Array<Ref<Shape>>"
+  api = true
+  final = true
+  status = "stable"
+  doc = "Convex decomposition."
+
+  [[class.method]]
+  name = "tessellate"
+  args = [ { name = "lod", type = "int" } ]
+  returns = "Ref<MeshResource>"
+  api = true
+  final = true
+  status = "stable"
+  doc = "Render geometry. Deliberately NOT the source of collision."
+
+[[class]]
+path = "/Core/SolidShape"
+extends = "/Core/Shape"
+kind = "object"
+status = "stable"
+doc = "A shape with an inside. Supports booleans and a signed distance field."
+
+  [[class.method]]
+  name = "sdf"
+  args = [ { name = "p", type = "Vec3" } ]
+  returns = "float"
+  api = true
+  final = true
+  status = "stable"
+  doc = "Signed distance to the surface."
+
+[[class]]
+path = "/Core/SurfaceShape"
+extends = "/Core/Shape"
+kind = "object"
+status = "stable"
+doc = "Zero thickness — no inside, so no sdf and no booleans."
+
+[[class]]
+path = "/Core/CubeShape"
+extends = "/Core/SolidShape"
+kind = "object"
+status = "stable"
+doc = "A box."
+  [[class.field]]
+  name = "extents"
+  type = "Vec3"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Half-extents."
+  [[class.field]]
+  name = "bevel"
+  type = "float"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  default = "0.0"
+  doc = "Edge bevel."
+  [[class.field]]
+  name = "segments"
+  type = "Vec3"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Tessellation density per axis. Render only."
+
+[[class]]
+path = "/Core/SphereShape"
+extends = "/Core/SolidShape"
+kind = "object"
+status = "stable"
+doc = "A sphere."
+  [[class.field]]
+  name = "radius"
+  type = "float"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Radius."
+  [[class.field]]
+  name = "segments"
+  type = "Vec2"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Tessellation density."
+
+[[class]]
+path = "/Core/HemisphereShape"
+extends = "/Core/SolidShape"
+kind = "object"
+status = "stable"
+doc = "Half a sphere."
+  [[class.field]]
+  name = "radius"
+  type = "float"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Radius."
+  [[class.field]]
+  name = "segments"
+  type = "Vec2"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Tessellation density."
+  [[class.field]]
+  name = "capped"
+  type = "bool"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  default = "true"
+  doc = "Whether the flat face is closed."
+
+[[class]]
+path = "/Core/ConeShape"
+extends = "/Core/SolidShape"
+kind = "object"
+status = "stable"
+doc = "A cone."
+  [[class.field]]
+  name = "radius"
+  type = "float"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Base radius."
+  [[class.field]]
+  name = "height"
+  type = "float"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Height."
+  [[class.field]]
+  name = "segments"
+  type = "int"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Radial tessellation."
+  [[class.field]]
+  name = "capped"
+  type = "bool"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  default = "true"
+  doc = "Whether the base is closed."
+
+[[class]]
+path = "/Core/CapsuleShape"
+extends = "/Core/SolidShape"
+kind = "object"
+status = "stable"
+doc = "A capsule — the usual occupant proxy."
+  [[class.field]]
+  name = "radius"
+  type = "float"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Radius."
+  [[class.field]]
+  name = "height"
+  type = "float"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Height of the cylindrical section."
+  [[class.field]]
+  name = "segments"
+  type = "Vec2"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Tessellation density."
+
+[[class]]
+path = "/Core/CylinderShape"
+extends = "/Core/SolidShape"
+kind = "object"
+status = "stable"
+doc = "A cylinder, or a truncated cone when the radii differ."
+  [[class.field]]
+  name = "radius_top"
+  type = "float"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Top radius."
+  [[class.field]]
+  name = "radius_bottom"
+  type = "float"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Bottom radius."
+  [[class.field]]
+  name = "height"
+  type = "float"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Height."
+  [[class.field]]
+  name = "segments"
+  type = "int"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Radial tessellation."
+  [[class.field]]
+  name = "capped"
+  type = "bool"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  default = "true"
+  doc = "Whether the ends are closed."
+
+[[class]]
+path = "/Core/PrismShape"
+extends = "/Core/SolidShape"
+kind = "object"
+status = "stable"
+doc = "An n-sided prism."
+  [[class.field]]
+  name = "sides"
+  type = "int"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Number of sides."
+  [[class.field]]
+  name = "radius"
+  type = "float"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Circumradius."
+  [[class.field]]
+  name = "height"
+  type = "float"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Height."
+  [[class.field]]
+  name = "twist"
+  type = "float"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  default = "0.0"
+  doc = "Rotation applied across the height."
+
+[[class]]
+path = "/Core/TorusShape"
+extends = "/Core/SolidShape"
+kind = "object"
+status = "stable"
+doc = "A torus, optionally a partial arc."
+  [[class.field]]
+  name = "major_radius"
+  type = "float"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Ring radius."
+  [[class.field]]
+  name = "minor_radius"
+  type = "float"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Tube radius."
+  [[class.field]]
+  name = "segments"
+  type = "Vec2"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Tessellation density."
+  [[class.field]]
+  name = "arc_sweep"
+  type = "float"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Swept angle. A full torus sweeps the whole circle."
+
+[[class]]
+path = "/Core/PipeShape"
+extends = "/Core/SolidShape"
+kind = "object"
+status = "stable"
+doc = "A hollow cylinder."
+  [[class.field]]
+  name = "inner_radius"
+  type = "float"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Bore radius."
+  [[class.field]]
+  name = "outer_radius"
+  type = "float"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Outer radius."
+  [[class.field]]
+  name = "height"
+  type = "float"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Height."
+  [[class.field]]
+  name = "segments"
+  type = "int"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Radial tessellation."
+
+[[class]]
+path = "/Core/ArchShape"
+extends = "/Core/SolidShape"
+kind = "object"
+status = "stable"
+doc = "An arched opening — a doorway primitive."
+  [[class.field]]
+  name = "width"
+  type = "float"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Opening width."
+  [[class.field]]
+  name = "height"
+  type = "float"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Total height."
+  [[class.field]]
+  name = "depth"
+  type = "float"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Wall thickness."
+  [[class.field]]
+  name = "arch_radius"
+  type = "float"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Radius of the arch crown."
+  [[class.field]]
+  name = "segments"
+  type = "int"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Arc tessellation."
+
+[[class]]
+path = "/Core/RampShape"
+extends = "/Core/SolidShape"
+kind = "object"
+status = "stable"
+doc = "An inclined plane with thickness. A traversal primitive as much as a visual one."
+  [[class.field]]
+  name = "width"
+  type = "float"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Width."
+  [[class.field]]
+  name = "run"
+  type = "float"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Horizontal distance covered."
+  [[class.field]]
+  name = "rise"
+  type = "float"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Vertical distance covered. With run, this is what max_floor_slope is tested against."
+  [[class.field]]
+  name = "thickness"
+  type = "float"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Slab thickness."
+  [[class.field]]
+  name = "side_walls"
+  type = "bool"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  default = "false"
+  doc = "Whether the sides are enclosed."
+
+[[class]]
+path = "/Core/StairsShape"
+extends = "/Core/SolidShape"
+kind = "object"
+status = "stable"
+doc = "A straight flight. The canonical intra-Space traversal edge."
+  [[class.field]]
+  name = "width"
+  type = "float"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Width."
+  [[class.field]]
+  name = "steps"
+  type = "int"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Step count."
+  [[class.field]]
+  name = "step_rise"
+  type = "float"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Height of one step."
+  [[class.field]]
+  name = "step_run"
+  type = "float"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Depth of one step."
+  [[class.field]]
+  name = "risers"
+  type = "bool"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  default = "true"
+  doc = "Whether the vertical faces are closed."
+  [[class.field]]
+  name = "landing_at"
+  type = "int"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  default = "0"
+  doc = "Step index a landing interrupts at. 0 = none."
+  [[class.field]]
+  name = "landing_run"
+  type = "float"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  default = "0.0"
+  doc = "Depth of that landing."
+
+[[class]]
+path = "/Core/SpiralStairsShape"
+extends = "/Core/SolidShape"
+kind = "object"
+status = "stable"
+doc = "A helical flight. The primitive that proves the library: it is the canonical multi-floor traversal AND the canonical is-this-a-ramp-or-steps collision question."
+  [[class.field]]
+  name = "inner_radius"
+  type = "float"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Inner radius."
+  [[class.field]]
+  name = "outer_radius"
+  type = "float"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Outer radius."
+  [[class.field]]
+  name = "total_rise"
+  type = "float"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Total height climbed."
+  [[class.field]]
+  name = "steps"
+  type = "int"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Step count."
+  [[class.field]]
+  name = "sweep"
+  type = "float"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Total swept angle."
+  [[class.field]]
+  name = "clockwise"
+  type = "bool"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  default = "true"
+  doc = "Handedness."
+  [[class.field]]
+  name = "center_post"
+  type = "bool"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  default = "true"
+  doc = "Whether a central column is present."
+
+[[class]]
+path = "/Core/CompositeShape"
+extends = "/Core/SolidShape"
+kind = "object"
+status = "stable"
+doc = "A boolean combination of solid shapes."
+  [[class.field]]
+  name = "operations"
+  type = "Array<BooleanOp>"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "The ordered operation list."
+
+[[class]]
+path = "/Core/QuadShape"
+extends = "/Core/SurfaceShape"
+kind = "object"
+status = "stable"
+doc = "A flat rectangle."
+  [[class.field]]
+  name = "extents"
+  type = "Vec2"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Half-extents."
+  [[class.field]]
+  name = "segments"
+  type = "Vec2"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Tessellation density."
+
+[[class]]
+path = "/Core/TriangleShape"
+extends = "/Core/SurfaceShape"
+kind = "object"
+status = "stable"
+doc = "A single triangle."
+  [[class.field]]
+  name = "a"
+  type = "Vec3"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "First vertex."
+  [[class.field]]
+  name = "b"
+  type = "Vec3"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Second vertex."
+  [[class.field]]
+  name = "c"
+  type = "Vec3"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Third vertex."
+
+[[class]]
+path = "/Core/DiscShape"
+extends = "/Core/SurfaceShape"
+kind = "object"
+status = "stable"
+doc = "A flat disc, optionally a sector."
+  [[class.field]]
+  name = "radius"
+  type = "float"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Radius."
+  [[class.field]]
+  name = "segments"
+  type = "int"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Radial tessellation."
+  [[class.field]]
+  name = "arc_start"
+  type = "float"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  default = "0.0"
+  doc = "Start angle."
+  [[class.field]]
+  name = "arc_sweep"
+  type = "float"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Swept angle."
+
+[[class]]
+path = "/Core/EllipseShape"
+extends = "/Core/SurfaceShape"
+kind = "object"
+status = "stable"
+doc = "A flat ellipse."
+  [[class.field]]
+  name = "radius"
+  type = "Vec2"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Semi-axes."
+  [[class.field]]
+  name = "segments"
+  type = "int"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Tessellation density."
+
+# =====================================================================================
+# Collision · Resource
+# =====================================================================================
+
+[[class]]
+path = "/Core/CollisionBody"
+extends = "/Core/Object"
+kind = "object"
+status = "stable"
+doc = "A set of collision islands. What actually blocks, as distinct from what is drawn."
+  [[class.method]]
+  name = "islands"
+  args = []
+  returns = "Array<CollisionData>"
+  api = true
+  final = true
+  status = "stable"
+  doc = "The disjoint pieces."
+  [[class.method]]
+  name = "add"
+  args = [ { name = "d", type = "CollisionData" } ]
+  returns = "void"
+  api = true
+  final = true
+  status = "stable"
+  doc = "Add an island."
+  [[class.method]]
+  name = "remove"
+  args = [ { name = "d", type = "CollisionData" } ]
+  returns = "void"
+  api = true
+  final = true
+  status = "stable"
+  doc = "Remove an island."
+  [[class.method]]
+  name = "bounds"
+  args = []
+  returns = "Aabb"
+  api = true
+  final = true
+  status = "stable"
+  doc = "Combined extent."
+  [[class.method]]
+  name = "is_convex"
+  args = []
+  returns = "bool"
+  api = true
+  final = true
+  status = "stable"
+  doc = "Whether the whole body is convex."
+  [[class.method]]
+  name = "fit_error"
+  args = []
+  returns = "float"
+  api = true
+  final = true
+  status = "stable"
+  doc = "How far this body diverges from the source geometry. Heat-mapped in the editor to catch a ramp collider left on a spiral staircase."
+
+[[class]]
+path = "/Core/Resource"
+extends = "/Core/Object"
+kind = "object"
+sealed = false
+status = "stable"
+doc = "Bytes on disk, content-hashed. Referenced from a schematic as a class plus an asset path, never inlined."
+  [[class.field]]
+  name = "path"
+  type = "String"
+  api = true
+  status = "stable"
+  doc = "The asset path."
+  [[class.field]]
+  name = "hash"
+  type = "String"
+  api = true
+  status = "stable"
+  doc = "Content hash. Part of the fingerprint, which is what makes an asset swap change the recipe."
+  [[class.field]]
+  name = "is_loaded"
+  type = "bool"
+  api = true
+  status = "stable"
+  doc = "Whether the bytes are resident. A resource may be REFERENCED during the solve without being loaded."
+
+[[class]]
+path = "/Core/MeshResource"
+extends = "/Core/Resource"
+kind = "object"
+status = "stable"
+doc = "Imported geometry. In a cooked build this is a hash and a bounds with no triangles behind it."
+  [[class.field]]
+  name = "bounds"
+  type = "Aabb"
+  api = true
+  status = "stable"
+  doc = "Extent, available even when cooked."
+  [[class.field]]
+  name = "triangle_count"
+  type = "int"
+  api = true
+  status = "stable"
+  doc = "Triangle count."
+  [[class.field]]
+  name = "submesh_names"
+  type = "Array<String>"
+  api = true
+  status = "stable"
+  doc = "Material or submesh names, which MeshComponent maps to Surfaces."
+  [[class.method]]
+  name = "derive_collision"
+  args = [ { name = "mode", type = "CollisionMode" } ]
+  returns = "Ref<CollisionBody>"
+  api = true
+  final = true
+  status = "stable"
+  doc = "Derive collision. In a cooked build this returns the baked body or ERRORS LOUDLY — never a silent empty body, which would turn a shipping bug into a world with no collision."
+  [[class.method]]
+  name = "export"
+  args = [ { name = "path", type = "String" } ]
+  returns = "void"
+  api = true
+  final = true
+  status = "stable"
+  doc = "Write the mesh out."
+
+[[class]]
+path = "/Core/CurveTableResource"
+extends = "/Core/Resource"
+kind = "object"
+status = "stable"
+doc = "One or more NAMED CURVES over one NAMED DOMAIN AXIS. One resource type where UE has four: a vector curve is three rows, a colour curve is four. JSON, not the block notation, because it has no nodes to notate."
+  [[class.field]]
+  name = "domain"
+  type = "String"
+  api = true
+  status = "stable"
+  doc = "The axis rows are read over. Bound BY NAME to whichever ProgressionAxis carries it."
+  [[class.field]]
+  name = "y_label"
+  type = "String"
+  api = true
+  status = "stable"
+  doc = "Editor-only, so the vertical axis has a name."
+  [[class.field]]
+  name = "rows"
+  type = "Array<String>"
+  api = true
+  status = "stable"
+  doc = "Named curves."
+  [[class.method]]
+  name = "row"
+  args = [ { name = "name", type = "String" } ]
+  returns = "Curve"
+  api = true
+  final = true
+  status = "stable"
+  doc = "One row as a Curve struct."
+  [[class.method]]
+  name = "sample"
+  args = [ { name = "row", type = "String" }, { name = "x", type = "float" } ]
+  returns = "float"
+  api = true
+  final = true
+  status = "stable"
+  doc = "Read a row at a domain value."
+
+[[class]]
+path = "/Core/ProgressionAxis"
+extends = "/Core/Object"
+kind = "object"
+abstract = true
+status = "stable"
+doc = "Supplies the x a curve row is sampled at. Built-ins cover depth, space count, capability count and sphere; a developer subclasses it for anything else, which is the only way to say 'complexity gains weight each time a boss is placed'."
+  [[class.field]]
+  name = "name"
+  type = "String"
+  api = true
+  status = "stable"
+  doc = "What a CurveTable's domain matches against."
+  [[class.method]]
+  name = "value"
+  args = [ { name = "ctx", type = "Ref<Context>" } ]
+  returns = "float"
+  api = true
+  final = false
+  hook = true
+  abstract = true
+  status = "stable"
+  doc = "The current position along this axis. No default — a subclass must answer."
+
+[[class]]
+path = "/Core/Depth"
+extends = "/Core/ProgressionAxis"
+kind = "object"
+status = "stable"
+doc = "Reach index divided by Reach count."
+
+[[class]]
+path = "/Core/SpaceCount"
+extends = "/Core/ProgressionAxis"
+kind = "object"
+status = "stable"
+doc = "How many Spaces exist so far."
+
+[[class]]
+path = "/Core/CapabilityCount"
+extends = "/Core/ProgressionAxis"
+kind = "object"
+status = "stable"
+doc = "How many progression tokens are held."
+
+[[class]]
+path = "/Core/Sphere"
+extends = "/Core/ProgressionAxis"
+kind = "object"
+status = "stable"
+doc = "The current accessibility sphere."
+
+# =====================================================================================
+# Routing · needs · scheduling
+# =====================================================================================
+
+[[class]]
+path = "/Core/Route"
+extends = "/Core/Object"
+kind = "object"
+status = "stable"
+doc = "A REQUIRED OR FORBIDDEN path with a budget, an occupant and predicates. The sign is in the primitive: a Span DECLARES a range, a Route OBLIGES one."
+  [[class.field]]
+  name = "from"
+  type = "Ref<Object>"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Origin. Null means unbound and resolved by the solver."
+  [[class.field]]
+  name = "to"
+  type = "Ref<Object>"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Destination. Null means unbound."
+  [[class.field]]
+  name = "budget"
+  type = "Ref<Budget>"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "What traversing it may spend."
+  [[class.field]]
+  name = "occupant"
+  type = "Occupant"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Who traverses. Null means the player."
+  [[class.field]]
+  name = "party"
+  type = "Array<Occupant>"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Every listed occupant must traverse — an escort, not a simultaneous hold."
+  [[class.field]]
+  name = "cohesion"
+  type = "float"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  default = "0.0"
+  doc = "Maximum separation in metres. 0 = unconstrained."
+  [[class.field]]
+  name = "line_of_sight"
+  type = "bool"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  default = "false"
+  doc = "Whether an unobstructed line is obliged. An OBLIGATION, not an observation — which is what makes L4 keep it."
+  [[class.field]]
+  name = "from_standing"
+  type = "bool"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  default = "true"
+  doc = "Whether the origin must be supported."
+  [[class.field]]
+  name = "forbidden"
+  type = "Array<Kind<Object>>"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Content this route must not pass. The negative half."
+
+[[class]]
+path = "/Core/Budget"
+extends = "/Core/Object"
+kind = "object"
+sealed = false
+status = "stable"
+doc = "What a route may spend."
+  [[class.method]]
+  name = "remaining"
+  args = []
+  returns = "float"
+  api = true
+  final = true
+  status = "stable"
+  doc = "Unspent amount."
+  [[class.method]]
+  name = "spend"
+  args = [ { name = "x", type = "float" } ]
+  returns = "void"
+  api = true
+  final = true
+  status = "stable"
+  doc = "Consume from the budget."
+
+[[class]]
+path = "/Core/DistanceBudget"
+extends = "/Core/Budget"
+kind = "object"
+status = "stable"
+doc = "Metres."
+
+[[class]]
+path = "/Core/TimeBudget"
+extends = "/Core/Budget"
+kind = "object"
+status = "stable"
+doc = "Seconds. Every TimeBudget is a distance divided by player_profile.speed, which is why that setting is not optional."
+
+[[class]]
+path = "/Core/PoolBudget"
+extends = "/Core/Budget"
+kind = "object"
+status = "stable"
+doc = "Draw against a named resource pool at a rate. How a soft gate is a magnitude rather than a rule."
+  [[class.field]]
+  name = "pool"
+  type = "String"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Which declared resource."
+  [[class.field]]
+  name = "rate"
+  type = "float"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Units per second."
+
+[[class]]
+path = "/Core/Path"
+extends = "/Core/Object"
+kind = "object"
+status = "stable"
+doc = "A realised route. What a Route becomes once the generator has produced it — and the reason there is no spline resource."
+  [[class.method]]
+  name = "steps"
+  args = []
+  returns = "Array<PathStep>"
+  api = true
+  final = true
+  status = "stable"
+  doc = "The ordered steps."
+  [[class.method]]
+  name = "length"
+  args = []
+  returns = "float"
+  api = true
+  final = true
+  status = "stable"
+  doc = "Total distance."
+  [[class.method]]
+  name = "rise"
+  args = []
+  returns = "float"
+  api = true
+  final = true
+  status = "stable"
+  doc = "Net vertical change."
+  [[class.method]]
+  name = "origin"
+  args = []
+  returns = "Vec3"
+  api = true
+  final = true
+  status = "stable"
+  doc = "Start point."
+  [[class.method]]
+  name = "target"
+  args = []
+  returns = "Vec3"
+  api = true
+  final = true
+  status = "stable"
+  doc = "End point."
+
+[[class]]
+path = "/Core/PathStep"
+extends = "/Core/Object"
+kind = "object"
+status = "stable"
+doc = "One leg of a path."
+  [[class.method]]
+  name = "position"
+  args = []
+  returns = "Vec3"
+  api = true
+  final = true
+  status = "stable"
+  doc = "Where this leg starts."
+  [[class.method]]
+  name = "length"
+  args = []
+  returns = "float"
+  api = true
+  final = true
+  status = "stable"
+  doc = "Leg distance."
+  [[class.method]]
+  name = "surface"
+  args = []
+  returns = "Kind<Surface>"
+  api = true
+  final = true
+  status = "stable"
+  doc = "What is underfoot."
+  [[class.method]]
+  name = "floor"
+  args = []
+  returns = "ScopeHandle"
+  api = true
+  final = true
+  status = "stable"
+  doc = "Which Floor this leg is on."
+  [[class.method]]
+  name = "via"
+  args = []
+  returns = "Ref<Object>"
+  api = true
+  final = true
+  status = "stable"
+  doc = "What made this leg possible."
+
+[[class]]
+path = "/Core/PlacementNeed"
+extends = "/Core/Object"
+kind = "object"
+sealed = false
+status = "stable"
+doc = "What requires() returns. The channel that makes the generator place enabling content."
+
+[[class]]
+path = "/Core/NeedsActor"
+extends = "/Core/PlacementNeed"
+kind = "object"
+status = "stable"
+doc = "Something carrying this component must exist, reachable by this route."
+  [[class.field]]
+  name = "having"
+  type = "Kind<Component>"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "The component the needed actor must carry. A CLASS reference — nothing is constructed."
+  [[class.field]]
+  name = "route"
+  type = "Ref<Route>"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "How it must be reachable."
+
+[[class]]
+path = "/Core/NeedsClearance"
+extends = "/Core/PlacementNeed"
+kind = "object"
+status = "stable"
+doc = "This volume must stay empty."
+  [[class.field]]
+  name = "volume"
+  type = "Ref<CollisionBody>"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "The volume."
+
+[[class]]
+path = "/Core/BlocksTraversal"
+extends = "/Core/PlacementNeed"
+kind = "object"
+status = "stable"
+doc = "Place me ON an edge of this kind and close it."
+  [[class.field]]
+  name = "matching"
+  type = "Kind<TraversalComponent>"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Which edges qualify."
+
+[[class]]
+path = "/Core/Constraint"
+extends = "/Core/Object"
+kind = "object"
+sealed = false
+status = "stable"
+doc = "A hard placement rule. Constraints express what CONTENT can state; dials express what only the generator can decide."
+
+[[class]]
+path = "/Core/AloneInScope"
+extends = "/Core/Constraint"
+kind = "object"
+status = "stable"
+doc = "No sibling of this kind in the same scope."
+  [[class.field]]
+  name = "scope"
+  type = "InstanceScope"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Which scope must be exclusive."
+
+[[class]]
+path = "/Core/MinDistanceFrom"
+extends = "/Core/Constraint"
+kind = "object"
+status = "stable"
+doc = "At least this far from a named kind. A door writes key-to-lock distance here, because the door names its own token and the key does not know its lock."
+  [[class.field]]
+  name = "kind"
+  type = "Kind<Object>"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "What to stay away from."
+  [[class.field]]
+  name = "budget"
+  type = "Ref<Budget>"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "The minimum separation."
+
+[[class]]
+path = "/Core/MaxDistanceFrom"
+extends = "/Core/Constraint"
+kind = "object"
+status = "stable"
+doc = "At most this far from a named kind."
+  [[class.field]]
+  name = "kind"
+  type = "Kind<Object>"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "What to stay near."
+  [[class.field]]
+  name = "budget"
+  type = "Ref<Budget>"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "The maximum separation."
+
+[[class]]
+path = "/Core/MountedOn"
+extends = "/Core/Constraint"
+kind = "object"
+status = "stable"
+doc = "Must be mounted on a matching socket."
+  [[class.field]]
+  name = "accepts"
+  type = "TagQuery"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Which sockets qualify."
+
+[[class]]
+path = "/Core/WithinScope"
+extends = "/Core/Constraint"
+kind = "object"
+status = "stable"
+doc = "Must be inside this scope."
+  [[class.field]]
+  name = "scope"
+  type = "InstanceScope"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "The scope."
+
+[[class]]
+path = "/Core/NotWithinScope"
+extends = "/Core/Constraint"
+kind = "object"
+status = "stable"
+doc = "Must not be inside this scope."
+  [[class.field]]
+  name = "scope"
+  type = "InstanceScope"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "The scope."
+
+[[class]]
+path = "/Core/Cohort"
+extends = "/Core/Constraint"
+kind = "object"
+status = "stable"
+doc = "These instances belong together. Prefer co-locating as components of ONE Actor where that applies — a landmark with two sockets is one Actor, unambiguous by construction. Reach for Cohort only when the members are genuinely separate placeables."
+  [[class.field]]
+  name = "members"
+  type = "Array<Kind<Actor>>"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "The grouped classes."
+  [[class.field]]
+  name = "scope"
+  type = "InstanceScope"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "How tightly grouped."
+  [[class.field]]
+  name = "all_or_nothing"
+  type = "bool"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  default = "true"
+  doc = "Whether a partial placement is acceptable."
+  [[class.field]]
+  name = "ordered"
+  type = "bool"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  default = "false"
+  doc = "Whether the order must be learnable."
+
+[[class]]
+path = "/Core/Preference"
+extends = "/Core/Object"
+kind = "object"
+status = "stable"
+doc = "A soft placement bias. Relaxable, and REPORTED when relaxed — nothing is loose by accident."
+  [[class.field]]
+  name = "strictness"
+  type = "Strictness"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  default = "PREFERRED"
+  doc = "How hard the solver tries."
+  [[class.field]]
+  name = "weight"
+  type = "float"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  default = "1.0"
+  doc = "Relative pull."
+
+[[class]]
+path = "/Core/Exclusion"
+extends = "/Core/Object"
+kind = "object"
+status = "stable"
+doc = "What forbids() returns: a volume nothing may occupy, with declared escapes."
+  [[class.field]]
+  name = "volume"
+  type = "Ref<CollisionBody>"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "The excluded volume."
+  [[class.field]]
+  name = "unless"
+  type = "Array<Kind<Object>>"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Content permitted anyway."
+  [[class.field]]
+  name = "reason"
+  type = "String"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Prose for the trace."
+
+[[class]]
+path = "/Core/ScheduleRule"
+extends = "/Core/Object"
+kind = "object"
+sealed = false
+status = "stable"
+doc = "Ordering relative to other content."
+  [[class.field]]
+  name = "relaxable"
+  type = "bool"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  default = "true"
+  doc = "Whether the solver may break this when infeasible — and report it."
+
+[[class]]
+path = "/Core/PlacedAfter"
+extends = "/Core/ScheduleRule"
+kind = "object"
+status = "stable"
+doc = "Place me after this target, with a gap."
+  [[class.field]]
+  name = "target"
+  type = "Kind<Object>"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "What must come first."
+  [[class.field]]
+  name = "gap"
+  type = "Span"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "How far after, in spheres."
+
+[[class]]
+path = "/Core/ExclusiveWith"
+extends = "/Core/ScheduleRule"
+kind = "object"
+status = "stable"
+doc = "Prefer not to appear alongside this."
+  [[class.field]]
+  name = "other"
+  type = "Kind<Object>"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "The other content."
+  [[class.field]]
+  name = "weight"
+  type = "float"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "How strongly."
+
+[[class]]
+path = "/Core/Supersedes"
+extends = "/Core/ScheduleRule"
+kind = "object"
+status = "stable"
+doc = "This replaces a base once available — the upgrade relationship."
+  [[class.field]]
+  name = "base"
+  type = "Kind<Object>"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "What this supersedes."
+
+[[class]]
+path = "/Core/SpherePin"
+extends = "/Core/ScheduleRule"
+kind = "object"
+status = "stable"
+doc = "Pin to a sphere range. The first constraint about PACING rather than topology, and the one developers reach for soonest."
+  [[class.field]]
+  name = "range"
+  type = "Span"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Permitted spheres."
+
+[[class]]
+path = "/Core/Rationale"
+extends = "/Core/Object"
+kind = "object"
+status = "stable"
+doc = "Why the core did what it did. The trace is built from these."
+  [[class.method]]
+  name = "subject"
+  args = []
+  returns = "Ref<Object>"
+  api = true
+  final = true
+  status = "stable"
+  doc = "What this explains."
+  [[class.method]]
+  name = "layer"
+  args = []
+  returns = "int"
+  api = true
+  final = true
+  status = "stable"
+  doc = "Which pipeline layer decided."
+  [[class.method]]
+  name = "inputs"
+  args = []
+  returns = "Array<Ref<Object>>"
+  api = true
+  final = true
+  status = "stable"
+  doc = "What the decision read."
+  [[class.method]]
+  name = "explain"
+  args = []
+  returns = "String"
+  api = true
+  final = false
+  status = "stable"
+  doc = "Prose."
+  [[class.method]]
+  name = "because"
+  args = []
+  returns = "Array<Ref<Rationale>>"
+  api = true
+  final = true
+  status = "stable"
+  doc = "The upstream reasons, so a developer can walk back to the root cause."
+
+# =====================================================================================
+# Context · ScopeHandle — the per-call lens
+# =====================================================================================
+
+[[class]]
+path = "/Core/Context"
+extends = "/Core/Object"
+kind = "object"
+sealed = true
+status = "stable"
+doc = "The lens handed into every hook. Scope reads are FIELDS because they are free; queries are METHODS because they are not."
+  [[class.field]]
+  name = "world"
+  type = "ScopeHandle"
+  api = true
+  final = true
+  status = "stable"
+  doc = "The World scope."
+  [[class.field]]
+  name = "reach"
+  type = "ScopeHandle"
+  api = true
+  final = true
+  status = "stable"
+  doc = "The enclosing Reach. The ONLY legal use of the reach stem — everywhere else the noun is range and the verb is accessible."
+  [[class.field]]
+  name = "area"
+  type = "ScopeHandle"
+  api = true
+  final = true
+  status = "stable"
+  doc = "The enclosing Area."
+  [[class.field]]
+  name = "space"
+  type = "ScopeHandle"
+  api = true
+  final = true
+  status = "stable"
+  doc = "The enclosing Space, which is what bounds geometry queries."
+  [[class.field]]
+  name = "floor"
+  type = "ScopeHandle"
+  api = true
+  final = true
+  status = "stable"
+  doc = "The enclosing Floor, which is what partitions accessibility."
+  [[class.field]]
+  name = "spatial"
+  type = "Ref<Actor>"
+  api = true
+  final = true
+  status = "stable"
+  doc = "The content being considered at a position."
+  [[class.field]]
+  name = "slot"
+  type = "Ref<SpineSlot>"
+  api = true
+  final = true
+  status = "stable"
+  doc = "The spine slot in play, or null outside a spine. Read-only."
+  [[class.field]]
+  name = "occupant"
+  type = "Occupant"
+  api = true
+  final = true
+  status = "stable"
+  doc = "Who is being reasoned about."
+  [[class.field]]
+  name = "party"
+  type = "Array<Occupant>"
+  api = true
+  final = true
+  status = "stable"
+  doc = "Everyone travelling together."
+  [[class.field]]
+  name = "held"
+  type = "Array<Kind<Object>>"
+  api = true
+  final = true
+  status = "stable"
+  doc = "Tokens held. CLASSES — one currency with grants() and HoldsRule."
+  [[class.field]]
+  name = "sphere"
+  type = "int"
+  api = true
+  final = true
+  status = "stable"
+  doc = "The current accessibility sphere."
+  [[class.field]]
+  name = "progression"
+  type = "float"
+  api = true
+  final = true
+  status = "stable"
+  doc = "Normalised progress through the world."
+  [[class.field]]
+  name = "role"
+  type = "Role"
+  api = true
+  final = true
+  status = "stable"
+  doc = "The role assigned to the content under consideration."
+  [[class.field]]
+  name = "layer"
+  type = "int"
+  api = true
+  final = true
+  status = "stable"
+  doc = "Which pipeline layer is asking."
+  [[class.field]]
+  name = "fidelity"
+  type = "Fidelity"
+  api = true
+  final = true
+  status = "stable"
+  doc = "How real the geometry currently is."
+  [[class.field]]
+  name = "tolerance"
+  type = "float"
+  api = true
+  final = true
+  status = "stable"
+  doc = "The bounded error of this fidelity rung. The ladder is monotone, so this only ever shrinks."
+  [[class.field]]
+  name = "rng"
+  type = "Rng"
+  api = true
+  final = true
+  status = "stable"
+  doc = "The ONLY randomness source. Anything else is unreplayable."
+  [[class.method]]
+  name = "state_of"
+  args = [ { name = "name", type = "String" } ]
+  returns = "String"
+  api = true
+  final = true
+  status = "stable"
+  doc = "Read a declared world-state variable."
+  [[class.method]]
+  name = "pool"
+  args = [ { name = "name", type = "String" } ]
+  returns = "Pool"
+  api = true
+  final = true
+  status = "stable"
+  doc = "Read a declared resource pool."
+  [[class.method]]
+  name = "setting"
+  args = [ { name = "name", type = "String" } ]
+  returns = "MetaValue"
+  api = true
+  final = true
+  status = "stable"
+  doc = "Read a project setting."
+  [[class.method]]
+  name = "query"
+  args = []
+  returns = "Query"
+  api = true
+  final = true
+  status = "stable"
+  doc = "The three-axis query builder: what to trace, what to consider, what to report. Declarative filters, never closures — a predicate callback survives neither the binding contract nor the palette."
+  [[class.method]]
+  name = "path_to"
+  args = [ { name = "target", type = "Ref<Object>" }, { name = "f", type = "QueryFilter" } ]
+  returns = "Ref<Path>"
+  api = true
+  final = true
+  status = "stable"
+  doc = "Realise a path to a target."
+  [[class.method]]
+  name = "accessible"
+  args = [ { name = "from", type = "Vec3" }, { name = "to", type = "Vec3" }, { name = "held", type = "Array<Kind<Object>>" } ]
+  returns = "Trivalent"
+  api = true
+  final = true
+  status = "stable"
+  doc = "Can an occupant holding these tokens get from here to there? Trivalent, not bool, because the API must not be able to lie."
+  [[class.method]]
+  name = "within"
+  args = [ { name = "measured", type = "float" }, { name = "limit", type = "float" } ]
+  returns = "Trivalent"
+  api = true
+  final = true
+  status = "stable"
+  doc = "Trivalent for METRIC questions. Dual bounds answer set membership; this answers 'is this ledge within 30 m', which every Span and Budget comparison actually asks."
+  [[class.method]]
+  name = "request"
+  args = [ { name = "p", type = "Ref<Preference>" } ]
+  returns = "void"
+  api = true
+  final = true
+  status = "stable"
+  doc = "Ask the solver for something, softly."
+  [[class.method]]
+  name = "note"
+  args = [ { name = "r", type = "Ref<Rationale>" } ]
+  returns = "void"
+  api = true
+  final = true
+  status = "stable"
+  doc = "Add a reason to the trace."
+  [[class.method]]
+  name = "send_message"
+  args = [ { name = "text", type = "String" }, { name = "channel", type = "String" }, { name = "debug_only", type = "bool" } ]
+  returns = "void"
+  api = true
+  final = true
+  status = "stable"
+  doc = "One-way notification to the host. Observational only, never affecting generation; debug_only messages are stripped entirely from a cooked build."
+
+[[class]]
+path = "/Core/ScopeHandle"
+extends = "/Core/Object"
+kind = "object"
+sealed = true
+status = "stable"
+doc = "A handle on one scope."
+  [[class.field]]
+  name = "bounds"
+  type = "Aabb"
+  api = true
+  status = "stable"
+  doc = "Extent."
+  [[class.field]]
+  name = "siblings"
+  type = "Array<ScopeHandle>"
+  api = true
+  status = "stable"
+  doc = "Peers under the same parent."
+  [[class.field]]
+  name = "floors"
+  type = "Array<ScopeHandle>"
+  api = true
+  status = "stable"
+  doc = "Floors inside this scope, if it is a Space."
+  [[class.field]]
+  name = "instances"
+  type = "Array<Ref<Actor>>"
+  api = true
+  status = "stable"
+  doc = "Placed actors here."
+  [[class.field]]
+  name = "granted_here"
+  type = "Array<Kind<Object>>"
+  api = true
+  status = "stable"
+  doc = "Tokens obtainable in this scope."
+  [[class.method]]
+  name = "contains"
+  args = [ { name = "a", type = "Ref<Actor>" } ]
+  returns = "bool"
+  api = true
+  final = true
+  status = "stable"
+  doc = "Is this actor inside?"
+  [[class.method]]
+  name = "accessible_from"
+  args = [ { name = "other", type = "ScopeHandle" }, { name = "held", type = "Array<Kind<Object>>" } ]
+  returns = "Trivalent"
+  api = true
+  final = true
+  status = "stable"
+  doc = "Can an occupant holding these get here from there?"
+  [[class.method]]
+  name = "instances_of"
+  args = [ { name = "kind", type = "Kind<Object>" }, { name = "scope", type = "InstanceScope" } ]
+  returns = "Array<Ref<Object>>"
+  api = true
+  final = true
+  status = "stable"
+  doc = "Placed content of a kind. Space and up — there is deliberately no floor-scoped instance query, because it would stop at a boundary the geometry does not stop at."
+  [[class.method]]
+  name = "dial"
+  args = [ { name = "name", type = "String" } ]
+  returns = "float"
+  api = true
+  final = true
+  status = "stable"
+  doc = "Read a dial. Inherits OUTWARD-IN and an inner scope wins, so 'set saturation once at World scope' works. The trace records which scope supplied the value."
+
+# =====================================================================================
+# Structs — copied, no identity, not subclassable
+# =====================================================================================
+
+[[class]]
+path = "/Core/Vec2"
+kind = "struct"
+status = "stable"
+doc = "2D vector. components, length, normalized, dot, distance_to, arithmetic, and the ZERO/ONE constants."
+
+[[class]]
+path = "/Core/Vec3"
+kind = "struct"
+status = "stable"
+doc = "3D vector. components, length, normalized, dot, cross, distance_to, arithmetic, and the ZERO/ONE/UP/DOWN/FORWARD/RIGHT constants."
+
+[[class]]
+path = "/Core/Quaternion"
+kind = "struct"
+status = "stable"
+doc = "Rotation. from_euler, to_euler, slerp, mul."
+
+[[class]]
+path = "/Core/Mat4"
+kind = "struct"
+status = "stable"
+doc = "4x4 matrix. origin, basis, apply, inverse, mul."
+
+[[class]]
+path = "/Core/Transform"
+kind = "struct"
+status = "stable"
+doc = "Position, rotation and scale. origin, basis, apply, inverse, mul."
+
+[[class]]
+path = "/Core/Aabb"
+kind = "struct"
+status = "stable"
+doc = "Axis-aligned box. min, max, center, size, contains, intersects, expand, merge."
+
+[[class]]
+path = "/Core/Ray"
+kind = "struct"
+status = "stable"
+doc = "Origin, direction, at(t)."
+
+[[class]]
+path = "/Core/Plane"
+kind = "struct"
+status = "stable"
+doc = "Normal, d, distance_to(p)."
+
+[[class]]
+path = "/Core/Span"
+kind = "struct"
+status = "stable"
+doc = "An inclusive range. min, max, contains, clamp, length, overlaps, lerp, is_bounded, and UNBOUNDED. A Span DECLARES a range; a Route OBLIGES one."
+
+[[class]]
+path = "/Core/Curve"
+kind = "struct"
+status = "stable"
+doc = "2D point data and NOT a resource — one row of a CurveTableResource. points, interpolation, sample, constant, ramp, from_points."
+
+[[class]]
+path = "/Core/Dial"
+kind = "struct"
+status = "stable"
+doc = "A tunable the generator may retune within declared bounds. value(ctx), min, max, set, and a source that is either a Constant or a Curve row read at a ProgressionAxis."
+
+[[class]]
+path = "/Core/AdaptiveRange"
+kind = "struct"
+status = "stable"
+doc = "soft_min, hard_max, and target(available) computed from what is genuinely placeable. Falls below soft_min HONESTLY under content scarcity rather than padding with repeated filler or breaking outright."
+
+[[class]]
+path = "/Core/Quantity"
+kind = "struct"
+status = "stable"
+doc = "initial, max, consumable."
+
+[[class]]
+path = "/Core/Pool"
+kind = "struct"
+status = "stable"
+doc = "A resource an occupant draws on. capacity, reserve, and available(ctx) — the last is what every soft gate compares against, because capacity alone cannot answer how much is held at a given sphere."
+
+[[class]]
+path = "/Core/Harm"
+kind = "struct"
+status = "stable"
+doc = "radius, severity 0..1, avoidable, continuous, mitigated_by, and NONE."
+
+[[class]]
+path = "/Core/Support"
+kind = "struct"
+status = "stable"
+doc = "permitted (a Rule), max_slope, endurance (a Budget). Returned per occupant by Surface.supports."
+
+[[class]]
+path = "/Core/Approach"
+kind = "struct"
+status = "stable"
+doc = "distance (a Span), max_slope, surface. What an occupant needs at the near end of a traversal."
+
+[[class]]
+path = "/Core/Occupant"
+kind = "struct"
+status = "stable"
+doc = "Who is standing, as a parameter. actor (null for the player), is_player, held, holds(kind), footprint."
+
+[[class]]
+path = "/Core/Hit"
+kind = "struct"
+status = "stable"
+doc = "A query result. valid, distance, point, normal, actor, component, island, polygon, triangle, surface, face, fidelity, and certainty. Fields below the achieved detail are ABSENT, which is checkable rather than sentinel-valued."
+
+[[class]]
+path = "/Core/DirectionCone"
+kind = "struct"
+status = "stable"
+doc = "axis and angle. Replaces a three-value enum so that 'up, level or diagonally up, never down' is expressible."
+
+[[class]]
+path = "/Core/Kind"
+kind = "struct"
+status = "stable"
+doc = "A picked CLASS path. path, is_a, and defaults() — the core-owned class default, one per class, READ and never built by content. This is how a token's authored values are compared without instantiating anything."
+
+[[class]]
+path = "/Core/Ref"
+kind = "struct"
+status = "stable"
+doc = "A live INSTANCE reference. Never interchangeable with Kind: a class never appears in a value position and a path never in a type position."
+
+[[class]]
+path = "/Core/Tag"
+kind = "struct"
+status = "stable"
+doc = "A dotted hierarchical label, picked rather than typed."
+
+[[class]]
+path = "/Core/TagQuery"
+kind = "struct"
+status = "stable"
+doc = "A tag match with an exact/inherited toggle. Why an eligible-surface list survives every future surface being added."
+
+[[class]]
+path = "/Core/Cost"
+kind = "struct"
+status = "stable"
+doc = "What an interaction spends."
+
+[[class]]
+path = "/Core/Quota"
+kind = "struct"
+status = "stable"
+doc = "How many of something may exist, per scope."
+
+[[class]]
+path = "/Core/Diagnostic"
+kind = "struct"
+status = "stable"
+doc = "An editor-time finding. Never blocks generation."
+
+[[class]]
+path = "/Core/Rng"
+kind = "struct"
+status = "stable"
+doc = "The owned, forkable PRNG. Reached only through ctx.rng."
+
+# =====================================================================================
+# Enums
+# =====================================================================================
+
+[[class]]
+path = "/Core/Face"
+kind = "enum"
+status = "stable"
+doc = "Which face of a bounding box something presents or mounts against."
+  [[class.value]]
+  name = "POS_X"
+  [[class.value]]
+  name = "NEG_X"
+  [[class.value]]
+  name = "POS_Y"
+  doc = "Up. The default mount face — a floor-standing thing."
+  [[class.value]]
+  name = "NEG_Y"
+  doc = "Down. A ceiling mount."
+  [[class.value]]
+  name = "POS_Z"
+  [[class.value]]
+  name = "NEG_Z"
+
+[[class]]
+path = "/Core/Role"
+kind = "enum"
+status = "stable"
+doc = "What a placement turned out to be. An OUTPUT, assigned after the search from what it ran into — never declared."
+  [[class.value]]
+  name = "DECORATION"
+  doc = "No mechanical consequence."
+  [[class.value]]
+  name = "OBSTACLE"
+  [[class.value]]
+  name = "TRAVERSAL"
+  [[class.value]]
+  name = "GATE"
+  [[class.value]]
+  name = "LANDMARK"
+
+[[class]]
+path = "/Core/ItemClass"
+kind = "enum"
+status = "stable"
+doc = "What kind of reward something is. An INPUT the developer declares."
+  [[class.value]]
+  name = "PROGRESSION"
+  doc = "May appear in logic. The conservative default."
+  [[class.value]]
+  name = "USEFUL"
+  doc = "Tunes route difficulty, spends slack, never gates."
+  [[class.value]]
+  name = "BONUS"
+  doc = "Rewards optional exploration. Auto-assigned to anything reachable solely through a relaxation."
+  [[class.value]]
+  name = "FILLER"
+  doc = "Satisfies density. Currency, ammo, consumables."
+
+[[class]]
+path = "/Core/CollisionLayer"
+kind = "enum"
+status = "stable"
+doc = "Which collision layer a body belongs to."
+  [[class.value]]
+  name = "HULL"
+  [[class.value]]
+  name = "STATIC"
+  [[class.value]]
+  name = "DYNAMIC"
+
+[[class]]
+path = "/Core/QueryFilter"
+kind = "enum"
+status = "stable"
+doc = "Coarse query scoping."
+  [[class.value]]
+  name = "ALL"
+  [[class.value]]
+  name = "NONE"
+  [[class.value]]
+  name = "WORLD"
+  [[class.value]]
+  name = "PLACED"
+
+[[class]]
+path = "/Core/CollisionMode"
+kind = "enum"
+status = "proposed"
+doc = "PROPOSED. How collision is derived from geometry. The design names the enum but not its values; these are the minimum set the pipeline needs and must be confirmed when mesh import lands."
+  [[class.value]]
+  name = "NONE"
+  doc = "Visible, never collidable."
+  [[class.value]]
+  name = "CONVEX_HULL"
+  [[class.value]]
+  name = "DECOMPOSED"
+  [[class.value]]
+  name = "TRIANGLE_MESH"
+  [[class.value]]
+  name = "AUTHORED"
+  doc = "Use a separately authored collision body rather than deriving one."
+
+[[class]]
+path = "/Core/Replenish"
+kind = "enum"
+status = "stable"
+doc = "Whether and how a supply comes back."
+  [[class.value]]
+  name = "NEVER"
+  [[class.value]]
+  name = "ON_REENTER"
+  [[class.value]]
+  name = "FROM_SOURCE"
+  [[class.value]]
+  name = "ON_TIMER"
+
+[[class]]
+path = "/Core/InstanceScope"
+kind = "enum"
+status = "stable"
+doc = "How wide an instance query or effect reaches. There is deliberately NO FLOOR member: a floor-scoped instance query would stop at a boundary the geometry does not stop at."
+  [[class.value]]
+  name = "SPATIAL"
+  [[class.value]]
+  name = "SPACE"
+  [[class.value]]
+  name = "AREA"
+  [[class.value]]
+  name = "REACH"
+  [[class.value]]
+  name = "WORLD"
+
+[[class]]
+path = "/Core/BooleanOp"
+kind = "enum"
+status = "stable"
+doc = "Constructive solid geometry operations."
+  [[class.value]]
+  name = "UNION"
+  [[class.value]]
+  name = "SUBTRACT"
+  [[class.value]]
+  name = "INTERSECT"
+
+[[class]]
+path = "/Core/ResolveState"
+kind = "enum"
+status = "stable"
+doc = "How committed a node is. A subtree may lag but never lead."
+  [[class.value]]
+  name = "PROJECTED"
+  doc = "A revisable forecast. The only state from which a node may be removed."
+  [[class.value]]
+  name = "RESERVED"
+  doc = "Committed to exist, with an envelope claimed. Removable only by recorded backtracking."
+  [[class.value]]
+  name = "REALIZED"
+  doc = "Built and frozen."
+
+[[class]]
+path = "/Core/Detail"
+kind = "enum"
+status = "stable"
+doc = "How much a query wants back. Detail is what you ASK for; fidelity is what EXISTS."
+  [[class.value]]
+  name = "SCOPE"
+  doc = "Which room. Available from L1."
+  [[class.value]]
+  name = "COLLIDER"
+  doc = "Which box, which face. From L2."
+  [[class.value]]
+  name = "INSTANCE"
+  doc = "Which placed actor, with its content path and metadata. From L2."
+  [[class.value]]
+  name = "ISLAND"
+  doc = "Which mesh island. From L3."
+  [[class.value]]
+  name = "POLYGON"
+  doc = "Which hull polygon or occupancy cell. From L3."
+  [[class.value]]
+  name = "TRIANGLE"
+  doc = "Which triangle, with an interpolated normal. From L4."
+
+[[class]]
+path = "/Core/Fidelity"
+kind = "enum"
+status = "stable"
+doc = "How real the geometry is. The ladder is monotone — each rung only tightens, so tolerance only shrinks."
+  [[class.value]]
+  name = "ENVELOPE"
+  doc = "Tolerance is the envelope's own slack."
+  [[class.value]]
+  name = "HULL"
+  doc = "Tolerance is the contouring tolerance."
+  [[class.value]]
+  name = "GEOMETRY"
+  doc = "Tolerance is zero."
+
+[[class]]
+path = "/Core/Strictness"
+kind = "enum"
+status = "stable"
+doc = "How hard a spine slot or preference must hold. Every relaxation is declared; nothing is loose by accident."
+  [[class.value]]
+  name = "REQUIRED"
+  doc = "Must hold; if it cannot, generation fails with a diagnostic."
+  [[class.value]]
+  name = "PREFERRED"
+  doc = "Strongly biased; may be relaxed when infeasible, and is REPORTED when it is."
+  [[class.value]]
+  name = "OPTIONAL"
+  doc = "The generator decides freely; absence is expected."
+
+[[class]]
+path = "/Core/SkipPolicy"
+kind = "enum"
+status = "stable"
+doc = "Per-lock sequence-break policy. A designer marks two or three gates, not two hundred."
+  [[class.value]]
+  name = "TOLERATED"
+  doc = "A path exists; other emergent paths are fine. The default, because real games ship tolerated skips deliberately."
+  [[class.value]]
+  name = "EXACT"
+  doc = "Report every alternative route found."
+  [[class.value]]
+  name = "GUARDED"
+  doc = "Actively verify no alternative exists at that sphere, and fail loudly if one does. Also what decides whether a discovered shortcut may be adopted."
+
+[[class]]
+path = "/Core/Interpolation"
+kind = "enum"
+status = "stable"
+doc = "How a curve row interpolates between keys. Declared PER ROW — UE fixes it per table only because a CSV has one header row, which JSON does not."
+  [[class.value]]
+  name = "CONSTANT"
+  [[class.value]]
+  name = "LINEAR"
+  [[class.value]]
+  name = "CUBIC"
+
+[[class]]
+path = "/Core/Trivalent"
+kind = "enum"
+status = "stable"
+doc = "Three-valued truth. A confident wrong answer is worse than an admitted unknown, so the API returns this rather than a bool wherever geometry is still approximate."
+  [[class.value]]
+  name = "YES"
+  [[class.value]]
+  name = "NO"
+  [[class.value]]
+  name = "AMBIGUOUS"
+  doc = "Inside the ambiguous band. Resolve, never guess — and a decision that returns this re-asks at the next fidelity rung by construction."

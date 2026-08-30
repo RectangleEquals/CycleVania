@@ -176,6 +176,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "cv-manifest"
+version = "0.1.0"
+
+[[package]]
 name = "cv-script"
 version = "0.1.0"
 dependencies = [
