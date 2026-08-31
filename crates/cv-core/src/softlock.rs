@@ -143,7 +143,7 @@ impl fmt::Display for AnalysisLimit {
     }
 }
 
-/// The result of a accessibility-preservation pass.
+/// The result of a reachability-preservation pass.
 #[derive(Clone, Debug, PartialEq)]
 pub struct SoftlockAnalysis {
     /// Every way a player can strand themselves. Empty means the world is un-softlockable.
@@ -206,7 +206,7 @@ impl fmt::Display for Repair {
     }
 }
 
-/// Runs the accessibility-preservation pass.
+/// Runs the reachability-preservation pass.
 pub struct SoftlockAnalyzer<'a> {
     mission: &'a MissionGraph,
     grants: &'a GrantMap,

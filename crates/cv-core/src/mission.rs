@@ -279,7 +279,7 @@ pub struct Sphere {
     pub granted: Vec<ObjectId>,
 }
 
-/// The outcome of a accessibility sweep.
+/// The outcome of a reachability sweep.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Accessibility {
     /// Every accessible scope.

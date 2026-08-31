@@ -17,7 +17,7 @@
 //! * [`context`] — the per-call lens handed into every mechanic callback.
 //! * [`fixtures`] — hand-written mechanics standing in for CVScript until the VM lands (M18).
 //! * [`schedule`] — L0 content resolution and the L1 plan, including `AdaptiveRange` (M08).
-//! * [`mission`] — the L2 mission graph, the `Rule` grammar, and sphere accessibility (M09).
+//! * [`mission`] — the L2 mission graph, the `Rule` grammar, and sphere reachability (M09).
 //! * [`solver`] — assumed-fill placement, cycle generation, and the linearity dials (M09).
 //! * [`softlock`] — the un-softlockable guarantee: no accessible state strands the goal (M10).
 //! * [`spine`] — opt-in macro-structure: guaranteed slots, free-form segments (M10a).
