@@ -50,6 +50,7 @@
 //! *what a call read*, there is one place to add it, and the spatial reads are already inside it.
 
 use crate::content::ContentRegistry;
+use crate::floor::{FloorLadder, ScopeBounds};
 use crate::geometry::{CoarseGeometry, ColliderId, Hit, Sweep};
 use crate::node::{Node, NodeGraph, NodeKind, NodeState};
 use crate::object::ObjectId;
@@ -77,6 +78,7 @@ struct WorldView<'a> {
     /// The coarse boxes the spatial primitives run against. Absent until something builds them,
     /// in which case every primitive answers "nothing there" rather than refusing to run.
     geometry: Option<&'a CoarseGeometry>,
+    floors: Option<&'a FloorLadder>,
 }
 
 impl<'a> Context<'a> {
@@ -97,6 +99,7 @@ impl<'a> Context<'a> {
                 registry,
                 placed,
                 geometry: None,
+                floors: None,
             }),
             scope: None,
             rng: rng.fork(label),
@@ -247,6 +250,45 @@ impl<'a> Context<'a> {
     /// The coarse geometry behind this call, if it has any.
     pub fn geometry(&self) -> Option<&CoarseGeometry> {
         self.world.as_ref().and_then(|w| w.geometry)
+    }
+
+    /// Give this context the floor ladder — **this is what takes spatial queries live at L2c**.
+    ///
+    /// Separate from [`Context::with_geometry`] because the two arrive at different moments: colliders
+    /// exist as soon as anything is committed, but the bounds derived from them only exist once the
+    /// L2a→L2c pass has run.
+    pub fn with_floors(mut self, floors: &'a FloorLadder) -> Self {
+        if let Some(world) = self.world.as_mut() {
+            world.floors = Some(floors);
+        }
+        self
+    }
+
+    /// The dual bounds for a scope, once the ladder has run.
+    ///
+    /// ⚠ **`None` means "not known yet", never "nothing there".** A hook running before L2c gets no
+    /// answer rather than a wrong one — the distinction `Trivalent` formalises at M06.
+    pub fn bounds(&self, scope: Handle<Node>) -> Option<&ScopeBounds> {
+        self.world
+            .as_ref()
+            .and_then(|w| w.floors)
+            .and_then(|l| l.bounds(scope))
+    }
+
+    /// Could an occupant be standing here? Definitely-yes only.
+    ///
+    /// ⚠ A `false` from this is **not** a definite no — that is [`Context::possibly_standable`]'s
+    /// job, and keeping them apart is what stops an optimistic bound reading as a fact.
+    pub fn definitely_standable(&self, scope: Handle<Node>, p: Vec3) -> bool {
+        self.bounds(scope).is_some_and(|b| b.inner_contains(p))
+    }
+
+    /// Could an occupant *possibly* be standing here?
+    ///
+    /// `false` **is** a definite no: outside the outer bound nothing later can put geometry there,
+    /// because the ladder only ever tightens.
+    pub fn possibly_standable(&self, scope: Handle<Node>, p: Vec3) -> bool {
+        self.bounds(scope).is_some_and(|b| b.outer_contains(p))
     }
 
     /// The first thing in the way.
