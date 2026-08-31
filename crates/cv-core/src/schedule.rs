@@ -18,7 +18,7 @@
 //! this slot*, which is a property of the slot, not of any one candidate.
 //!
 //! Content declares its own eligibility ([`Schedule`]); per-scope limits are a *constraint*
-//! (`Constraint::MaxPerScope`), enforced by L2/L3 where placement actually happens.
+//! (a `MaxPerScope` constraint — ▶ M07), enforced by L2/L3 where placement actually happens.
 //!
 //! # The inputs a dev has
 //!

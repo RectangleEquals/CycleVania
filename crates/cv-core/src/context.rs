@@ -14,7 +14,7 @@
 //! |---|---|---|
 //! | **Query** | reads committed fact | `ctx.count_realized(kind)`, `ctx.raycast(o, d, r)` |
 //! | **Assert** | the mechanic states ground truth | the *return value* of `footprint`/`constraints` |
-//! | **Request** | the algorithm may grant, adapt, or deny | `ctx.request(Request::PreferSpacing(4.0))` |
+//! | **Preference** | the algorithm may grant, adapt, or deny | `ctx.request(p)` — ▶ **M07** |
 //! | **Randomness** | deterministic, label-addressed | `ctx.rng("placement")` |
 //!
 //! Note what is absent: **no setters.** A mechanic cannot write the graph, move a node, or force a
@@ -44,14 +44,13 @@
 //!
 //! # What this is at M11
 //!
-//! Identity, randomness, scope reads, committed-state counts, requests, and the spatial primitives.
+//! Identity, randomness, scope reads, committed-state counts, and the spatial primitives.
 //! Reactive dependency tracking arrives at M12 — which is why reads funnel through methods here rather
 //! than letting callers hold a `&NodeGraph` or a `&CoarseGeometry` directly. When M12 needs to record
 //! *what a call read*, there is one place to add it, and the spatial reads are already inside it.
 
 use crate::content::ContentRegistry;
 use crate::geometry::{CoarseGeometry, ColliderId, Hit, Sweep};
-use crate::mechanic::Request;
 use crate::node::{Node, NodeGraph, NodeKind, NodeState};
 use crate::object::ObjectId;
 use crate::Handle;
@@ -67,8 +66,6 @@ pub struct Context<'a> {
     scope: Option<Handle<Node>>,
     /// The stream this call may draw from, forked to the call site.
     rng: Rng,
-    /// Preferences collected during this call, in order.
-    requests: Vec<Request>,
 }
 
 /// The read-only view of the world a context exposes.
@@ -103,7 +100,6 @@ impl<'a> Context<'a> {
             }),
             scope: None,
             rng: rng.fork(label),
-            requests: Vec::new(),
         }
     }
 
@@ -117,7 +113,6 @@ impl<'a> Context<'a> {
             world: None,
             scope: None,
             rng: Rng::new(0),
-            requests: Vec::new(),
         }
     }
 
@@ -325,24 +320,11 @@ impl<'a> Context<'a> {
     }
 
     // --- requests ---------------------------------------------------------------------------
-
-    /// Ask for something. The algorithm may grant, adapt, or deny it.
-    ///
-    /// Returns nothing on purpose — a request that reported success would tempt a mechanic into
-    /// branching on it, which would make behaviour depend on solver internals and on evaluation order.
-    pub fn request(&mut self, request: Request) {
-        self.requests.push(request);
-    }
-
-    /// The requests made during this call, in order.
-    pub fn requests(&self) -> &[Request] {
-        &self.requests
-    }
-
-    /// Take the collected requests, for the pipeline to weigh.
-    pub fn take_requests(&mut self) -> Vec<Request> {
-        std::mem::take(&mut self.requests)
-    }
+    //
+    // ▶ **M07 P07.** The channel is design-backed — `ctx.request(p: Ref<Preference>)`, *"ask the
+    // solver for something, softly"* — but `Preference` does not exist yet. The pre-v0.1 `Request`
+    // enum that used to sit here came from the mechanic seam and went with it at M04, rather than
+    // being carried forward into a shape the design does not have.
 }
 
 #[cfg(test)]
@@ -427,22 +409,6 @@ mod tests {
         assert_ne!(
             ctx.rng("jitter").next_u64(),
             other_call.rng("jitter").next_u64()
-        );
-    }
-
-    #[test]
-    fn requests_accumulate_in_order_and_report_nothing() {
-        let (g, reg, placed) = world();
-        let mut ctx = Context::new(&g, &reg, &placed, &Rng::new(1), "t");
-        // `request` returns (), so a mechanic cannot branch on whether it was granted.
-        ctx.request(Request::PreferSpacing(4.0));
-        ctx.request(Request::PreferScopeKind(NodeKind::Space));
-        assert_eq!(ctx.requests().len(), 2);
-        assert_eq!(ctx.requests()[0], Request::PreferSpacing(4.0));
-        assert_eq!(ctx.take_requests().len(), 2);
-        assert!(
-            ctx.requests().is_empty(),
-            "taking clears them for the next call"
         );
     }
 

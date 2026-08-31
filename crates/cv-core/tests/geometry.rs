@@ -1,36 +1,116 @@
 //! M11 exit criteria: the spatial primitives mechanics reason through.
 //!
-//! The load-bearing claim is not "raycast works" — it is that **geometry answers *where*, and mechanics
-//! answer *whether***. If the two ever merge, `FlowKind` leaks into the primitives, and a laser puzzle
-//! stops being expressible without the core knowing what a laser is.
+//! The load-bearing claim is not "raycast works" — it is that **geometry answers *where*, and content
+//! answers *whether***. If the two ever merge, the notion of a laser leaks into the primitives, and a
+//! laser puzzle stops being expressible without the core knowing what a laser is.
 //!
-//! So the centrepiece here is a laser tracer built entirely out of `raycast_all` plus the fixture
-//! mechanics' own `blocks`/`redirects`. It is roughly forty lines, it lives in the *test*, and the
-//! geometry module knows nothing about it — which is the whole point.
+//! So the centrepiece is a laser tracer built entirely out of `raycast_all` plus a **test-local**
+//! notion of what stops what. It is about forty lines, it lives here, and the geometry module knows
+//! nothing about it — which is the whole point.
+//!
+//! ⚠ **M04 made that demonstration stronger, not weaker.** These flows used to come from
+//! `FlowKind` and the `Mechanic` trait in the core. Both were deleted with the pre-script seam, so
+//! the stand-in below is now genuinely the test's own — the core cannot be quietly helping. What
+//! returns at M13 is the *dispatch*: the VM calling an authored `affords` in place of `Surface`.
 
-use cv_core::fixtures::{Deflective, Glass};
 use cv_core::{
-    CoarseGeometry, Collider, ContentKind, ContentRegistry, Context, Face, FlowKind, Hit, Mechanic,
-    MechanicRegistry, NodeGraph, NodeKind, NodeState, ObjectId,
+    CoarseGeometry, Collider, ContentRegistry, Context, Face, Hit, NodeGraph, NodeKind, NodeState,
+    ObjectId,
 };
 use cv_determinism::{Aabb, Rng, Vec3};
+use std::collections::BTreeMap;
+
+/// What is travelling. Test-local: the core has no such concept, and that is the property under test.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Flow {
+    Laser,
+    Sight,
+    Ballistic,
+    Walking,
+}
+
+impl Flow {
+    /// Light-like flows pass a transparent pane; physical ones do not.
+    ///
+    /// ⚠ The distinction lives **here**, in the test, not in the geometry. That is the claim: four
+    /// flows, one pane, four answers, and `raycast_all` never learns which is which.
+    fn is_light(self) -> bool {
+        matches!(self, Flow::Laser | Flow::Sight)
+    }
+}
+
+/// What a piece of content says about a flow meeting it.
+///
+/// Stands in for the authored `affords` hook the VM will dispatch at M13.
+trait Surface {
+    fn blocks(&self, flow: Flow) -> bool;
+    fn redirects(&self, _flow: Flow, _direction: Vec3) -> Option<Vec3> {
+        None
+    }
+}
+
+/// Transparent to light, solid to everything physical — the pane in the laser puzzle.
+struct Glass;
+
+impl Surface for Glass {
+    fn blocks(&self, flow: Flow) -> bool {
+        !flow.is_light()
+    }
+}
+
+/// A mirror: passes nothing, reflects light off its normal.
+struct Deflective {
+    normal: Vec3,
+}
+
+impl Deflective {
+    fn facing(normal: Vec3) -> Self {
+        Deflective {
+            normal: normal.normalized(),
+        }
+    }
+}
+
+impl Surface for Deflective {
+    fn blocks(&self, flow: Flow) -> bool {
+        !flow.is_light()
+    }
+    fn redirects(&self, flow: Flow, direction: Vec3) -> Option<Vec3> {
+        flow.is_light()
+            .then(|| direction - self.normal * (2.0 * direction.dot(self.normal)))
+    }
+}
+
+/// The registry the core no longer provides: a map from content to what it says.
+#[derive(Default)]
+struct Surfaces(BTreeMap<ObjectId, Box<dyn Surface>>);
+
+impl Surfaces {
+    fn new() -> Self {
+        Surfaces(BTreeMap::new())
+    }
+    fn register(&mut self, id: ObjectId, s: Box<dyn Surface>) {
+        self.0.insert(id, s);
+    }
+    /// ⚠ Unregistered content says **nothing**, and therefore does not block. That default is right
+    /// — silence must not make a thing solid — so "an obstacle" is something a test states.
+    fn blocks(&self, id: ObjectId, flow: Flow) -> bool {
+        self.0.get(&id).is_some_and(|s| s.blocks(flow))
+    }
+    fn redirects(&self, id: ObjectId, flow: Flow, direction: Vec3) -> Option<Vec3> {
+        self.0.get(&id).and_then(|s| s.redirects(flow, direction))
+    }
+}
 
 fn oid(name: &str) -> ObjectId {
     ObjectId::derived("actor", name)
 }
 
 /// A plain wall: stops everything, deflects nothing.
-///
-/// Needed because `Mechanic::blocks` defaults to **false** — a thing that says nothing about blocking
-/// does not block. That default is right (unregistered content should not silently become solid), but
-/// it does mean "an obstacle" is something a test has to state rather than assume.
 struct Solid;
 
-impl Mechanic for Solid {
-    fn kind(&self) -> ContentKind {
-        ContentKind::Actor
-    }
-    fn blocks(&self, _ctx: &Context<'_>, _flow: FlowKind) -> bool {
+impl Surface for Solid {
+    fn blocks(&self, _flow: Flow) -> bool {
         true
     }
 }
@@ -74,8 +154,8 @@ struct Leg {
 /// and the *only* thing that differs is what the mechanics say. That is the property under test.
 fn trace(
     ctx: &Context<'_>,
-    mechanics: &MechanicRegistry,
-    flow: FlowKind,
+    surfaces: &Surfaces,
+    flow: Flow,
     mut origin: Vec3,
     mut direction: Vec3,
     range: f64,
@@ -89,14 +169,10 @@ fn trace(
         // The first surface that actually stops *this* flow — everything nearer is passed through.
         let stopper = hits
             .iter()
-            .find(|h| !h.from_inside && mechanics.get(h.owner).blocks(ctx, flow));
-        let redirector = hits.iter().find(|h| {
-            !h.from_inside
-                && mechanics
-                    .get(h.owner)
-                    .redirects(ctx, flow, direction)
-                    .is_some()
-        });
+            .find(|h| !h.from_inside && surfaces.blocks(h.owner, flow));
+        let redirector = hits
+            .iter()
+            .find(|h| !h.from_inside && surfaces.redirects(h.owner, flow, direction).is_some());
 
         // Whichever comes first wins; a mirror that also blocked would simply stop the beam.
         let event = match (stopper, redirector) {
@@ -121,7 +197,7 @@ fn trace(
         if blocked {
             return legs;
         }
-        let Some(bounced) = mechanics.get(hit.owner).redirects(ctx, flow, direction) else {
+        let Some(bounced) = surfaces.redirects(hit.owner, flow, direction) else {
             return legs;
         };
         budget -= hit.distance;
@@ -153,36 +229,28 @@ fn a_laser_passes_glass_and_stops_at_stone_while_a_bullet_stops_at_the_glass() {
         box_at(Vec3::new(6.0, 0.0, 0.0), Vec3::new(7.0, 4.0, 4.0)),
     ));
 
-    let mut mechanics = MechanicRegistry::new();
-    mechanics.register(glass, Box::new(Glass));
-    mechanics.register(stone, Box::new(Solid));
+    let mut surfaces = Surfaces::new();
+    surfaces.register(glass, Box::new(Glass));
+    surfaces.register(stone, Box::new(Solid));
 
     let ctx = Context::new(&g, &reg, &placed, &Rng::new(1), "laser").with_geometry(&geometry);
     let start = Vec3::new(0.0, 2.0, 2.0);
 
-    let laser = trace(&ctx, &mechanics, FlowKind::Laser, start, Vec3::X, 20.0, 0);
+    let laser = trace(&ctx, &surfaces, Flow::Laser, start, Vec3::X, 20.0, 0);
     assert_eq!(laser.len(), 1);
     assert_eq!(
         laser[0].to.x, 6.0,
         "the laser passed the glass and stopped at stone"
     );
 
-    let bullet = trace(
-        &ctx,
-        &mechanics,
-        FlowKind::Ballistic,
-        start,
-        Vec3::X,
-        20.0,
-        0,
-    );
+    let bullet = trace(&ctx, &surfaces, Flow::Ballistic, start, Vec3::X, 20.0, 0);
     assert_eq!(bullet.len(), 1);
     assert_eq!(bullet[0].to.x, 2.0, "the bullet stopped at the glass");
 
     // Sight behaves like the laser; walking like the bullet. Same geometry, no geometry changes.
-    let sight = trace(&ctx, &mechanics, FlowKind::Sight, start, Vec3::X, 20.0, 0);
+    let sight = trace(&ctx, &surfaces, Flow::Sight, start, Vec3::X, 20.0, 0);
     assert_eq!(sight[0].to.x, 6.0);
-    let walk = trace(&ctx, &mechanics, FlowKind::Walking, start, Vec3::X, 20.0, 0);
+    let walk = trace(&ctx, &surfaces, Flow::Walking, start, Vec3::X, 20.0, 0);
     assert_eq!(walk[0].to.x, 2.0);
 }
 
@@ -206,17 +274,17 @@ fn a_laser_bounces_off_a_mirror_into_a_catcher() {
         box_at(Vec3::new(-3.0, 0.0, 0.0), Vec3::new(-2.0, 4.0, 4.0)),
     ));
 
-    let mut mechanics = MechanicRegistry::new();
-    mechanics.register(
+    let mut surfaces = Surfaces::new();
+    surfaces.register(
         mirror,
         Box::new(Deflective::facing(Vec3::new(-1.0, 0.0, 0.0))),
     );
-    mechanics.register(catcher, Box::new(Solid));
+    surfaces.register(catcher, Box::new(Solid));
 
     let ctx = Context::new(&g, &reg, &placed, &Rng::new(1), "laser").with_geometry(&geometry);
     let start = Vec3::new(0.0, 2.0, 2.0);
 
-    let legs = trace(&ctx, &mechanics, FlowKind::Laser, start, Vec3::X, 60.0, 4);
+    let legs = trace(&ctx, &surfaces, Flow::Laser, start, Vec3::X, 60.0, 4);
     assert_eq!(legs.len(), 2, "out to the mirror, back to the catcher");
     assert_eq!(legs[0].to.x, 10.0, "reached the mirror");
     assert!(
@@ -226,15 +294,15 @@ fn a_laser_bounces_off_a_mirror_into_a_catcher() {
     );
 
     // Swap the mirror for a plain wall and the catcher goes dark — the bounce was doing the work.
-    let mut plain = MechanicRegistry::new();
+    let mut plain = Surfaces::new();
     plain.register(mirror, Box::new(Solid));
-    let unbounced = trace(&ctx, &plain, FlowKind::Laser, start, Vec3::X, 60.0, 4);
+    let unbounced = trace(&ctx, &plain, Flow::Laser, start, Vec3::X, 60.0, 4);
     assert_eq!(unbounced.len(), 1, "no reflection, no second leg");
     assert_eq!(unbounced[0].to.x, 10.0);
 
     // And an *unregistered* surface does not block at all: the beam sails past everything.
-    let none = MechanicRegistry::new();
-    let unobstructed = trace(&ctx, &none, FlowKind::Laser, start, Vec3::X, 60.0, 4);
+    let none = Surfaces::new();
+    let unobstructed = trace(&ctx, &none, Flow::Laser, start, Vec3::X, 60.0, 4);
     assert_eq!(unobstructed.len(), 1);
     assert_eq!(
         unobstructed[0].to.x, 60.0,
@@ -252,8 +320,8 @@ fn a_bullet_does_not_bounce_off_a_mirror() {
         mirror,
         box_at(Vec3::new(10.0, 0.0, 0.0), Vec3::new(11.0, 4.0, 4.0)),
     ));
-    let mut mechanics = MechanicRegistry::new();
-    mechanics.register(
+    let mut surfaces = Surfaces::new();
+    surfaces.register(
         mirror,
         Box::new(Deflective::facing(Vec3::new(-1.0, 0.0, 0.0))),
     );
@@ -261,8 +329,8 @@ fn a_bullet_does_not_bounce_off_a_mirror() {
     let ctx = Context::new(&g, &reg, &placed, &Rng::new(1), "shot").with_geometry(&geometry);
     let legs = trace(
         &ctx,
-        &mechanics,
-        FlowKind::Ballistic,
+        &surfaces,
+        Flow::Ballistic,
         Vec3::new(0.0, 2.0, 2.0),
         Vec3::X,
         60.0,

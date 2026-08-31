@@ -20,7 +20,6 @@ wasm = ["dep:wasm-bindgen"]
 
 [dependencies]
 cv-core = { workspace = true }
-cv-script = { workspace = true }
 cv-vm = { workspace = true }
 cv-determinism = { workspace = true }
 napi = { workspace = true, optional = true }

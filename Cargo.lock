@@ -144,7 +144,6 @@ version = "0.1.0"
 dependencies = [
  "cv-core",
  "cv-determinism",
- "cv-script",
  "cv-vm",
  "napi",
  "napi-build",
@@ -159,7 +158,6 @@ dependencies = [
  "clap",
  "cv-core",
  "cv-determinism",
- "cv-script",
 ]
 
 [[package]]
@@ -179,19 +177,11 @@ name = "cv-editor-backend"
 version = "0.1.0"
 dependencies = [
  "cv-core",
- "cv-script",
 ]
 
 [[package]]
 name = "cv-manifest"
 version = "0.1.0"
-
-[[package]]
-name = "cv-script"
-version = "0.1.0"
-dependencies = [
- "cv-determinism",
-]
 
 [[package]]
 name = "cv-vm"

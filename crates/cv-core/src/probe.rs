@@ -16,7 +16,7 @@
 //! The blob covers: arenas with vacant slots and cyclic handle references, object identity, the scope
 //! graph across every kind and lifecycle state, the content registry, a fingerprint computed from it,
 //! the host-facing `WorldDescriptor` (both placement forms, mirroring, sockets, tags, rationale), and
-//! the event stream, and the mechanic-interface values (traversals, volumes, per-flow answers) taken
+//! and the event stream, taken
 //! from the fixtures rather than written by hand. The descriptor especially matters here — it is the
 //! artifact that actually *ships* to a host, so it differing between targets would be a shipped bug
 //! rather than an internal one.
@@ -33,16 +33,13 @@
 
 use crate::arena::{Arena, Handle};
 use crate::content::{ContentKind, ContentRegistry};
-use crate::context::Context;
 use crate::descriptor::{
     DescriptorBuilder, InstanceRecord, MeshRecord, Placement, PlacementReason, Rationale, ScopeRef,
     Socket, SpineSlotTag, WorldDescriptor,
 };
 use crate::events::GenEvent;
 use crate::fingerprint::{Fingerprint, FingerprintBuilder, ReproductionBundle};
-use crate::fixtures::{Deflective, Door, Glass, KeyItem, Ledge, MovementUnlock};
 use crate::geometry::{CoarseGeometry, Collider, Face, Hit};
-use crate::mechanic::{FlowKind, Mechanic, Traversal, TraversalKind, Volume};
 use crate::mission::{MissionEdge, Rule};
 use crate::node::{NodeGraph, NodeKind, NodeState};
 use crate::object::{IdAllocator, ObjectHeader, ObjectId};
@@ -104,9 +101,6 @@ struct ProbeWorld {
     bundle: ReproductionBundle,
     descriptor: WorldDescriptor,
     events: Vec<GenEvent>,
-    traversals: Vec<Traversal>,
-    volumes: Vec<Volume>,
-    flows: Vec<FlowKind>,
     schedules: ScheduleBook,
     seed_policy: SeedPolicy,
     schedule_math: Vec<u8>,
@@ -130,9 +124,6 @@ impl Serialize for ProbeWorld {
         w.write(&self.bundle);
         w.write(&self.descriptor);
         w.write(&self.events);
-        w.write(&self.traversals);
-        w.write(&self.volumes);
-        w.write(&self.flows);
         w.write(&self.schedules);
         w.write(&self.seed_policy);
         w.bytes(&self.schedule_math);
@@ -269,7 +260,7 @@ fn build() -> ProbeWorld {
                 header: ObjectHeader::derived("probe", format!("reused_{i}")),
                 links: vec![handles[0]],
                 parent: Some(handles[2]),
-                weight: f64::from(i) + 0.5,
+                weight: i as f64 + 0.5,
                 count: u64::MAX - i as u64,
                 delta: i64::MIN + i as i64,
                 enabled: i == 0,
@@ -299,7 +290,6 @@ fn build() -> ProbeWorld {
     let scopes = build_scopes();
     let descriptor = build_descriptor(&scopes, bundle.fingerprint, bundle.seed);
     let events = build_events(bundle.fingerprint, bundle.seed);
-    let (traversals, volumes, flows) = build_mechanic_values();
     let (schedules, seed_policy, schedule_math) = build_schedule_values();
     let (rules, mission_edges) = build_mission_values();
     let (strictness, unlock_refs, spine_math) = build_spine_values();
@@ -313,9 +303,6 @@ fn build() -> ProbeWorld {
         bundle,
         descriptor,
         events,
-        traversals,
-        volumes,
-        flows,
         schedules,
         seed_policy,
         schedule_math,
@@ -575,45 +562,6 @@ fn build_descriptor(scopes: &NodeGraph, fingerprint: Fingerprint, seed: u64) -> 
         },
     );
     b.finish()
-}
-
-/// The mechanic-interface value types, exercised through the fixtures rather than by hand — so the
-/// probe covers what a mechanic actually *returns*, not just that the types encode.
-fn build_mechanic_values() -> (Vec<Traversal>, Vec<Volume>, Vec<FlowKind>) {
-    let ctx = Context::detached();
-    let dash = ObjectId::derived("unlock", "blink_dash");
-
-    let mut traversals = Vec::new();
-    traversals.extend(Door::locked_by(dash).affords(&ctx));
-    traversals.extend(Ledge.affords(&ctx));
-    traversals.extend(MovementUnlock::new("Blink Dash", TraversalKind::Blink).affords(&ctx));
-    traversals.push(Traversal::gated(TraversalKind::Custom(9), [dash]).one_way());
-
-    let volumes: Vec<Volume> = [
-        Door::locked_by(dash).footprint(&ctx),
-        KeyItem::granting(dash).footprint(&ctx),
-        Some(Volume::with_clearance(
-            Aabb::new(Vec3::new(-0.1, 0.0, 3.3), Vec3::new(1.9, 4.25, 4.0)),
-            0.125,
-        )),
-    ]
-    .into_iter()
-    .flatten()
-    .collect();
-
-    // Which flows each surface stops — the per-flow answers, not just the enum tags.
-    let mut flows = Vec::new();
-    for f in FlowKind::CORE {
-        if Glass.blocks(&ctx, f) {
-            flows.push(f);
-        }
-        if Deflective::facing(Vec3::Z).blocks(&ctx, f) {
-            flows.push(f);
-        }
-    }
-    flows.push(FlowKind::Custom(77));
-
-    (traversals, volumes, flows)
 }
 
 /// Scheduling config plus the **computed** results of the AdaptiveRange formula.

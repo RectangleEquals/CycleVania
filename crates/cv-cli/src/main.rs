@@ -27,10 +27,9 @@ fn main() {
             if dry {
                 println!(
                     "cv build --dry: pipeline is a no-op (M00 bootstrap). \
-                     core {}, determinism {}, script {}.",
+                     core {}, determinism {}.",
                     cv_core::version(),
                     cv_determinism::version(),
-                    cv_script::version(),
                 );
             } else {
                 println!(
