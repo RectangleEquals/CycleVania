@@ -1509,9 +1509,9 @@ export interface CurveTableResource extends Resource {
 }
 
 /**
- * Supplies the x a curve row is sampled at. Built-ins cover depth, space count, capability count
- * and sphere; a developer subclasses it for anything else, which is the only way to say
- * 'complexity gains weight each time a boss is placed'.
+ * Supplies the x a curve row is sampled at. Built-ins cover depth, space count, token count and
+ * sphere; a developer subclasses it for anything else, which is the only way to say 'complexity
+ * gains weight each time a boss is placed'.
  */
 export interface ProgressionAxis extends Object {
   /**
@@ -1540,7 +1540,7 @@ export interface SpaceCount extends ProgressionAxis {
 /**
  * How many progression tokens are held.
  */
-export interface CapabilityCount extends ProgressionAxis {
+export interface TokenCount extends ProgressionAxis {
 }
 
 /**
@@ -1697,7 +1697,7 @@ export interface PlacementNeed extends Object {
 }
 
 /**
- * Something carrying this component must exist, reachable by this route.
+ * Something carrying this component must exist, accessible by this route.
  */
 export interface NeedsActor extends PlacementNeed {
   /**
@@ -1705,7 +1705,7 @@ export interface NeedsActor extends PlacementNeed {
    */
   having: ClassPath<Component>;
   /**
-   * How it must be reachable.
+   * How it must be accessible.
    */
   route: InstanceRef<Route>;
 }
@@ -2340,7 +2340,7 @@ export type ItemClass =
   | "PROGRESSION"
   /** Tunes route difficulty, spends slack, never gates. */
   | "USEFUL"
-  /** Rewards optional exploration. Auto-assigned to anything reachable solely through a relaxation. */
+  /** Rewards optional exploration. Auto-assigned to anything accessible solely through a relaxation. */
   | "BONUS"
   /** Satisfies density. Currency, ammo, consumables. */
   | "FILLER";

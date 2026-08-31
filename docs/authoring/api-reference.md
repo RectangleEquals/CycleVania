@@ -808,7 +808,7 @@ One or more NAMED CURVES over one NAMED DOMAIN AXIS. One resource type where UE 
 
 **abstract** — a subclass must answer
 
-Supplies the x a curve row is sampled at. Built-ins cover depth, space count, capability count and sphere; a developer subclasses it for anything else, which is the only way to say 'complexity gains weight each time a boss is placed'.
+Supplies the x a curve row is sampled at. Built-ins cover depth, space count, token count and sphere; a developer subclasses it for anything else, which is the only way to say 'complexity gains weight each time a boss is placed'.
 
 `/Core/ProgressionAxis`
 
@@ -832,11 +832,11 @@ How many Spaces exist so far.
 
 `/Core/SpaceCount`
 
-### `CapabilityCount` — extends `ProgressionAxis`
+### `TokenCount` — extends `ProgressionAxis`
 
 How many progression tokens are held.
 
-`/Core/CapabilityCount`
+`/Core/TokenCount`
 
 ### `Sphere` — extends `ProgressionAxis`
 
@@ -932,14 +932,14 @@ What requires() returns. The channel that makes the generator place enabling con
 
 ### `NeedsActor` — extends `PlacementNeed`
 
-Something carrying this component must exist, reachable by this route.
+Something carrying this component must exist, accessible by this route.
 
 `/Core/NeedsActor`
 
 | Field | Type | | |
 |---|---|---|---|
 | `having` | `Kind<Component>` | mutable · exposed | The component the needed actor must carry. A CLASS reference — nothing is constructed. |
-| `route` | `Ref<Route>` | mutable · exposed | How it must be reachable. |
+| `route` | `Ref<Route>` | mutable · exposed | How it must be accessible. |
 
 ### `NeedsClearance` — extends `PlacementNeed`
 
@@ -1410,7 +1410,7 @@ What kind of reward something is. An INPUT the developer declares.
 |---|---|
 | `PROGRESSION` | May appear in logic. The conservative default. |
 | `USEFUL` | Tunes route difficulty, spends slack, never gates. |
-| `BONUS` | Rewards optional exploration. Auto-assigned to anything reachable solely through a relaxation. |
+| `BONUS` | Rewards optional exploration. Auto-assigned to anything accessible solely through a relaxation. |
 | `FILLER` | Satisfies density. Currency, ammo, consumables. |
 
 ### `CollisionLayer`

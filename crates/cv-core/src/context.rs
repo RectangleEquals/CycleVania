@@ -164,7 +164,7 @@ impl<'a> Context<'a> {
 
     /// Read-only access to the scope graph.
     ///
-    /// Read-only is not a matter of trust: [`NodeGraph`]'s mutators are simply not reachable through a
+    /// Read-only is not a matter of trust: [`NodeGraph`]'s mutators are simply not accessible through a
     /// shared reference, so a mechanic cannot write structure even if it tried.
     pub fn graph(&self) -> Option<&NodeGraph> {
         self.world.as_ref().map(|w| w.graph)

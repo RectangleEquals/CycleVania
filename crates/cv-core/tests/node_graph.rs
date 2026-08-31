@@ -208,7 +208,7 @@ fn a_corrupt_graph_is_rejected_at_load_not_discovered_later() {
     let (g, _, _, _) = build_world();
     let mut bytes = to_bytes(&g);
 
-    // The root handle is written directly after the arena; corrupting it is the simplest reachable
+    // The root handle is written directly after the arena; corrupting it is the simplest accessible
     // structural break, and must be caught rather than parsed into a graph with no valid root.
     let tail = bytes.len() - 8 /*seed*/ - 8 /*scale*/ - 8 /*ids*/ - 8 /*root handle*/;
     bytes[tail] = 0xFE;

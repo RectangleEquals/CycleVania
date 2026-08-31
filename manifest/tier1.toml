@@ -2599,7 +2599,7 @@ extends = "/Core/Object"
 kind = "object"
 abstract = true
 status = "stable"
-doc = "Supplies the x a curve row is sampled at. Built-ins cover depth, space count, capability count and sphere; a developer subclasses it for anything else, which is the only way to say 'complexity gains weight each time a boss is placed'."
+doc = "Supplies the x a curve row is sampled at. Built-ins cover depth, space count, token count and sphere; a developer subclasses it for anything else, which is the only way to say 'complexity gains weight each time a boss is placed'."
   [[class.field]]
   name = "name"
   type = "String"
@@ -2632,7 +2632,7 @@ status = "stable"
 doc = "How many Spaces exist so far."
 
 [[class]]
-path = "/Core/CapabilityCount"
+path = "/Core/TokenCount"
 extends = "/Core/ProgressionAxis"
 kind = "object"
 status = "stable"
@@ -2899,7 +2899,7 @@ path = "/Core/NeedsActor"
 extends = "/Core/PlacementNeed"
 kind = "object"
 status = "stable"
-doc = "Something carrying this component must exist, reachable by this route."
+doc = "Something carrying this component must exist, accessible by this route."
   [[class.field]]
   name = "having"
   type = "Kind<Component>"
@@ -2915,7 +2915,7 @@ doc = "Something carrying this component must exist, reachable by this route."
   mutable = true
   exposed = true
   status = "stable"
-  doc = "How it must be reachable."
+  doc = "How it must be accessible."
 
 [[class]]
 path = "/Core/NeedsClearance"
@@ -3805,7 +3805,7 @@ doc = "What kind of reward something is. An INPUT the developer declares."
   doc = "Tunes route difficulty, spends slack, never gates."
   [[class.value]]
   name = "BONUS"
-  doc = "Rewards optional exploration. Auto-assigned to anything reachable solely through a relaxation."
+  doc = "Rewards optional exploration. Auto-assigned to anything accessible solely through a relaxation."
   [[class.value]]
   name = "FILLER"
   doc = "Satisfies density. Currency, ammo, consumables."

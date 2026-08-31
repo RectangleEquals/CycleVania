@@ -25,9 +25,10 @@ fn registry() -> ContentRegistry {
         .unwrap();
     r.register(ContentKind::Item, "crawler/key_bronze", 0x1002)
         .unwrap();
-    r.register(ContentKind::Capability, "blink_dash", 0x1003)
+    r.register(ContentKind::Token, "blink_dash", 0x1003)
         .unwrap();
-    r.register(ContentKind::Biome, "caverns", 0x1004).unwrap();
+    r.register(ContentKind::Puzzle, "crawler/gate_relay", 0x1004)
+        .unwrap();
     r.register(ContentKind::Component, "hinge", 0x1005).unwrap();
     r
 }
@@ -130,7 +131,7 @@ fn changing_the_recipe_changes_the_fingerprint() {
     // Content added.
     let mut extended = registry();
     extended
-        .register(ContentKind::Motif, "ruins", 0x2001)
+        .register(ContentKind::Spine, "spines/ascent", 0x2001)
         .unwrap();
     assert_ne!(original, recipe_of(&extended, "0.1.0", 1.0));
 
@@ -187,10 +188,10 @@ fn the_registry_actually_influences_the_world() {
         .register(ContentKind::Item, "other/key", 0x1002)
         .unwrap();
     swapped
-        .register(ContentKind::Capability, "other_dash", 0x1003)
+        .register(ContentKind::Token, "other_dash", 0x1003)
         .unwrap();
     swapped
-        .register(ContentKind::Biome, "other_caverns", 0x1004)
+        .register(ContentKind::Puzzle, "crawler/other_relay", 0x1004)
         .unwrap();
 
     assert_ne!(

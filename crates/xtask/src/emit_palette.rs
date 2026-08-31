@@ -18,7 +18,7 @@
 //! costs anything — *the signal a method sends is cost*.
 //!
 //! Only `stable` members are emitted. A `proposed` member exists in the manifest and the reference
-//! but must not be reachable from the palette, or content starts depending on it.
+//! but must not be accessible from the palette, or content starts depending on it.
 
 use cv_manifest::model::{Class, Kind, Status};
 use cv_manifest::Manifest;

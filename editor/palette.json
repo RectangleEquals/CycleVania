@@ -4833,7 +4833,7 @@
       "label": "get route",
       "category": "NeedsActor",
       "shape": "pure",
-      "doc": "How it must be reachable.",
+      "doc": "How it must be accessible.",
       "pins": [
         { "name": "self", "type": "Ref<NeedsActor>", "dir": "in" },
         { "name": "value", "type": "Ref<Route>", "dir": "out" }
@@ -4844,7 +4844,7 @@
       "label": "set route",
       "category": "NeedsActor",
       "shape": "call",
-      "doc": "How it must be reachable.",
+      "doc": "How it must be accessible.",
       "pins": [
         { "name": "in", "type": "exec", "dir": "in" },
         { "name": "self", "type": "Ref<NeedsActor>", "dir": "in" },

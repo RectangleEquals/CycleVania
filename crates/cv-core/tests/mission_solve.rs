@@ -17,7 +17,7 @@ use cv_core::{
 use cv_determinism::{Aabb, Rng, Vec3};
 
 fn cap(i: usize) -> ObjectId {
-    ObjectId::derived("capability", &format!("cap_{i}"))
+    ObjectId::derived("token", &format!("cap_{i}"))
 }
 
 fn item(i: usize) -> ObjectId {
@@ -121,16 +121,16 @@ fn every_generated_world_is_completable() {
                         panic!("{areas}x{per_area} dial {dial:?} seed {seed}: {e}")
                     });
 
-                // Every capability is obtainable...
+                // Every token is obtainable...
                 for i in 0..3 {
                     assert!(
-                        solution.reachability.held.contains(&cap(i)),
+                        solution.accessibility.held.contains(&cap(i)),
                         "{areas}x{per_area} seed {seed}: cap_{i} is unobtainable"
                     );
                 }
                 // ...and the far end of the world is reached.
                 assert!(
-                    solution.reachability.reaches(*spaces.last().unwrap()),
+                    solution.accessibility.accessible(*spaces.last().unwrap()),
                     "{areas}x{per_area} seed {seed}: the world does not complete"
                 );
                 worlds += 1;
@@ -151,7 +151,7 @@ fn every_generated_world_is_completable() {
 #[test]
 fn a_key_is_never_placed_behind_the_lock_it_opens() {
     // Stated directly rather than inferred from completability: for every placement, the room holding
-    // the key must be reachable *without* that key.
+    // the key must be accessible *without* that key.
     let (g, spaces) = build_world(3, 4);
     let resolver = LinearityResolver::new(Linearity::default());
 
@@ -165,7 +165,7 @@ fn a_key_is_never_placed_behind_the_lock_it_opens() {
             else {
                 continue;
             };
-            // Reachability with every capability *except* this one.
+            // Accessibility with every token *except* this one.
             let without: std::collections::BTreeSet<ObjectId> =
                 (0..3).map(cap).filter(|c| *c != granted).collect();
             let r = mission.sweep(
@@ -180,7 +180,7 @@ fn a_key_is_never_placed_behind_the_lock_it_opens() {
                 .1
                 .scope;
             assert!(
-                r.reaches(scope),
+                r.accessible(scope),
                 "seed {seed}: {placed} sits somewhere needing {granted} to reach"
             );
         }
@@ -252,7 +252,7 @@ fn gating_creates_real_progression_structure() {
     let (g, spaces) = build_world(3, 4);
     let resolver = LinearityResolver::new(Linearity::default());
 
-    // Ungated: everything is reachable immediately — a single sphere.
+    // Ungated: everything is accessible immediately — a single sphere.
     let caps: Vec<ObjectId> = (0..3).map(cap).collect();
     let items: Vec<ObjectId> = (0..3).map(item).collect();
     let mut solver = Solver::new(&g, &resolver);
@@ -278,8 +278,8 @@ fn gating_creates_real_progression_structure() {
         "gating must produce progression, got {} spheres",
         staged.depth()
     );
-    // Sphere 0 needs nothing; later spheres exist only because capabilities were found.
-    assert!(!staged.reachability.spheres[0].granted.is_empty() || staged.depth() == 1);
+    // Sphere 0 needs nothing; later spheres exist only because tokens were found.
+    assert!(!staged.accessibility.spheres[0].granted.is_empty() || staged.depth() == 1);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -325,7 +325,7 @@ fn an_unsolvable_world_is_reported_rather_than_returned_broken() {
     let resolver = LinearityResolver::new(Linearity::default());
     let solver = Solver::new(&g, &resolver);
     let err = solver.fill(&mission, &[item(0)], &Rng::new(1)).unwrap_err();
-    assert!(matches!(err, SolveError::NoReachableLocation { .. }));
+    assert!(matches!(err, SolveError::NoAccessibleLocation { .. }));
 }
 
 #[test]
@@ -347,6 +347,6 @@ fn the_solution_explains_itself() {
     // Rules read back as something a human can check.
     for edge in mission.edges().iter().filter(|e| e.is_gated()) {
         assert!(!edge.rule.to_string().is_empty());
-        assert!(!edge.rule.capabilities().is_empty());
+        assert!(!edge.rule.tokens().is_empty());
     }
 }

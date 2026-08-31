@@ -3832,7 +3832,7 @@ pub const CLASSES: &[ClassDesc] = &[
         sealed: false,
         is_abstract: true,
         status: Status::Stable,
-        doc: "Supplies the x a curve row is sampled at. Built-ins cover depth, space count, capability count and sphere; a developer subclasses it for anything else, which is the only way to say 'complexity gains weight each time a boss is placed'.",
+        doc: "Supplies the x a curve row is sampled at. Built-ins cover depth, space count, token count and sphere; a developer subclasses it for anything else, which is the only way to say 'complexity gains weight each time a boss is placed'.",
         fields: &[
             FieldDesc {
                 name: "name",
@@ -3896,7 +3896,7 @@ pub const CLASSES: &[ClassDesc] = &[
         ],
     },
     ClassDesc {
-        path: "/Core/CapabilityCount",
+        path: "/Core/TokenCount",
         extends: Some("/Core/ProgressionAxis"),
         kind: DeclKind::Object,
         sealed: false,
@@ -4330,7 +4330,7 @@ pub const CLASSES: &[ClassDesc] = &[
         sealed: false,
         is_abstract: false,
         status: Status::Stable,
-        doc: "Something carrying this component must exist, reachable by this route.",
+        doc: "Something carrying this component must exist, accessible by this route.",
         fields: &[
             FieldDesc {
                 name: "having",
@@ -4351,7 +4351,7 @@ pub const CLASSES: &[ClassDesc] = &[
                 exposed: true,
                 mutable: true,
                 status: Status::Stable,
-                doc: "How it must be reachable.",
+                doc: "How it must be accessible.",
                 default: None,
             },
         ],
@@ -5932,7 +5932,7 @@ pub const CLASSES: &[ClassDesc] = &[
         values: &[
             ValueDesc { name: "PROGRESSION", doc: "May appear in logic. The conservative default." },
             ValueDesc { name: "USEFUL", doc: "Tunes route difficulty, spends slack, never gates." },
-            ValueDesc { name: "BONUS", doc: "Rewards optional exploration. Auto-assigned to anything reachable solely through a relaxation." },
+            ValueDesc { name: "BONUS", doc: "Rewards optional exploration. Auto-assigned to anything accessible solely through a relaxation." },
             ValueDesc { name: "FILLER", doc: "Satisfies density. Currency, ammo, consumables." },
         ],
     },

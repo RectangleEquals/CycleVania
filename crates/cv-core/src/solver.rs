@@ -8,7 +8,7 @@
 //! solvable collapse, and the generator spends its time rejecting worlds.
 //!
 //! **Assumed fill** inverts it. Items are placed one at a time, and each is placed only somewhere
-//! reachable *without it*. That single rule makes a circular dependency — the key behind the door it
+//! accessible *without it*. That single rule makes a circular dependency — the key behind the door it
 //! opens — impossible to create, so there is nothing to check afterwards. Every world the solver
 //! returns is completable, and the sphere analysis it produces along the way *proves* it.
 //!
@@ -17,7 +17,7 @@
 //! How linear a world feels is a design decision, not an artefact of the algorithm:
 //!
 //! * **`progression_locality`** — how far a key may sit from the lock it opens. `0.0` puts it in or
-//!   beside the gated room (Portal-style, no backtracking); `1.0` allows anywhere reachable
+//!   beside the gated room (Portal-style, no backtracking); `1.0` allows anywhere accessible
 //!   (MP1-style, heavy backtracking).
 //! * **`cycle_density`** — how much the topology loops. `0.0` is a pure chain; `1.0` adds every
 //!   shortcut it reasonably can, producing fork-and-reconverge structure.
@@ -27,7 +27,7 @@
 //! default**, so a mostly non-linear world can contain a strictly linear stretch without special
 //! cases. See `01-core/pipeline.md` for the full linearity model.
 
-use crate::mission::{Location, LocationId, MissionEdge, MissionGraph, Reachability, Rule};
+use crate::mission::{Accessibility, Location, LocationId, MissionEdge, MissionGraph, Rule};
 use crate::node::{Node, NodeGraph, NodeKind};
 use crate::object::ObjectId;
 use crate::Handle;
@@ -173,8 +173,8 @@ impl LinearityResolver {
 pub enum SolveError {
     /// More progression items than places to put them.
     NotEnoughLocations { items: usize, locations: usize },
-    /// An item had nowhere reachable to go — the world is gated in a way that admits no solution.
-    NoReachableLocation {
+    /// An item had nowhere accessible to go — the world is gated in a way that admits no solution.
+    NoAccessibleLocation {
         item: ObjectId,
         placed_so_far: usize,
     },
@@ -190,12 +190,12 @@ impl fmt::Display for SolveError {
                 "{items} progression items but only {locations} locations — \
                  either schedule more slots or gate less"
             ),
-            SolveError::NoReachableLocation {
+            SolveError::NoAccessibleLocation {
                 item,
                 placed_so_far,
             } => write!(
                 f,
-                "no reachable location for {item} after placing {placed_so_far}; \
+                "no accessible location for {item} after placing {placed_so_far}; \
                  the gating admits no solvable arrangement"
             ),
             SolveError::UnmetDemand { content } => {
@@ -232,7 +232,7 @@ pub struct Solution {
     /// What went where.
     pub placements: BTreeMap<LocationId, ObjectId>,
     /// The progression, sphere by sphere.
-    pub reachability: Reachability,
+    pub accessibility: Accessibility,
     /// Why each item landed where it did.
     pub traces: Vec<PlacementTrace>,
     /// How many orderings were tried before one worked.
@@ -246,14 +246,14 @@ pub struct Solution {
 impl Solution {
     /// How many rounds of progression the world has.
     pub fn depth(&self) -> u32 {
-        self.reachability.depth()
+        self.accessibility.depth()
     }
 
-    /// Is every location reachable?
+    /// Is every location accessible?
     ///
     /// `false` is not necessarily wrong — a world may hold optional pockets — but it is worth knowing.
-    pub fn fully_reachable(&self, mission: &MissionGraph) -> bool {
-        mission.location_count() == self.reachability.locations.len()
+    pub fn fully_accessible(&self, mission: &MissionGraph) -> bool {
+        mission.location_count() == self.accessibility.locations.len()
     }
 }
 
@@ -265,9 +265,9 @@ impl Solution {
 pub struct Solver<'a> {
     graph: &'a NodeGraph,
     linearity: &'a LinearityResolver,
-    /// Item content id → the capability obtaining it grants.
+    /// Item content id → the token obtaining it grants.
     grants: BTreeMap<ObjectId, ObjectId>,
-    /// Capabilities the player starts with.
+    /// Tokens the player starts with.
     initial: BTreeSet<ObjectId>,
 }
 
@@ -282,19 +282,19 @@ impl<'a> Solver<'a> {
         }
     }
 
-    /// Declare that obtaining `item` grants `capability`.
-    pub fn with_grant(mut self, item: ObjectId, capability: ObjectId) -> Self {
-        self.grants.insert(item, capability);
+    /// Declare that obtaining `item` grants `token`.
+    pub fn with_grant(mut self, item: ObjectId, token: ObjectId) -> Self {
+        self.grants.insert(item, token);
         self
     }
 
-    /// Declare a capability the player starts with.
-    pub fn with_initial(mut self, capability: ObjectId) -> Self {
-        self.initial.insert(capability);
+    /// Declare a token the player starts with.
+    pub fn with_initial(mut self, token: ObjectId) -> Self {
+        self.initial.insert(token);
         self
     }
 
-    /// The item→capability map.
+    /// The item→token map.
     pub fn grants(&self) -> &BTreeMap<ObjectId, ObjectId> {
         &self.grants
     }
@@ -346,7 +346,7 @@ impl<'a> Solver<'a> {
         added
     }
 
-    /// **Assumed fill.** Place every item somewhere reachable without it.
+    /// **Assumed fill.** Place every item somewhere accessible without it.
     ///
     /// Items are consumed from the back of `items`. At each step the sweep assumes the player holds
     /// everything *still unplaced*, which is what lets an item legitimately sit deep in the world: the
@@ -415,8 +415,8 @@ impl<'a> Solver<'a> {
                 }
             }
 
-            let reachable = mission.sweep(&assumed, &placements, &self.grants);
-            let open: Vec<LocationId> = reachable
+            let accessible = mission.sweep(&assumed, &placements, &self.grants);
+            let open: Vec<LocationId> = accessible
                 .locations
                 .iter()
                 .filter(|l| !placements.contains_key(l))
@@ -424,7 +424,7 @@ impl<'a> Solver<'a> {
                 .collect();
 
             if open.is_empty() {
-                return Err(SolveError::NoReachableLocation {
+                return Err(SolveError::NoAccessibleLocation {
                     item,
                     placed_so_far: placements.len(),
                 });
@@ -442,12 +442,12 @@ impl<'a> Solver<'a> {
             placements.insert(location, item);
         }
 
-        let reachability = mission.sweep(&self.initial, &placements, &self.grants);
+        let accessibility = mission.sweep(&self.initial, &placements, &self.grants);
         // Reverse so the trace reads in placement order rather than pop order.
         traces.reverse();
         Ok(Solution {
             placements,
-            reachability,
+            accessibility,
             traces,
             attempts: attempt + 1,
         })
@@ -457,7 +457,7 @@ impl<'a> Solver<'a> {
     ///
     /// Locality is applied as a **bias, not a filter**. Filtering would make a low dial unsatisfiable
     /// whenever no nearby location happened to be open, turning a preference into a failure; biasing
-    /// degrades to "the closest available" instead. `1.0` is uniform over everything reachable.
+    /// degrades to "the closest available" instead. `1.0` is uniform over everything accessible.
     fn choose_location(
         &self,
         mission: &MissionGraph,
@@ -544,7 +544,7 @@ impl<'a> Solver<'a> {
     /// Turn a fraction of edges into **one-way commits** — a drop you cannot climb back up.
     ///
     /// These are what make a world feel like it has consequences, and they are also the only way a
-    /// player can strand themselves (capabilities are monotone, so collecting never hurts). The
+    /// player can strand themselves (tokens are monotone, so collecting never hurts). The
     /// un-softlockable pass (M10) exists to check exactly what this introduces, and should be run
     /// afterwards — generating commits without validating them is how a shipped softlock happens.
     ///
@@ -588,15 +588,15 @@ impl<'a> Solver<'a> {
     ///
     /// Walks the graph outward from the start and gates a fraction of the edges that lead *away* from
     /// it, so a gate always sits between the player and something new rather than sealing a dead end.
-    /// Which capability gates which edge is drawn deterministically from `capabilities`.
+    /// Which token gates which edge is drawn deterministically from `tokens`.
     pub fn gate_edges(
         &self,
         mission: &mut MissionGraph,
-        capabilities: &[ObjectId],
+        tokens: &[ObjectId],
         gate_fraction: f64,
         rng: &Rng,
     ) -> usize {
-        if capabilities.is_empty() {
+        if tokens.is_empty() {
             return 0;
         }
         let distances = mission.distances_from(mission.start());
@@ -617,21 +617,21 @@ impl<'a> Solver<'a> {
             })
             .collect();
 
-        // Map depth onto the capability list *proportionally*, not by raw index.
+        // Map depth onto the token list *proportionally*, not by raw index.
         //
         // Using the depth directly is wrong and produces unsolvable worlds: the first edge out of the
-        // start would be gated on capability #1, whose item can only live beyond that very edge. The
+        // start would be gated on token #1, whose item can only live beyond that very edge. The
         // world seals itself at the door. Scaling by the world's actual depth keeps shallow gates on
-        // early capabilities and deep gates on late ones, which is what "gating follows progression"
+        // early tokens and deep gates on late ones, which is what "gating follows progression"
         // has to mean.
         let max_depth = candidates.iter().map(|(_, d)| *d).max().unwrap_or(1).max(1) as usize;
         for (index, depth) in candidates {
             if !decide.fork(&index.to_string()).chance(gate_fraction) {
                 continue;
             }
-            let scaled = depth.saturating_sub(1) as usize * capabilities.len() / max_depth;
-            let pick = scaled.min(capabilities.len() - 1);
-            mission.gate_edge(index, Rule::has(capabilities[pick]));
+            let scaled = depth.saturating_sub(1) as usize * tokens.len() / max_depth;
+            let pick = scaled.min(tokens.len() - 1);
+            mission.gate_edge(index, Rule::has(tokens[pick]));
             gated += 1;
         }
         gated
@@ -644,7 +644,7 @@ mod tests {
     use crate::mission::Location;
 
     fn cap(name: &str) -> ObjectId {
-        ObjectId::derived("capability", name)
+        ObjectId::derived("token", name)
     }
 
     fn item(name: &str) -> ObjectId {
@@ -716,7 +716,7 @@ mod tests {
             .fill(&mission, &[key], &Rng::new(1))
             .expect("solvable");
 
-        // The key must be in a room reachable *before* the gate.
+        // The key must be in a room accessible *before* the gate.
         let loc = solution
             .placements
             .iter()
@@ -735,7 +735,7 @@ mod tests {
             "the key must be findable without itself"
         );
         assert!(
-            solution.reachability.reaches(*rooms.last().unwrap()),
+            solution.accessibility.accessible(*rooms.last().unwrap()),
             "and the world completes"
         );
     }
@@ -763,13 +763,13 @@ mod tests {
             // Every item is obtainable...
             for c in &caps {
                 assert!(
-                    solution.reachability.held.contains(c),
+                    solution.accessibility.held.contains(c),
                     "seed {seed}: {c} unobtainable"
                 );
             }
             // ...and the far end of the world is reached.
             assert!(
-                solution.reachability.reaches(*rooms.last().unwrap()),
+                solution.accessibility.accessible(*rooms.last().unwrap()),
                 "seed {seed}: the world does not complete"
             );
         }
@@ -895,12 +895,12 @@ mod tests {
         let result = solver.fill(&mission, &[item("a")], &Rng::new(1));
         assert!(matches!(
             result,
-            Err(SolveError::NoReachableLocation { .. })
+            Err(SolveError::NoAccessibleLocation { .. })
         ));
         assert!(result
             .unwrap_err()
             .to_string()
-            .contains("no reachable location"));
+            .contains("no accessible location"));
     }
 
     #[test]

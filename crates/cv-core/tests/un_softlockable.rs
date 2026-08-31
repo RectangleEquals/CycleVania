@@ -1,4 +1,4 @@
-//! M10 exit criteria: no reachable state strands the goal.
+//! M10 exit criteria: no accessible state strands the goal.
 //!
 //! Three things have to hold, and they are genuinely different claims:
 //!
@@ -7,7 +7,7 @@
 //!    that does not work.
 //! 2. **Generated worlds end up safe.** Run the whole pipeline with one-way commits enabled across
 //!    many seeds, repair, and verify nothing strands.
-//! 3. **The cost is bounded and measured.** The pass enumerates capability sets, so its price has to
+//! 3. **The cost is bounded and measured.** The pass enumerates token sets, so its price has to
 //!    be a known quantity rather than a hope.
 //!
 //! Note that (2) is meaningless without (1): a detector that always returns "safe" would pass the
@@ -21,7 +21,7 @@ use cv_determinism::{Aabb, Rng, Vec3};
 use std::collections::BTreeMap;
 
 fn cap(i: usize) -> ObjectId {
-    ObjectId::derived("capability", &format!("cap_{i}"))
+    ObjectId::derived("token", &format!("cap_{i}"))
 }
 fn item(i: usize) -> ObjectId {
     ObjectId::derived("item", &format!("item_{i}"))
@@ -133,7 +133,7 @@ fn a_trap_needing_partial_progress_is_detected() {
         .iter()
         .find(|h| h.holding.contains(&cap(0)) && !h.holding.contains(&cap(1)))
         .expect("the trapping state is 'holds cap_0, skipped cap_1'");
-    assert_eq!(trap.kind, SoftlockKind::GoalUnreachable);
+    assert_eq!(trap.kind, SoftlockKind::GoalInaccessible);
 }
 
 #[test]
@@ -288,7 +288,7 @@ fn loops_are_themselves_a_softlock_mitigation() {
 
 #[test]
 fn repair_preserves_solvability() {
-    // Making an edge reversible can only *add* reachability, so a repaired world must still complete.
+    // Making an edge reversible can only *add* accessibility, so a repaired world must still complete.
     // Worth asserting rather than assuming: a repair that broke the M09 guarantee would be a poor trade.
     let (g, spaces) = world(3, 4);
     for seed in 0..40u64 {
@@ -302,7 +302,7 @@ fn repair_preserves_solvability() {
 
         let sweep = m.sweep(&Default::default(), &placements, &grants);
         assert!(
-            sweep.reaches(m.goal().unwrap()),
+            sweep.accessible(m.goal().unwrap()),
             "seed {seed}: repair broke completability"
         );
         for i in 0..3 {
@@ -316,7 +316,7 @@ fn repair_preserves_solvability() {
 
 #[test]
 fn a_world_without_commits_needs_no_repair() {
-    // Monotone capabilities mean collecting cannot strand you. With no one-way edges the pass should
+    // Monotone tokens mean collecting cannot strand you. With no one-way edges the pass should
     // find nothing and cost nothing.
     let (g, spaces) = world(3, 4);
     for seed in 0..20u64 {
@@ -338,7 +338,7 @@ fn a_world_without_commits_needs_no_repair() {
 
 #[test]
 fn the_cost_is_measured_and_stays_modest() {
-    // ▶ The no-softlock cost model. Monotone pruning is what makes enumerating capability sets
+    // ▶ The no-softlock cost model. Monotone pruning is what makes enumerating token sets
     // affordable; this records the actual figure so a regression in the pruning is visible rather
     // than merely slow.
     let (g, spaces) = world(4, 5);
@@ -359,7 +359,7 @@ fn the_cost_is_measured_and_stays_modest() {
         }
     }
 
-    // With 6 capabilities the naive lattice is 64 sets *per commit*; pruning must keep the real
+    // With 6 tokens the naive lattice is 64 sets *per commit*; pruning must keep the real
     // figure far below commits × 64.
     let naive = worst_commits * 64;
     assert!(
@@ -381,7 +381,7 @@ fn an_oversized_world_declines_rather_than_stalling() {
         panic!("fixture must generate");
     };
     let analysis = SoftlockAnalyzer::new(&m, &placements, &grants)
-        .with_max_capabilities(2)
+        .with_max_tokens(2)
         .analyze();
     assert!(analysis.limit.is_some());
     assert!(!analysis.is_un_softlockable(), "declined is not safe");

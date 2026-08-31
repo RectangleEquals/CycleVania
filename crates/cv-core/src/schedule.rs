@@ -856,9 +856,9 @@ impl ContentPool {
 
     /// The entries eligible at a progression **for a kind of scope**.
     ///
-    /// Filtering by scope kind here is what keeps `unique` honest: a Biome cannot go in a room, so
-    /// counting it among a room's available variety would inflate that room's target with content it
-    /// could never use.
+    /// Filtering by scope kind here is what keeps `unique` honest: a token is scheduled at *room*
+    /// granularity, so counting it among a sub-volume's available variety would inflate that
+    /// sub-volume's target with content it could never hold.
     ///
     /// Ignores [`Schedule::chance`], which is a roll rather than a property — the scheduler applies it,
     /// since only the scheduler has a stream to roll from.

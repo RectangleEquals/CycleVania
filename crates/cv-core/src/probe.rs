@@ -40,7 +40,7 @@ use crate::descriptor::{
 };
 use crate::events::GenEvent;
 use crate::fingerprint::{Fingerprint, FingerprintBuilder, ReproductionBundle};
-use crate::fixtures::{Deflective, Door, Glass, KeyItem, Ledge, MovementCapability};
+use crate::fixtures::{Deflective, Door, Glass, KeyItem, Ledge, MovementToken};
 use crate::geometry::{CoarseGeometry, Collider, Face, Hit};
 use crate::mechanic::{FlowKind, Mechanic, Traversal, TraversalKind, Volume};
 use crate::mission::{MissionEdge, Rule};
@@ -51,7 +51,7 @@ use crate::schedule::{
 };
 use crate::serialize::{to_bytes, Deserialize, Reader, SerResult, Serialize, Writer};
 use crate::spine::{
-    CapabilityRef, Coverage, SlotRole, SpineSegment, SpineSlot, SpineTemplate, Strictness,
+    Coverage, SlotRole, SpineSegment, SpineSlot, SpineTemplate, Strictness, TokenRef,
 };
 use cv_determinism::{Aabb, Mat4, Quat, Rng, Transform, Vec3};
 
@@ -113,7 +113,7 @@ struct ProbeWorld {
     rules: Vec<Rule>,
     mission_edges: Vec<MissionEdge>,
     strictness: Vec<Strictness>,
-    capability_refs: Vec<CapabilityRef>,
+    token_refs: Vec<TokenRef>,
     spine_math: Vec<u8>,
     faces: Vec<Face>,
     hits: Vec<Hit>,
@@ -139,7 +139,7 @@ impl Serialize for ProbeWorld {
         w.write(&self.rules);
         w.write(&self.mission_edges);
         w.write(&self.strictness);
-        w.write(&self.capability_refs);
+        w.write(&self.token_refs);
         w.bytes(&self.spine_math);
         w.write(&self.faces);
         w.write(&self.hits);
@@ -157,9 +157,9 @@ fn build_registry_and_bundle() -> (ContentRegistry, ReproductionBundle) {
     for (kind, path, digest) in [
         (ContentKind::Actor, "crawler/door_heavy", 0x1001u64),
         (ContentKind::Item, "crawler/key_bronze", 0x1002),
-        (ContentKind::Capability, "blink_dash", 0x1003),
-        (ContentKind::Biome, "caverns", 0x1004),
-        (ContentKind::Motif, "ruins", 0x1005),
+        (ContentKind::Token, "blink_dash", 0x1003),
+        (ContentKind::Puzzle, "crawler/gate_relay", 0x1004),
+        (ContentKind::Spine, "spines/ascent", 0x1005),
         (ContentKind::Component, "hinge", 0x1006),
         (ContentKind::SurfaceProperty, "portalable", 0x1007),
         (ContentKind::StaticMesh, "kit/door_a", 0x1008),
@@ -289,7 +289,7 @@ fn build() -> ProbeWorld {
     let derived = vec![
         ObjectId::derived("actor", "crawler/door_heavy"),
         ObjectId::derived("item", "crawler/key_bronze"),
-        ObjectId::derived("capability", "blink_dash"),
+        ObjectId::derived("token", "blink_dash"),
         ObjectId::derived("actor", "crawler/door_heavy").child("mesh"),
         ObjectId::derived("", ""),
         ObjectId::NONE,
@@ -302,7 +302,7 @@ fn build() -> ProbeWorld {
     let (traversals, volumes, flows) = build_mechanic_values();
     let (schedules, seed_policy, schedule_math) = build_schedule_values();
     let (rules, mission_edges) = build_mission_values();
-    let (strictness, capability_refs, spine_math) = build_spine_values();
+    let (strictness, token_refs, spine_math) = build_spine_values();
     let (faces, hits, geometry_math) = build_geometry_values();
     ProbeWorld {
         ids,
@@ -322,7 +322,7 @@ fn build() -> ProbeWorld {
         rules,
         mission_edges,
         strictness,
-        capability_refs,
+        token_refs,
         spine_math,
         faces,
         hits,
@@ -432,16 +432,16 @@ fn build_geometry_values() -> (Vec<Face>, Vec<Hit>, Vec<u8>) {
 /// laid out differently from the same seed, which is exactly the failure this whole crate exists to
 /// prevent. [`Coverage::Fraction`] is the sharp edge: it accumulates a curve, so it is float math
 /// deciding topology.
-fn build_spine_values() -> (Vec<Strictness>, Vec<CapabilityRef>, Vec<u8>) {
+fn build_spine_values() -> (Vec<Strictness>, Vec<TokenRef>, Vec<u8>) {
     let strictness = vec![
         Strictness::Required,
         Strictness::Preferred,
         Strictness::Optional,
     ];
-    let capability_refs = vec![
-        CapabilityRef::Explicit(ObjectId::derived("capability", "blink_dash")),
-        CapabilityRef::GrantedBy("precursor".into()),
-        CapabilityRef::Explicit(ObjectId::NONE),
+    let token_refs = vec![
+        TokenRef::Explicit(ObjectId::derived("token", "blink_dash")),
+        TokenRef::GrantedBy("precursor".into()),
+        TokenRef::Explicit(ObjectId::NONE),
     ];
 
     let mut w = Writer::new();
@@ -503,7 +503,7 @@ fn build_spine_values() -> (Vec<Strictness>, Vec<CapabilityRef>, Vec<u8>) {
         w.u32(u32::MAX); // separator, so differing lengths cannot alias
     }
 
-    (strictness, capability_refs, w.finish())
+    (strictness, token_refs, w.finish())
 }
 
 /// A descriptor covering both placement forms, mirroring, sockets, tags and rationale — the
@@ -581,12 +581,12 @@ fn build_descriptor(scopes: &NodeGraph, fingerprint: Fingerprint, seed: u64) -> 
 /// probe covers what a mechanic actually *returns*, not just that the types encode.
 fn build_mechanic_values() -> (Vec<Traversal>, Vec<Volume>, Vec<FlowKind>) {
     let ctx = Context::detached();
-    let dash = ObjectId::derived("capability", "blink_dash");
+    let dash = ObjectId::derived("token", "blink_dash");
 
     let mut traversals = Vec::new();
     traversals.extend(Door::locked_by(dash).affords(&ctx));
     traversals.extend(Ledge.affords(&ctx));
-    traversals.extend(MovementCapability::new("Blink Dash", TraversalKind::Blink).affords(&ctx));
+    traversals.extend(MovementToken::new("Blink Dash", TraversalKind::Blink).affords(&ctx));
     traversals.push(Traversal::gated(TraversalKind::Custom(9), [dash]).one_way());
 
     let volumes: Vec<Volume> = [
@@ -636,7 +636,10 @@ fn build_schedule_values() -> (ScheduleBook, SeedPolicy, Vec<u8>) {
         ObjectId::derived("item", "crawler/key_bronze"),
         Schedule::during(Span::from(0.5)).weighted(Curve::ramp(0.05, 1.0)),
     );
-    book.set(ObjectId::derived("biome", "caverns"), Schedule::always());
+    book.set(
+        ObjectId::derived("puzzle", "crawler/gate_relay"),
+        Schedule::always(),
+    );
 
     let policy = SeedPolicy {
         lookahead: 3,
@@ -681,9 +684,9 @@ fn build_schedule_values() -> (ScheduleBook, SeedPolicy, Vec<u8>) {
 /// L2 rules and edges, including a nested combinator — the grammar is script-authored at M16, so its
 /// encoding has to be stable across targets before anything writes one.
 fn build_mission_values() -> (Vec<Rule>, Vec<MissionEdge>) {
-    let dash = ObjectId::derived("capability", "blink_dash");
-    let grapple = ObjectId::derived("capability", "grapple");
-    let key = ObjectId::derived("capability", "key_bronze");
+    let dash = ObjectId::derived("token", "blink_dash");
+    let grapple = ObjectId::derived("token", "grapple");
+    let key = ObjectId::derived("token", "key_bronze");
 
     let rules = vec![
         Rule::Always,

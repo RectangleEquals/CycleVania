@@ -16,7 +16,7 @@
 //! Note what `analyze` *cannot* do: it holds `&dyn Mechanic`, so it has no way to ask which kind of
 //! implementation it received. The substitution is enforced by the type, not by discipline.
 
-use cv_core::fixtures::{Deflective, Door, Glass, KeyItem, Ledge, MovementCapability};
+use cv_core::fixtures::{Deflective, Door, Glass, KeyItem, Ledge, MovementToken};
 use cv_core::{
     Constraint, Constraints, ContentKind, ContentRegistry, Context, FlowKind, Mechanic,
     MechanicRegistry, NodeGraph, NodeKind, NodeState, ObjectId, Traversal, TraversalKind, Volume,
@@ -105,7 +105,7 @@ impl Ids {
             door: ObjectId::derived("actor", "door_heavy"),
             ledge: ObjectId::derived("actor", "ledge"),
             key: ObjectId::derived("item", "key_bronze"),
-            dash: ObjectId::derived("capability", "blink_dash"),
+            dash: ObjectId::derived("token", "blink_dash"),
             glass: ObjectId::derived("surface", "glass"),
             mirror: ObjectId::derived("surface", "deflective"),
         }
@@ -120,7 +120,7 @@ fn rust_mechanics(ids: &Ids) -> MechanicRegistry {
     r.register(ids.key, Box::new(KeyItem::granting(ids.dash)));
     r.register(
         ids.dash,
-        Box::new(MovementCapability::new("Blink Dash", TraversalKind::Blink)),
+        Box::new(MovementToken::new("Blink Dash", TraversalKind::Blink)),
     );
     r.register(ids.glass, Box::new(Glass));
     r.register(ids.mirror, Box::new(Deflective::facing(Vec3::Z)));
@@ -145,7 +145,7 @@ fn vm_mechanics(ids: &Ids) -> MechanicRegistry {
                 )),
                 constraints: vec![
                     Constraint::WithinScopeKind(NodeKind::Space),
-                    Constraint::RequiresCapability(ids.dash),
+                    Constraint::RequiresToken(ids.dash),
                 ],
                 traversals: vec![Traversal::gated(TraversalKind::Walk, [ids.dash])],
                 ..Default::default()
@@ -181,7 +181,7 @@ fn vm_mechanics(ids: &Ids) -> MechanicRegistry {
         ids.dash,
         Box::new(VmBacked {
             program: MechanicProgram {
-                kind_tag: Some(ContentKind::Capability),
+                kind_tag: Some(ContentKind::Token),
                 label: "Blink Dash".into(),
                 traversals: vec![Traversal::open(TraversalKind::Blink)],
                 ..Default::default()
@@ -231,7 +231,7 @@ struct Analysis {
     profiles: Vec<(String, Option<f64>, usize)>,
     /// Traversal edges the world affords, with what each costs.
     edges: Vec<(TraversalKind, Vec<ObjectId>, bool)>,
-    /// Capabilities obtainable, and from what.
+    /// Tokens obtainable, and from what.
     grants: Vec<(ObjectId, ObjectId)>,
     /// Which flows each surface stops.
     blocked: Vec<(String, Vec<FlowKind>)>,

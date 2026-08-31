@@ -17,16 +17,16 @@ use cv_core::{
     Scheduler, SlotRule,
 };
 use cv_core::{
-    CapabilityRef, Coverage, DescriptorBuilder, Fingerprint, GrantSpec, Handle, Linearity,
-    LinearityResolver, Location, LocationId, MissionGraph, Node, NodeGraph, NodeKind, NodeState,
-    ObjectId, SlotRole, SoftlockAnalyzer, Solver, SpineError, SpineInstantiator, SpineSegment,
-    SpineSlot, SpineSlotTag, SpineTemplate, Strictness,
+    Coverage, DescriptorBuilder, Fingerprint, GrantSpec, Handle, Linearity, LinearityResolver,
+    Location, LocationId, MissionGraph, Node, NodeGraph, NodeKind, NodeState, ObjectId, SlotRole,
+    SoftlockAnalyzer, Solver, SpineError, SpineInstantiator, SpineSegment, SpineSlot, SpineSlotTag,
+    SpineTemplate, Strictness, TokenRef,
 };
 use cv_determinism::{Aabb, Rng, Vec3};
 use std::collections::{BTreeMap, BTreeSet};
 
 fn cap(name: &str) -> ObjectId {
-    ObjectId::derived("capability", name)
+    ObjectId::derived("token", name)
 }
 fn item(name: &str) -> ObjectId {
     ObjectId::derived("item", name)
@@ -100,7 +100,7 @@ fn dungeon() -> SpineTemplate {
             SpineSlot::new("capstone")
                 .role(SlotRole::Goal)
                 .must_contain([actor("boss")])
-                .requires(CapabilityRef::GrantedBy("precursor".into())),
+                .requires(TokenRef::GrantedBy("precursor".into())),
         )
         .segment(SpineSegment::new(
             "start",
@@ -109,7 +109,7 @@ fn dungeon() -> SpineTemplate {
         ))
         .segment(
             SpineSegment::new("precursor", "capstone", AdaptiveRange::new(1, 3))
-                .gated_by(CapabilityRef::GrantedBy("precursor".into())),
+                .gated_by(TokenRef::GrantedBy("precursor".into())),
         )
 }
 
@@ -131,8 +131,8 @@ fn registry() -> ContentRegistry {
     let mut r = ContentRegistry::new();
     r.register(ContentKind::Actor, "boss", 1).unwrap();
     r.register(ContentKind::Actor, "waypoint", 1).unwrap();
-    r.register(ContentKind::Capability, "hook", 1).unwrap();
-    r.register(ContentKind::Capability, "bombs", 1).unwrap();
+    r.register(ContentKind::Token, "hook", 1).unwrap();
+    r.register(ContentKind::Token, "bombs", 1).unwrap();
     r
 }
 
@@ -291,13 +291,13 @@ fn a_spined_world_still_solves_and_stays_un_softlockable() {
             .fill(&mission, &[item("hook_item"), item("bomb_item")], &rng)
             .unwrap_or_else(|e| panic!("seed {seed}: spined world did not solve: {e}"));
 
-        // The guaranteed rooms survive gating — they are still reachable in the solved world.
+        // The guaranteed rooms survive gating — they are still accessible in the solved world.
         for instance in &instances {
             for slot in ["capstone", "terminal"] {
                 let scope = instance.scope_of(slot).unwrap();
                 assert!(
-                    solution.reachability.reaches(scope),
-                    "seed {seed}: the {slot} must be reachable, not merely present"
+                    solution.accessibility.accessible(scope),
+                    "seed {seed}: the {slot} must be accessible, not merely present"
                 );
             }
         }
@@ -760,7 +760,7 @@ fn an_empty_slot_refuses_item_locations_however_many_passes_try() {
         "nothing may be findable in a room declared empty"
     );
 
-    // And it is still a normal part of the world otherwise — reachable, connected, just not filled.
+    // And it is still a normal part of the world otherwise — accessible, connected, just not filled.
     let capstone = instances[0].scope_of("capstone").unwrap();
     assert!(mission.connects(capstone, refuge));
     assert_eq!(mission.degree(refuge), 1);
@@ -905,7 +905,7 @@ fn a_repeating_spine_yields_one_start_and_one_goal() {
 }
 
 #[test]
-fn a_symbolic_grant_resolves_to_one_capability_everywhere_it_is_named() {
+fn a_symbolic_grant_resolves_to_one_token_everywhere_it_is_named() {
     // The dungeon pattern's load-bearing trick: three references, one resolution.
     let (g, _) = world(1, 10);
     let mut mission = MissionGraph::new(g.of_kind(NodeKind::Space).next().unwrap().0);
@@ -920,7 +920,7 @@ fn a_symbolic_grant_resolves_to_one_capability_everywhere_it_is_named() {
         mission
             .edges()
             .iter()
-            .any(|e| e.rule.capabilities().contains(&granted)),
+            .any(|e| e.rule.tokens().contains(&granted)),
         "the gated segment must use exactly what the precursor granted"
     );
 }

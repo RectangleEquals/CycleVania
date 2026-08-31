@@ -495,20 +495,33 @@ fn chance_gates_whether_content_is_offered_at_all() {
 
 #[test]
 fn content_is_only_offered_to_scopes_that_can_hold_it() {
-    // The correctness point: a Biome dresses an Area and can never go in a room. Counting it among a
-    // room's variety would inflate that room's adaptive target with content it could never use.
+    // The correctness point: a token is scheduled at *room* granularity — "when does this become
+    // available" — so it can never land in a sub-volume like a ledge or an alcove. Counting it among
+    // a Spatial slot's variety would inflate that slot's adaptive target with content it could never
+    // use.
     let mut reg = ContentRegistry::new();
     let actor = reg.register(ContentKind::Actor, "prop", 1).unwrap();
-    let biome = reg.register(ContentKind::Biome, "caverns", 2).unwrap();
+    let token = reg.register(ContentKind::Token, "blink_dash", 2).unwrap();
     let mut book = ScheduleBook::new();
     book.set(actor, Schedule::for_kind(ContentKind::Actor));
-    book.set(biome, Schedule::for_kind(ContentKind::Biome));
+    book.set(token, Schedule::for_kind(ContentKind::Token));
     let pool = ContentPool::resolve(&reg, &book);
 
-    let g = world(2);
+    // `world` stops at Space, so give one room a sub-volume to schedule into.
+    let mut g = world(2);
+    let a_space = *g
+        .walk()
+        .iter()
+        .find(|h| g.node(**h).unwrap().kind() == NodeKind::Space)
+        .unwrap();
+    let ledge = g.add_child(a_space, "ledge").unwrap();
+    g.set_envelope(ledge, Aabb::new(Vec3::ZERO, Vec3::splat(2.0)))
+        .unwrap();
+    g.advance(ledge, NodeState::Realized).unwrap();
+
     let plan = Scheduler::new(&g, &pool)
         .with_rule(SlotRule::new(NodeKind::Space, AdaptiveRange::new(0, 5)))
-        .with_rule(SlotRule::new(NodeKind::Area, AdaptiveRange::new(0, 5)))
+        .with_rule(SlotRule::new(NodeKind::Spatial, AdaptiveRange::new(0, 5)))
         .plan(&Rng::new(1));
 
     for slot in plan.slots() {
@@ -517,15 +530,18 @@ fn content_is_only_offered_to_scopes_that_can_hold_it() {
         match kind {
             NodeKind::Space => {
                 assert!(offered.contains(&actor));
-                assert!(!offered.contains(&biome), "a Biome cannot go in a room");
+                assert!(offered.contains(&token));
+            }
+            NodeKind::Spatial => {
+                assert!(offered.contains(&actor), "an Actor may fill a sub-volume");
+                assert!(
+                    !offered.contains(&token),
+                    "a token is room-granularity and cannot go in a sub-volume"
+                );
                 assert_eq!(
                     slot.reasoning.unique, 1,
                     "unique must not count unusable content"
                 );
-            }
-            NodeKind::Area => {
-                assert!(offered.contains(&biome));
-                assert!(!offered.contains(&actor), "an Actor is not Area dressing");
             }
             _ => unreachable!(),
         }

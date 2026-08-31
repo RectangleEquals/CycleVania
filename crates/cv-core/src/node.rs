@@ -59,7 +59,10 @@ pub enum NodeKind {
     World,
     /// A major progression region — the granularity lazy generation streams at.
     Reach,
-    /// A themed sub-region within a Reach (a biome carrier).
+    /// A themed sub-region within a Reach.
+    ///
+    /// The scope a theme attaches *to*. Themeing itself is not a kind of content: it is dial values
+    /// on an Area-scoped spine slot, which is why there is no `Biome` anywhere in this tree.
     Area,
     /// A room: the unit most puzzles and encounters are scoped to.
     Space,

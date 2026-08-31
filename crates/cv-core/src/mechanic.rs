@@ -110,8 +110,8 @@ impl Volume {
 /// may trade away — contrast [`Request`], which is negotiable.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Constraint {
-    /// The player must hold this capability to reach the placement.
-    RequiresCapability(ObjectId),
+    /// The player must hold this token to reach the placement.
+    RequiresToken(ObjectId),
     /// At least this much free space around the placement.
     MinClearance(f64),
     /// Only inside this kind of scope.
@@ -128,7 +128,7 @@ pub enum Constraint {
 impl fmt::Display for Constraint {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Constraint::RequiresCapability(id) => write!(f, "requires capability {id}"),
+            Constraint::RequiresToken(id) => write!(f, "requires token {id}"),
             Constraint::MinClearance(c) => write!(f, "needs {c} clearance"),
             Constraint::WithinScopeKind(k) => write!(f, "must sit in a {k}"),
             Constraint::AwayFrom {
@@ -182,10 +182,10 @@ impl Constraints {
         self.0.is_empty()
     }
 
-    /// Every capability this placement depends on — what L2 needs to reason about reachability.
-    pub fn required_capabilities(&self) -> impl Iterator<Item = ObjectId> + '_ {
+    /// Every token this placement depends on — what L2 needs to reason about accessibility.
+    pub fn required_tokens(&self) -> impl Iterator<Item = ObjectId> + '_ {
         self.0.iter().filter_map(|c| match c {
-            Constraint::RequiresCapability(id) => Some(*id),
+            Constraint::RequiresToken(id) => Some(*id),
             _ => None,
         })
     }
@@ -225,7 +225,7 @@ pub enum TraversalKind {
 pub struct Traversal {
     /// The movement this enables.
     pub kind: TraversalKind,
-    /// Capabilities or items the player must hold to use it.
+    /// Tokens or items the player must hold to use it.
     pub requires: Vec<ObjectId>,
     /// Can it be traversed back the other way?
     ///
@@ -369,7 +369,7 @@ pub trait Mechanic: Send + Sync {
         Vec::new()
     }
 
-    /// What this grants when obtained — a capability id, for an `Item`.
+    /// What this grants when obtained — a token id, for an `Item`.
     fn grants(&self, _ctx: &Context<'_>) -> Option<ObjectId> {
         None
     }
@@ -601,13 +601,13 @@ mod tests {
 
     #[test]
     fn constraints_expose_what_the_solver_needs() {
-        let dash = ObjectId::derived("capability", "blink_dash");
+        let dash = ObjectId::derived("token", "blink_dash");
         let c = Constraints::none()
-            .and(Constraint::RequiresCapability(dash))
+            .and(Constraint::RequiresToken(dash))
             .and(Constraint::MinClearance(2.0))
             .and(Constraint::WithinScopeKind(NodeKind::Space));
         assert_eq!(c.len(), 3);
-        assert_eq!(c.required_capabilities().collect::<Vec<_>>(), vec![dash]);
+        assert_eq!(c.required_tokens().collect::<Vec<_>>(), vec![dash]);
         assert!(Constraints::none().is_empty());
     }
 

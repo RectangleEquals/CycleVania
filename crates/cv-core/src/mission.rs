@@ -1,4 +1,4 @@
-//! **L2's data model** — the mission graph, the rule grammar edges are gated by, and the reachability
+//! **L2's data model** — the mission graph, the rule grammar edges are gated by, and the accessibility
 //! analysis everything else rests on.
 //!
 //! # The mission graph is not the scope graph
@@ -13,8 +13,8 @@
 //!
 //! # Spheres: the shape of progression
 //!
-//! Reachability is not a single set — it is a sequence. With nothing, some rooms are reachable; the
-//! items in them grant capabilities; those open more rooms; and so on. Each round is a **sphere**
+//! Accessibility is not a single set — it is a sequence. With nothing, some rooms are accessible; the
+//! items in them grant tokens; those open more rooms; and so on. Each round is a **sphere**
 //! ([`Sphere`]), and the sphere sequence *is* the progression structure:
 //!
 //! ```text
@@ -27,7 +27,7 @@
 //! Everything the linearity dials do shows up here, which makes spheres the natural thing to assert
 //! against in tests and to show a dev in the editor.
 //!
-//! Computing them is a fixed point: sweep for what is reachable, collect what is there, sweep again,
+//! Computing them is a fixed point: sweep for what is accessible, collect what is there, sweep again,
 //! until nothing new appears.
 
 use crate::node::{Node, NodeGraph, NodeKind};
@@ -57,7 +57,7 @@ pub enum Rule {
     Always,
     /// Never satisfied. Useful as a placeholder for "sealed until L3 decides".
     Never,
-    /// The player holds this capability.
+    /// The player holds this token.
     Has(ObjectId),
     /// Every sub-rule holds.
     All(Vec<Rule>),
@@ -68,14 +68,14 @@ pub enum Rule {
 }
 
 impl Rule {
-    /// Requires holding a capability.
-    pub fn has(capability: ObjectId) -> Rule {
-        Rule::Has(capability)
+    /// Requires holding a token.
+    pub fn has(token: ObjectId) -> Rule {
+        Rule::Has(token)
     }
 
-    /// Requires all of a set of capabilities.
-    pub fn all_of(capabilities: impl IntoIterator<Item = ObjectId>) -> Rule {
-        let rules: Vec<Rule> = capabilities.into_iter().map(Rule::Has).collect();
+    /// Requires all of a set of tokens.
+    pub fn all_of(tokens: impl IntoIterator<Item = ObjectId>) -> Rule {
+        let rules: Vec<Rule> = tokens.into_iter().map(Rule::Has).collect();
         match rules.len() {
             0 => Rule::Always,
             1 => rules.into_iter().next().expect("length checked"),
@@ -83,9 +83,9 @@ impl Rule {
         }
     }
 
-    /// Requires any one of a set of capabilities.
-    pub fn any_of(capabilities: impl IntoIterator<Item = ObjectId>) -> Rule {
-        let rules: Vec<Rule> = capabilities.into_iter().map(Rule::Has).collect();
+    /// Requires any one of a set of tokens.
+    pub fn any_of(tokens: impl IntoIterator<Item = ObjectId>) -> Rule {
+        let rules: Vec<Rule> = tokens.into_iter().map(Rule::Has).collect();
         match rules.len() {
             0 => Rule::Never, // "any of nothing" is unsatisfiable, not free
             1 => rules.into_iter().next().expect("length checked"),
@@ -93,7 +93,7 @@ impl Rule {
         }
     }
 
-    /// Is this satisfied by a set of held capabilities?
+    /// Is this satisfied by a set of held tokens?
     pub fn is_satisfied(&self, held: &BTreeSet<ObjectId>) -> bool {
         match self {
             Rule::Always => true,
@@ -110,17 +110,17 @@ impl Rule {
         matches!(self, Rule::Always)
     }
 
-    /// Every capability mentioned anywhere in the rule.
+    /// Every token mentioned anywhere in the rule.
     ///
     /// What the solver needs to know which items gate this edge — and therefore which locks a key is
     /// "for" when [`crate::solver`] applies the locality dial.
-    pub fn capabilities(&self) -> BTreeSet<ObjectId> {
+    pub fn tokens(&self) -> BTreeSet<ObjectId> {
         let mut out = BTreeSet::new();
-        self.collect_capabilities(&mut out);
+        self.collect_tokens(&mut out);
         out
     }
 
-    fn collect_capabilities(&self, out: &mut BTreeSet<ObjectId>) {
+    fn collect_tokens(&self, out: &mut BTreeSet<ObjectId>) {
         match self {
             Rule::Always | Rule::Never => {}
             Rule::Has(c) => {
@@ -128,10 +128,10 @@ impl Rule {
             }
             Rule::All(rules) | Rule::Any(rules) => {
                 for r in rules {
-                    r.collect_capabilities(out);
+                    r.collect_tokens(out);
                 }
             }
-            Rule::Not(r) => r.collect_capabilities(out),
+            Rule::Not(r) => r.collect_tokens(out),
         }
     }
 
@@ -265,35 +265,35 @@ impl MissionEdge {
     }
 }
 
-/// One round of progression: what became reachable, and what it yielded.
+/// One round of progression: what became accessible, and what it yielded.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Sphere {
     /// How deep this sphere is; sphere 0 needs nothing.
     pub index: u32,
-    /// Scopes that became reachable in this round.
+    /// Scopes that became accessible in this round.
     pub scopes: Vec<Handle<Node>>,
     /// Locations that became available in this round.
     pub locations: Vec<LocationId>,
-    /// Capabilities obtained from those locations, opening the next sphere.
+    /// Tokens obtained from those locations, opening the next sphere.
     pub granted: Vec<ObjectId>,
 }
 
-/// The outcome of a reachability sweep.
+/// The outcome of a accessibility sweep.
 #[derive(Clone, Debug, PartialEq)]
-pub struct Reachability {
-    /// Every reachable scope.
+pub struct Accessibility {
+    /// Every accessible scope.
     pub scopes: BTreeSet<Handle<Node>>,
-    /// Every reachable location.
+    /// Every accessible location.
     pub locations: BTreeSet<LocationId>,
-    /// Every capability obtainable.
+    /// Every token obtainable.
     pub held: BTreeSet<ObjectId>,
     /// The progression, round by round.
     pub spheres: Vec<Sphere>,
 }
 
-impl Reachability {
-    /// Is a scope reachable?
-    pub fn reaches(&self, scope: Handle<Node>) -> bool {
+impl Accessibility {
+    /// Is a scope accessible?
+    pub fn accessible(&self, scope: Handle<Node>) -> bool {
         self.scopes.contains(&scope)
     }
 
@@ -302,7 +302,7 @@ impl Reachability {
         self.spheres.len() as u32
     }
 
-    /// Which sphere a scope first became reachable in.
+    /// Which sphere a scope first became accessible in.
     pub fn sphere_of(&self, scope: Handle<Node>) -> Option<u32> {
         self.spheres
             .iter()
@@ -316,7 +316,7 @@ impl Reachability {
 pub struct MissionGraph {
     start: Handle<Node>,
     /// Where the world is considered complete. The un-softlockable guarantee (M10) is stated against
-    /// this: from every reachable state, *the goal* must stay reachable.
+    /// this: from every accessible state, *the goal* must stay accessible.
     goal: Option<Handle<Node>>,
     /// Scopes from which a stranded player can get back — a warp, a checkpoint, a hub return.
     ///
@@ -595,14 +595,14 @@ impl MissionGraph {
             .map(|(id, _)| *id)
     }
 
-    /// Edges that are gated on a capability — the "locks" a key opens.
-    pub fn locks_for(&self, capability: ObjectId) -> impl Iterator<Item = &MissionEdge> + '_ {
+    /// Edges that are gated on a token — the "locks" a key opens.
+    pub fn locks_for(&self, token: ObjectId) -> impl Iterator<Item = &MissionEdge> + '_ {
         self.edges
             .iter()
-            .filter(move |e| e.rule.capabilities().contains(&capability))
+            .filter(move |e| e.rule.tokens().contains(&token))
     }
 
-    /// **Sweep**: what is reachable, given a starting capability set and what sits at each location.
+    /// **Sweep**: what is accessible, given a starting token set and what sits at each location.
     ///
     /// A fixed point rather than a single traversal: reaching a room may yield an item that opens
     /// another room, so the search repeats until a round adds nothing. Each round is a [`Sphere`].
@@ -611,21 +611,21 @@ impl MissionGraph {
         initial: &BTreeSet<ObjectId>,
         placements: &BTreeMap<LocationId, ObjectId>,
         grants: &BTreeMap<ObjectId, ObjectId>,
-    ) -> Reachability {
+    ) -> Accessibility {
         self.sweep_from(self.start, initial, placements, grants)
     }
 
     /// A sweep starting somewhere other than the world's start.
     ///
     /// This is what the un-softlockable analysis needs: "the player has just dropped through a one-way
-    /// transition into `origin` holding only these capabilities — what can they still reach?"
+    /// transition into `origin` holding only these tokens — what can they still reach?"
     pub fn sweep_from(
         &self,
         origin: Handle<Node>,
         initial: &BTreeSet<ObjectId>,
         placements: &BTreeMap<LocationId, ObjectId>,
         grants: &BTreeMap<ObjectId, ObjectId>,
-    ) -> Reachability {
+    ) -> Accessibility {
         let mut held = initial.clone();
         let mut scopes: BTreeSet<Handle<Node>> = BTreeSet::new();
         let mut locations: BTreeSet<LocationId> = BTreeSet::new();
@@ -674,7 +674,7 @@ impl MissionGraph {
             });
         }
 
-        Reachability {
+        Accessibility {
             scopes,
             locations,
             held,
@@ -682,15 +682,15 @@ impl MissionGraph {
         }
     }
 
-    /// One breadth-first traversal with a fixed capability set.
+    /// One breadth-first traversal with a fixed token set.
     ///
     /// Deterministic: a `VecDeque` frontier and edges visited in index order, so the same graph and
-    /// capabilities always yield the same set — and, more importantly, the same *sphere boundaries*.
+    /// tokens always yield the same set — and, more importantly, the same *sphere boundaries*.
     pub fn traverse(&self, held: &BTreeSet<ObjectId>) -> BTreeSet<Handle<Node>> {
         self.traverse_from(self.start, held)
     }
 
-    /// One breadth-first traversal from an arbitrary origin with a fixed capability set.
+    /// One breadth-first traversal from an arbitrary origin with a fixed token set.
     pub fn traverse_from(
         &self,
         origin: Handle<Node>,
@@ -854,7 +854,7 @@ mod tests {
     use crate::serialize::{from_bytes, to_bytes};
 
     fn cap(name: &str) -> ObjectId {
-        ObjectId::derived("capability", name)
+        ObjectId::derived("token", name)
     }
 
     #[test]
@@ -891,8 +891,8 @@ mod tests {
             Rule::has(cap("dash")),
             Rule::Any(vec![Rule::has(cap("grapple")), Rule::has(cap("blink"))]),
         ]);
-        assert_eq!(rule.capabilities().len(), 3);
-        assert!(rule.capabilities().contains(&cap("blink")));
+        assert_eq!(rule.tokens().len(), 3);
+        assert!(rule.tokens().contains(&cap("blink")));
         assert_eq!(rule.depth(), 3);
         assert_eq!(Rule::Always.depth(), 1);
     }
@@ -957,7 +957,7 @@ mod tests {
 
         let r = mission.sweep(&BTreeSet::new(), &placements, &grants);
         assert!(
-            r.reaches(rooms[3]),
+            r.accessible(rooms[3]),
             "the key is findable, so the gate opens"
         );
         assert_eq!(r.depth(), 2, "one sphere before the key, one after");
@@ -989,7 +989,7 @@ mod tests {
 
         let r = mission.sweep(&BTreeSet::new(), &placements, &grants);
         assert!(
-            !r.reaches(rooms[3]),
+            !r.accessible(rooms[3]),
             "unreachable, and the sweep terminates rather than spinning"
         );
         assert!(r.held.is_empty());
@@ -1008,14 +1008,14 @@ mod tests {
         forward.add_edge(MissionEdge::open(a, b).one_way());
         assert!(forward
             .sweep(&BTreeSet::new(), &BTreeMap::new(), &BTreeMap::new())
-            .reaches(b));
+            .accessible(b));
 
         // Starting at the far end, the same edge is impassable.
         let mut backward = MissionGraph::new(b);
         backward.add_edge(MissionEdge::open(a, b).one_way());
         assert!(!backward
             .sweep(&BTreeSet::new(), &BTreeMap::new(), &BTreeMap::new())
-            .reaches(a));
+            .accessible(a));
     }
 
     #[test]

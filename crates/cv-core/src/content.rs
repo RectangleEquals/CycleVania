@@ -3,7 +3,7 @@
 //! # What "content" is
 //!
 //! A host does not hand the generator *instances*; it declares **kinds of thing that may exist**: a
-//! heavy door, a bronze key, a blink-dash capability, a volcanic biome. L0 turns those declarations
+//! heavy door, a bronze key, a blink-dash token, a relay puzzle. L0 turns those declarations
 //! into a registry, and every later layer draws from it. The registry is therefore the complete answer
 //! to "what could this world contain?", which is exactly why it is a fingerprint input (see
 //! [`crate::fingerprint`]): change what content exists and you have changed the recipe.
@@ -39,11 +39,7 @@ pub enum ContentKind {
     /// A stateful Actor solved as a state graph.
     Puzzle,
     /// A player ability the solver reasons about.
-    Capability,
-    /// A themed dressing set applied at Area scope.
-    Biome,
-    /// A recurring motif the generator may repeat.
-    Motif,
+    Token,
 
     // --- not schedulable: referenced or composed, never placed on their own ---
     /// A reusable concern attached to an Actor.
@@ -66,13 +62,11 @@ pub enum ContentKind {
 
 impl ContentKind {
     /// Every kind, in declaration order — the canonical order for iteration and tags.
-    pub const ALL: [ContentKind; 13] = [
+    pub const ALL: [ContentKind; 11] = [
         ContentKind::Actor,
         ContentKind::Item,
         ContentKind::Puzzle,
-        ContentKind::Capability,
-        ContentKind::Biome,
-        ContentKind::Motif,
+        ContentKind::Token,
         ContentKind::Component,
         ContentKind::Action,
         ContentKind::Shape,
@@ -89,29 +83,23 @@ impl ContentKind {
     pub fn is_schedulable(self) -> bool {
         matches!(
             self,
-            ContentKind::Actor
-                | ContentKind::Item
-                | ContentKind::Puzzle
-                | ContentKind::Capability
-                | ContentKind::Biome
-                | ContentKind::Motif
+            ContentKind::Actor | ContentKind::Item | ContentKind::Puzzle | ContentKind::Token
         )
     }
 
     /// The scope kinds this content naturally fills.
     ///
-    /// A `Biome` dresses an Area; an `Actor` goes in a room. Without this, scheduling a Space would
-    /// count Biomes among its available variety and inflate the target with content that could never
-    /// go there. A schedule may override it, but the default should already be right.
+    /// A `Token` is scheduled at room granularity; an `Actor` may also land at an arbitrary point
+    /// inside one. Without this, scheduling a `Spatial` slot would count tokens among its available
+    /// variety and inflate the target with content that could never go there. A schedule may override
+    /// it, but the default should already be right.
     pub fn default_scopes(self) -> &'static [crate::node::NodeKind] {
         use crate::node::NodeKind::*;
         match self {
             ContentKind::Actor | ContentKind::Item | ContentKind::Puzzle => &[Space, Spatial],
-            // A capability is scheduled as "when does this become available", which is a
+            // A token is scheduled as "when does this become available", which is a
             // room-granularity question even though an Item is what physically grants it.
-            ContentKind::Capability => &[Space],
-            ContentKind::Biome => &[Area],
-            ContentKind::Motif => &[Area, Reach],
+            ContentKind::Token => &[Space],
             // Not schedulable: referenced or composed, never placed on their own.
             ContentKind::Component
             | ContentKind::Action
@@ -130,9 +118,7 @@ impl ContentKind {
             ContentKind::Actor => "actor",
             ContentKind::Item => "item",
             ContentKind::Puzzle => "puzzle",
-            ContentKind::Capability => "capability",
-            ContentKind::Biome => "biome",
-            ContentKind::Motif => "motif",
+            ContentKind::Token => "token",
             ContentKind::Component => "component",
             ContentKind::Action => "action",
             ContentKind::Shape => "shape",
@@ -400,8 +386,7 @@ mod tests {
             .unwrap();
         r.register(ContentKind::Item, "crawler/key_bronze", 0x22)
             .unwrap();
-        r.register(ContentKind::Capability, "blink_dash", 0x33)
-            .unwrap();
+        r.register(ContentKind::Token, "blink_dash", 0x33).unwrap();
         r.register(ContentKind::Component, "hinge", 0x44).unwrap();
         r.register(ContentKind::StaticMesh, "kit/door_a", 0x55)
             .unwrap();
@@ -477,9 +462,7 @@ mod tests {
             ContentKind::Actor,
             ContentKind::Item,
             ContentKind::Puzzle,
-            ContentKind::Capability,
-            ContentKind::Biome,
-            ContentKind::Motif,
+            ContentKind::Token,
         ] {
             assert!(k.is_schedulable(), "{k} should be schedulable");
         }
@@ -529,6 +512,6 @@ mod tests {
     fn of_kind_filters() {
         let r = populated();
         assert_eq!(r.of_kind(ContentKind::Actor).count(), 1);
-        assert_eq!(r.of_kind(ContentKind::Biome).count(), 0);
+        assert_eq!(r.of_kind(ContentKind::Spine).count(), 0);
     }
 }

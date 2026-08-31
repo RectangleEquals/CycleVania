@@ -17,9 +17,9 @@
 //! * [`context`] — the per-call lens handed into every mechanic callback.
 //! * [`fixtures`] — hand-written mechanics standing in for CVScript until the VM lands (M18).
 //! * [`schedule`] — L0 content resolution and the L1 plan, including `AdaptiveRange` (M08).
-//! * [`mission`] — the L2 mission graph, the `Rule` grammar, and sphere reachability (M09).
+//! * [`mission`] — the L2 mission graph, the `Rule` grammar, and sphere accessibility (M09).
 //! * [`solver`] — assumed-fill placement, cycle generation, and the linearity dials (M09).
-//! * [`softlock`] — the un-softlockable guarantee: no reachable state strands the goal (M10).
+//! * [`softlock`] — the un-softlockable guarantee: no accessible state strands the goal (M10).
 //! * [`spine`] — opt-in macro-structure: guaranteed slots, free-form segments (M10a).
 //! * [`geometry`] — coarse colliders and the spatial primitives mechanics reason through (M11).
 //! * [`serialize`] — the deterministic binary spine for reproduction bundles and round-trips.
@@ -67,7 +67,7 @@ pub use mechanic::{
     Constraint, Constraints, DefaultMechanic, FlowKind, Mechanic, MechanicRegistry, Request,
     Traversal, TraversalKind, Volume,
 };
-pub use mission::{Location, LocationId, MissionEdge, MissionGraph, Reachability, Rule, Sphere};
+pub use mission::{Accessibility, Location, LocationId, MissionEdge, MissionGraph, Rule, Sphere};
 pub use node::{Node, NodeError, NodeGraph, NodeKind, NodeResult, NodeState};
 pub use object::{IdAllocator, Object, ObjectHeader, ObjectId};
 pub use schedule::{
@@ -83,9 +83,9 @@ pub use solver::{
     Linearity, LinearityOverride, LinearityResolver, PlacementTrace, Solution, SolveError, Solver,
 };
 pub use spine::{
-    CapabilityRef, Coverage, GrantSpec, Relaxation, SlotAssignment, SlotContents, SlotRole,
-    SlotShape, SpineError, SpineInstance, SpineInstantiator, SpineSegment, SpineSlot,
-    SpineTemplate, SpineValidation, SpineWarning, Strictness,
+    Coverage, GrantSpec, Relaxation, SlotAssignment, SlotContents, SlotRole, SlotShape, SpineError,
+    SpineInstance, SpineInstantiator, SpineSegment, SpineSlot, SpineTemplate, SpineValidation,
+    SpineWarning, Strictness, TokenRef,
 };
 
 /// This crate's version.

@@ -10,7 +10,7 @@
 //! # They are deliberately real, not stubs
 //!
 //! A stub returning `None` everywhere would let the pipeline compile without proving anything. These
-//! implement behaviour with actual consequences: [`Barrier`] gates a traversal on holding a capability,
+//! implement behaviour with actual consequences: [`Barrier`] gates a traversal on holding a token,
 //! so the solver has something to reason about; [`Glass`] passes some flows and blocks others, which
 //! is the TC16 case that motivated per-flow surfaces. If the interface were shaped wrong, writing
 //! these is where it would show.
@@ -46,7 +46,7 @@ pub struct Door {
 }
 
 impl Door {
-    /// A door gated on an item or capability.
+    /// A door gated on an item or token.
     pub fn locked_by(key: ObjectId) -> Self {
         Door {
             key: Some(key),
@@ -82,9 +82,9 @@ impl Mechanic for Door {
     fn constraints(&self, _ctx: &Context<'_>) -> Constraints {
         let base = Constraints::none().and(Constraint::WithinScopeKind(NodeKind::Space));
         match self.key {
-            // The gate's own reachability depends on its key — the fact L2 needs to place them in a
+            // The gate's own accessibility depends on its key — the fact L2 needs to place them in a
             // solvable order rather than discovering the cycle later.
-            Some(key) => base.and(Constraint::RequiresCapability(key)),
+            Some(key) => base.and(Constraint::RequiresToken(key)),
             None => base,
         }
     }
@@ -105,7 +105,7 @@ impl Mechanic for Door {
 /// A one-way drop: passable downward, impossible to climb back.
 ///
 /// The simplest thing that can strand a player, which makes it the smallest useful test of the
-/// un-softlockable pass (M10): every reachable state behind it must still reach the goal.
+/// un-softlockable pass (M10): every accessible state behind it must still reach the goal.
 ///
 /// Becomes:
 /// ```gdscript
@@ -133,34 +133,34 @@ impl Mechanic for Ledge {
     }
 }
 
-/// A capability the player can be granted, which unlocks a kind of movement.
+/// A token the player can be granted, which unlocks a kind of movement.
 ///
 /// Becomes:
 /// ```gdscript
-/// class BlinkDash extends Capability:
+/// class BlinkDash extends Token:
 ///     api func affords(ctx) -> Array[Traversal]:  return [Traversal.open(Blink)]
 /// ```
 #[derive(Debug, Clone)]
-pub struct MovementCapability {
+pub struct MovementToken {
     /// The movement it enables.
     pub traversal: TraversalKind,
     /// Its display name.
     pub name: String,
 }
 
-impl MovementCapability {
-    /// A capability granting a movement kind.
+impl MovementToken {
+    /// A token granting a movement kind.
     pub fn new(name: impl Into<String>, traversal: TraversalKind) -> Self {
-        MovementCapability {
+        MovementToken {
             traversal,
             name: name.into(),
         }
     }
 }
 
-impl Mechanic for MovementCapability {
+impl Mechanic for MovementToken {
     fn kind(&self) -> ContentKind {
-        ContentKind::Capability
+        ContentKind::Token
     }
 
     fn label(&self) -> &str {
@@ -172,23 +172,23 @@ impl Mechanic for MovementCapability {
     }
 }
 
-/// A pickup that grants a capability when obtained.
+/// A pickup that grants a token when obtained.
 ///
 /// Becomes:
 /// ```gdscript
 /// class KeyItem extends Item:
-///     exposed var grants: Capability
+///     exposed var grants: Token
 /// ```
 #[derive(Debug, Clone)]
 pub struct KeyItem {
-    /// The capability obtaining this confers.
+    /// The token obtaining this confers.
     pub grants: ObjectId,
 }
 
 impl KeyItem {
-    /// An item granting a capability.
-    pub fn granting(capability: ObjectId) -> Self {
-        KeyItem { grants: capability }
+    /// An item granting a token.
+    pub fn granting(token: ObjectId) -> Self {
+        KeyItem { grants: token }
     }
 }
 
@@ -318,20 +318,14 @@ mod tests {
 
         // The same dependency shows up as a constraint, so L2 can order placement before it routes.
         assert_eq!(
-            door.constraints(&ctx)
-                .required_capabilities()
-                .collect::<Vec<_>>(),
+            door.constraints(&ctx).required_tokens().collect::<Vec<_>>(),
             vec![key]
         );
 
         // An open doorway gates nothing.
         let open = Door::open();
         assert!(open.affords(&ctx)[0].requires.is_empty());
-        assert!(open
-            .constraints(&ctx)
-            .required_capabilities()
-            .next()
-            .is_none());
+        assert!(open.constraints(&ctx).required_tokens().next().is_none());
     }
 
     #[test]
@@ -357,15 +351,15 @@ mod tests {
     }
 
     #[test]
-    fn an_item_grants_a_capability_that_affords_movement() {
+    fn an_item_grants_a_token_that_affords_movement() {
         let ctx = Context::detached();
-        let dash = ObjectId::derived("capability", "blink_dash");
+        let dash = ObjectId::derived("token", "blink_dash");
         assert_eq!(KeyItem::granting(dash).grants(&ctx), Some(dash));
 
-        // And the capability itself is what turns into a traversal edge.
-        let cap = MovementCapability::new("Blink Dash", TraversalKind::Blink);
+        // And the token itself is what turns into a traversal edge.
+        let cap = MovementToken::new("Blink Dash", TraversalKind::Blink);
         assert_eq!(cap.affords(&ctx)[0].kind, TraversalKind::Blink);
-        assert_eq!(cap.kind(), ContentKind::Capability);
+        assert_eq!(cap.kind(), ContentKind::Token);
     }
 
     #[test]

@@ -200,7 +200,7 @@ fn a_laser_bounces_off_a_mirror_into_a_catcher() {
         mirror,
         box_at(Vec3::new(10.0, 0.0, 0.0), Vec3::new(11.0, 4.0, 4.0)),
     ));
-    // The catcher sits behind the emitter, reachable only by the bounce.
+    // The catcher sits behind the emitter, accessible only by the bounce.
     geometry.add(Collider::new(
         catcher,
         box_at(Vec3::new(-3.0, 0.0, 0.0), Vec3::new(-2.0, 4.0, 4.0)),
