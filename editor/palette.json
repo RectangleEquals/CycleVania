@@ -5974,11 +5974,11 @@
       "label": "dial",
       "category": "ScopeHandle",
       "shape": "call",
-      "doc": "Read a dial. Inherits OUTWARD-IN and an inner scope wins, so 'set saturation once at World scope' works. The trace records which scope supplied the value.",
+      "doc": "Read a numeric dial by its qualified <ClassName>.<DialName> id -- a scope handle may be any scope, so the owner is never implied. This is the DYNAMIC read; the typed one is the per-dial get node, which is picked and carries the dial's real type. Inherits OUTWARD-IN and an inner scope wins, so 'set saturation once at World scope' works. The trace records which scope supplied the value.",
       "pins": [
         { "name": "in", "type": "exec", "dir": "in" },
         { "name": "self", "type": "Ref<ScopeHandle>", "dir": "in" },
-        { "name": "name", "type": "String", "dir": "in" },
+        { "name": "id", "type": "String", "dir": "in" },
         { "name": "out", "type": "exec", "dir": "out" },
         { "name": "return", "type": "float", "dir": "out" }
       ]

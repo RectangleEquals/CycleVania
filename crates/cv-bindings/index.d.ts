@@ -2115,10 +2115,13 @@ export interface ScopeHandle extends Object {
    */
   instances_of(kind: ClassPath<Object>, scope: InstanceScope): InstanceRef<Object>[];
   /**
-   * Read a dial. Inherits OUTWARD-IN and an inner scope wins, so 'set saturation once at World
-   * scope' works. The trace records which scope supplied the value.
+   * Read a numeric dial by its qualified <ClassName>.<DialName> id -- a scope handle may be any
+   * scope, so the owner is never implied. This is the DYNAMIC read; the typed one is the
+   * per-dial get node, which is picked and carries the dial's real type. Inherits OUTWARD-IN and
+   * an inner scope wins, so 'set saturation once at World scope' works. The trace records which
+   * scope supplied the value.
    */
-  dial(name: string): number;
+  dial(id: string): number;
 }
 
 /**
@@ -2186,8 +2189,13 @@ export interface Curve {
 }
 
 /**
- * A tunable the generator may retune within declared bounds. value(ctx), min, max, set, and a
- * source that is either a Constant or a Curve row read at a ProgressionAxis.
+ * A DEVELOPER-AUTHORED, named, tunable value owned by a Schematic or a Spine slot — how a host
+ * keeps fine-grained control over authored content at runtime. Identity is <ClassName>.<DialName>.
+ * Always exposed; always optional; the core ships none, and there is no such thing as a core dial.
+ * Holds a number, a hard range, a soft AdaptiveRange, an enum value, one curve, or a whole curve
+ * table whose named eval input it drives for every row. Resolves ONCE per generation pass, so it
+ * never changes underneath a decision mid-pass — which is why changing one is a different recipe
+ * and regenerates the world.
  */
 export interface Dial {
 }
