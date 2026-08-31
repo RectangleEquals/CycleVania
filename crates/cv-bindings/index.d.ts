@@ -62,13 +62,6 @@ export interface Object {
    */
   equals(other: InstanceRef<Object>): boolean;
   /**
-   * Does this candidate class satisfy a requirement for me? Runs on the CLASS DEFAULT, never an
-   * instance — which is how a longer rope satisfies a requirement for a shorter one without
-   * constructing either.
-   * @default candidate is-a my kind
-   */
-  satisfied_by(candidate: ClassPath<Object>): boolean;
-  /**
    * Short display form.
    * @default TypeName#id
    */
@@ -246,7 +239,7 @@ export interface Actor extends Object {
    */
   embed_depth(ctx: InstanceRef<Context>): Span;
   /**
-   * Hard placement constraints. A door names its own token here, which is where key-to-lock
+   * Hard placement constraints. A door names its own unlock here, which is where key-to-lock
    * distance is written.
    * @default []
    * @remarks A hook — a question the core asks.
@@ -327,12 +320,13 @@ export interface Actor extends Object {
    */
   harm(ctx: InstanceRef<Context>): Harm;
   /**
-   * Tokens the occupant keeps after reaching this. CLASSES, never instances — the lattice is
-   * over identities, and a token class already is one.
+   * Unlocks the occupant keeps after reaching this. ROWS of an UnlockTableResource, never
+   * classes — the lattice is over identities and a row id already is one. An unlock carries NO
+   * behaviour: every mechanical consequence belongs to a Component.
    * @default aggregate enabled components in attach order
    * @remarks A hook — a question the core asks.
    */
-  grants(ctx: InstanceRef<Context>): ClassPath<Object>[];
+  grants(ctx: InstanceRef<Context>): Unlock[];
   /**
    * Event: the solver is considering this position.
    * @remarks A hook — a question the core asks.
@@ -371,7 +365,7 @@ export interface Actor extends Object {
 }
 
 /**
- * An obtainable actor. The thing that hands out tokens, as distinct from the tokens themselves.
+ * An obtainable actor. The thing that hands out unlocks, as distinct from the unlocks themselves.
  */
 export interface Item extends Actor {
   /**
@@ -586,7 +580,8 @@ export interface TraversalComponent extends Component {
  */
 export interface CheckpointComponent extends Component {
   /**
-   * What comes back here.
+   * Which CLASSES OF PLACED CONTENT respawn here -- consumables, destructibles, enemies. NOT
+   * unlocks: an unlock is monotone and can never be lost, so restoring one has no meaning.
    */
   restores: ClassPath<Object>[];
   /**
@@ -712,10 +707,10 @@ export interface Rule extends Object {
    */
   is_open(): boolean;
   /**
-   * Every token this rule mentions. The solver's dependency walk, and what lets requires() plant
-   * a source.
+   * Every unlock this rule mentions. The solver's dependency walk, and what lets requires()
+   * plant a source.
    */
-  referenced(): ClassPath<Object>[];
+  referenced(): Unlock[];
   /**
    * Prose for a lock badge and the trace.
    */
@@ -740,15 +735,16 @@ export interface NeverRule extends Rule {
 }
 
 /**
- * The occupant holds something satisfying this kind.
+ * The occupant holds this unlock, or anything that supersedes it.
  *
  * Sealed: content may not subclass this.
  */
 export interface HoldsRule extends Rule {
   /**
-   * The token class required.
+   * The unlock required. Satisfied by this row, or by any held unlock whose supersedes closure
+   * contains it.
    */
-  kind: ClassPath<Object>;
+  unlock: Unlock;
   /**
    * How many. Quantity lives here, not in a number of instances.
    * @default 1
@@ -757,8 +753,8 @@ export interface HoldsRule extends Rule {
 }
 
 /**
- * The occupant holds something CARRYING a matching component. Branching on components is sound
- * where branching on tokens is not.
+ * The occupant holds something CARRYING a matching component. A DIFFERENT question from HoldsRule:
+ * this asks about the things held, that asks about the lattice.
  *
  * Sealed: content may not subclass this.
  */
@@ -1481,6 +1477,28 @@ export interface MeshResource extends Resource {
 }
 
 /**
+ * The project's progression vocabulary -- named rows, each one atom of the lattice. JSON, not the
+ * block notation, because it has no nodes to notate. A project may hold any number of these files
+ * anywhere under /Content; THE FILE IS THE UNIT OF SHARING, so copying it carries the vocabulary
+ * with it.
+ */
+export interface UnlockTableResource extends Resource {
+  /**
+   * The row names, in file order.
+   */
+  readonly rows: string[];
+  /**
+   * One row by display name. Convenience for authoring; by_id is the identity lookup.
+   */
+  row(name: string): Unlock;
+  /**
+   * One row by its stable id. IDENTITY IS THE ID, never the name -- renaming a row must rewrite
+   * zero references.
+   */
+  by_id(id: string): Unlock;
+}
+
+/**
  * One or more NAMED CURVES over one NAMED DOMAIN AXIS. One resource type where UE has four: a
  * vector curve is three rows, a colour curve is four. JSON, not the block notation, because it has
  * no nodes to notate.
@@ -1509,7 +1527,7 @@ export interface CurveTableResource extends Resource {
 }
 
 /**
- * Supplies the x a curve row is sampled at. Built-ins cover depth, space count, token count and
+ * Supplies the x a curve row is sampled at. Built-ins cover depth, space count, unlock count and
  * sphere; a developer subclasses it for anything else, which is the only way to say 'complexity
  * gains weight each time a boss is placed'.
  */
@@ -1538,9 +1556,9 @@ export interface SpaceCount extends ProgressionAxis {
 }
 
 /**
- * How many progression tokens are held.
+ * How many progression unlocks are held.
  */
-export interface TokenCount extends ProgressionAxis {
+export interface UnlockCount extends ProgressionAxis {
 }
 
 /**
@@ -1749,7 +1767,7 @@ export interface AloneInScope extends Constraint {
 
 /**
  * At least this far from a named kind. A door writes key-to-lock distance here, because the door
- * names its own token and the key does not know its lock.
+ * names its own unlock and the key does not know its lock.
  */
 export interface MinDistanceFrom extends Constraint {
   /**
@@ -1997,9 +2015,10 @@ export interface Context extends Object {
    */
   readonly party: Occupant[];
   /**
-   * Tokens held. CLASSES — one currency with grants() and HoldsRule.
+   * Unlocks held. ROWS — one currency with grants() and HoldsRule. Already expanded through
+   * supersedes, so membership is a plain set test.
    */
-  readonly held: ClassPath<Object>[];
+  readonly held: Unlock[];
   /**
    * The current accessibility sphere.
    */
@@ -2051,10 +2070,10 @@ export interface Context extends Object {
    */
   path_to(target: InstanceRef<Object>, f: QueryFilter): InstanceRef<Path>;
   /**
-   * Can an occupant holding these tokens get from here to there? Trivalent, not bool, because
+   * Can an occupant holding these unlocks get from here to there? Trivalent, not bool, because
    * the API must not be able to lie.
    */
-  accessible(from: Vec3, to: Vec3, held: ClassPath<Object>[]): Trivalent;
+  accessible(from: Vec3, to: Vec3, held: Unlock[]): Trivalent;
   /**
    * Trivalent for METRIC questions. Dual bounds answer set membership; this answers 'is this
    * ledge within 30 m', which every Span and Budget comparison actually asks.
@@ -2098,9 +2117,9 @@ export interface ScopeHandle extends Object {
    */
   readonly instances: InstanceRef<Actor>[];
   /**
-   * Tokens obtainable in this scope.
+   * Unlocks obtainable in this scope.
    */
-  readonly granted_here: ClassPath<Object>[];
+  readonly granted_here: Unlock[];
   /**
    * Is this actor inside?
    */
@@ -2108,7 +2127,7 @@ export interface ScopeHandle extends Object {
   /**
    * Can an occupant holding these get here from there?
    */
-  accessible_from(other: ScopeHandle, held: ClassPath<Object>[]): Trivalent;
+  accessible_from(other: ScopeHandle, held: Unlock[]): Trivalent;
   /**
    * Placed content of a kind. Space and up — there is deliberately no floor-scoped instance
    * query, because it would stop at a boundary the geometry does not stop at.
@@ -2179,6 +2198,15 @@ export interface Plane {
  * UNBOUNDED. A Span DECLARES a range; a Route OBLIGES one.
  */
 export interface Span {
+}
+
+/**
+ * ONE ROW of an UnlockTableResource -- one atom of the progression lattice, something an occupant
+ * holds or knows. id, name, doc, supersedes. NOT A CLASS AND NOT A FILE: it carries no behaviour
+ * whatever, because every mechanical consequence belongs to a Component where
+ * affords/supports/judge can act on it. An unlock is an identity, and identity is all it is.
+ */
+export interface Unlock {
 }
 
 /**

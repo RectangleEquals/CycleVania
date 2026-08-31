@@ -10,7 +10,7 @@
 //! # They are deliberately real, not stubs
 //!
 //! A stub returning `None` everywhere would let the pipeline compile without proving anything. These
-//! implement behaviour with actual consequences: [`Barrier`] gates a traversal on holding a token,
+//! implement behaviour with actual consequences: [`Barrier`] gates a traversal on holding a unlock,
 //! so the solver has something to reason about; [`Glass`] passes some flows and blocks others, which
 //! is the TC16 case that motivated per-flow surfaces. If the interface were shaped wrong, writing
 //! these is where it would show.
@@ -46,7 +46,7 @@ pub struct Door {
 }
 
 impl Door {
-    /// A door gated on an item or token.
+    /// A door gated on an item or unlock.
     pub fn locked_by(key: ObjectId) -> Self {
         Door {
             key: Some(key),
@@ -84,7 +84,7 @@ impl Mechanic for Door {
         match self.key {
             // The gate's own accessibility depends on its key — the fact L2 needs to place them in a
             // solvable order rather than discovering the cycle later.
-            Some(key) => base.and(Constraint::RequiresToken(key)),
+            Some(key) => base.and(Constraint::RequiresUnlock(key)),
             None => base,
         }
     }
@@ -133,34 +133,36 @@ impl Mechanic for Ledge {
     }
 }
 
-/// A token the player can be granted, which unlocks a kind of movement.
+/// A unlock the player can be granted, which unlocks a kind of movement.
 ///
 /// Becomes:
 /// ```gdscript
-/// class BlinkDash extends Token:
+/// class BlinkDash extends Unlock:
 ///     api func affords(ctx) -> Array[Traversal]:  return [Traversal.open(Blink)]
 /// ```
 #[derive(Debug, Clone)]
-pub struct MovementToken {
+pub struct MovementUnlock {
     /// The movement it enables.
     pub traversal: TraversalKind,
     /// Its display name.
     pub name: String,
 }
 
-impl MovementToken {
-    /// A token granting a movement kind.
+impl MovementUnlock {
+    /// A unlock granting a movement kind.
     pub fn new(name: impl Into<String>, traversal: TraversalKind) -> Self {
-        MovementToken {
+        MovementUnlock {
             traversal,
             name: name.into(),
         }
     }
 }
 
-impl Mechanic for MovementToken {
+impl Mechanic for MovementUnlock {
     fn kind(&self) -> ContentKind {
-        ContentKind::Token
+        // ⚠ The pickup is what is registered and placed; the unlock it grants is a table row, which
+        // is data rather than content. Before M03a these were conflated into one `Token` kind.
+        ContentKind::Item
     }
 
     fn label(&self) -> &str {
@@ -172,23 +174,23 @@ impl Mechanic for MovementToken {
     }
 }
 
-/// A pickup that grants a token when obtained.
+/// A pickup that grants a unlock when obtained.
 ///
 /// Becomes:
 /// ```gdscript
 /// class KeyItem extends Item:
-///     exposed var grants: Token
+///     exposed var grants: Unlock
 /// ```
 #[derive(Debug, Clone)]
 pub struct KeyItem {
-    /// The token obtaining this confers.
+    /// The unlock obtaining this confers.
     pub grants: ObjectId,
 }
 
 impl KeyItem {
-    /// An item granting a token.
-    pub fn granting(token: ObjectId) -> Self {
-        KeyItem { grants: token }
+    /// An item granting a unlock.
+    pub fn granting(unlock: ObjectId) -> Self {
+        KeyItem { grants: unlock }
     }
 }
 
@@ -318,14 +320,16 @@ mod tests {
 
         // The same dependency shows up as a constraint, so L2 can order placement before it routes.
         assert_eq!(
-            door.constraints(&ctx).required_tokens().collect::<Vec<_>>(),
+            door.constraints(&ctx)
+                .required_unlocks()
+                .collect::<Vec<_>>(),
             vec![key]
         );
 
         // An open doorway gates nothing.
         let open = Door::open();
         assert!(open.affords(&ctx)[0].requires.is_empty());
-        assert!(open.constraints(&ctx).required_tokens().next().is_none());
+        assert!(open.constraints(&ctx).required_unlocks().next().is_none());
     }
 
     #[test]
@@ -351,15 +355,16 @@ mod tests {
     }
 
     #[test]
-    fn an_item_grants_a_token_that_affords_movement() {
+    fn an_item_grants_a_unlock_that_affords_movement() {
         let ctx = Context::detached();
-        let dash = ObjectId::derived("token", "blink_dash");
+        let dash = ObjectId::derived("unlock", "blink_dash");
         assert_eq!(KeyItem::granting(dash).grants(&ctx), Some(dash));
 
-        // And the token itself is what turns into a traversal edge.
-        let cap = MovementToken::new("Blink Dash", TraversalKind::Blink);
+        // And the mechanic itself is what turns into a traversal edge.
+        let cap = MovementUnlock::new("Blink Dash", TraversalKind::Blink);
         assert_eq!(cap.affords(&ctx)[0].kind, TraversalKind::Blink);
-        assert_eq!(cap.kind(), ContentKind::Token);
+        // ⚠ The mechanic is placed content; the unlock it grants is a table row, which is not.
+        assert_eq!(cap.kind(), ContentKind::Item);
     }
 
     #[test]

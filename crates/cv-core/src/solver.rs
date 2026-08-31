@@ -30,6 +30,7 @@
 use crate::mission::{Accessibility, Location, LocationId, MissionEdge, MissionGraph, Rule};
 use crate::node::{Node, NodeGraph, NodeKind};
 use crate::object::ObjectId;
+use crate::unlock::GrantMap;
 use crate::Handle;
 use cv_determinism::{math, Rng};
 use std::collections::{BTreeMap, BTreeSet};
@@ -265,9 +266,9 @@ impl Solution {
 pub struct Solver<'a> {
     graph: &'a NodeGraph,
     linearity: &'a LinearityResolver,
-    /// Item content id → the token obtaining it grants.
-    grants: BTreeMap<ObjectId, ObjectId>,
-    /// Tokens the player starts with.
+    /// Item content id → the unlocks obtaining it grants.
+    grants: GrantMap,
+    /// Unlocks the player starts with.
     initial: BTreeSet<ObjectId>,
 }
 
@@ -282,20 +283,23 @@ impl<'a> Solver<'a> {
         }
     }
 
-    /// Declare that obtaining `item` grants `token`.
-    pub fn with_grant(mut self, item: ObjectId, token: ObjectId) -> Self {
-        self.grants.insert(item, token);
+    /// Declare that obtaining `item` grants `unlock`.
+    ///
+    /// ⚠ **Additive.** Calling this twice for one item grants both — one pickup, several separable
+    /// gates. Overwriting instead would silently drop a gate.
+    pub fn with_grant(mut self, item: ObjectId, unlock: ObjectId) -> Self {
+        self.grants.entry(item).or_default().insert(unlock);
         self
     }
 
-    /// Declare a token the player starts with.
-    pub fn with_initial(mut self, token: ObjectId) -> Self {
-        self.initial.insert(token);
+    /// Declare a unlock the player starts with.
+    pub fn with_initial(mut self, unlock: ObjectId) -> Self {
+        self.initial.insert(unlock);
         self
     }
 
-    /// The item→token map.
-    pub fn grants(&self) -> &BTreeMap<ObjectId, ObjectId> {
+    /// The item→unlocks map.
+    pub fn grants(&self) -> &GrantMap {
         &self.grants
     }
 
@@ -410,8 +414,8 @@ impl<'a> Solver<'a> {
             // found by sweeping, which is what keeps the dependency order honest.
             let mut assumed = self.initial.clone();
             for remaining in &pool {
-                if let Some(cap) = self.grants.get(remaining) {
-                    assumed.insert(*cap);
+                if let Some(unlocks) = self.grants.get(remaining) {
+                    assumed.extend(unlocks.iter().copied());
                 }
             }
 
@@ -466,8 +470,13 @@ impl<'a> Solver<'a> {
         rng: &Rng,
     ) -> (LocationId, Option<u32>, f64) {
         // The locks this item opens, if any.
+        // ⚠ Every unlock this item grants, not just one: an item that opens two lock families is
+        // placed against both, and taking only the first would ignore half its own consequences.
         let lock_scopes: Vec<Handle<Node>> = match self.grants.get(&item) {
-            Some(cap) => mission.locks_for(*cap).map(|e| e.from).collect(),
+            Some(unlocks) => unlocks
+                .iter()
+                .flat_map(|u| mission.locks_for(*u).map(|e| e.from))
+                .collect(),
             None => Vec::new(),
         };
 
@@ -544,7 +553,7 @@ impl<'a> Solver<'a> {
     /// Turn a fraction of edges into **one-way commits** — a drop you cannot climb back up.
     ///
     /// These are what make a world feel like it has consequences, and they are also the only way a
-    /// player can strand themselves (tokens are monotone, so collecting never hurts). The
+    /// player can strand themselves (unlocks are monotone, so collecting never hurts). The
     /// un-softlockable pass (M10) exists to check exactly what this introduces, and should be run
     /// afterwards — generating commits without validating them is how a shipped softlock happens.
     ///
@@ -588,15 +597,15 @@ impl<'a> Solver<'a> {
     ///
     /// Walks the graph outward from the start and gates a fraction of the edges that lead *away* from
     /// it, so a gate always sits between the player and something new rather than sealing a dead end.
-    /// Which token gates which edge is drawn deterministically from `tokens`.
+    /// Which unlock gates which edge is drawn deterministically from `unlocks`.
     pub fn gate_edges(
         &self,
         mission: &mut MissionGraph,
-        tokens: &[ObjectId],
+        unlocks: &[ObjectId],
         gate_fraction: f64,
         rng: &Rng,
     ) -> usize {
-        if tokens.is_empty() {
+        if unlocks.is_empty() {
             return 0;
         }
         let distances = mission.distances_from(mission.start());
@@ -617,21 +626,21 @@ impl<'a> Solver<'a> {
             })
             .collect();
 
-        // Map depth onto the token list *proportionally*, not by raw index.
+        // Map depth onto the unlock list *proportionally*, not by raw index.
         //
         // Using the depth directly is wrong and produces unsolvable worlds: the first edge out of the
-        // start would be gated on token #1, whose item can only live beyond that very edge. The
+        // start would be gated on unlock #1, whose item can only live beyond that very edge. The
         // world seals itself at the door. Scaling by the world's actual depth keeps shallow gates on
-        // early tokens and deep gates on late ones, which is what "gating follows progression"
+        // early unlocks and deep gates on late ones, which is what "gating follows progression"
         // has to mean.
         let max_depth = candidates.iter().map(|(_, d)| *d).max().unwrap_or(1).max(1) as usize;
         for (index, depth) in candidates {
             if !decide.fork(&index.to_string()).chance(gate_fraction) {
                 continue;
             }
-            let scaled = depth.saturating_sub(1) as usize * tokens.len() / max_depth;
-            let pick = scaled.min(tokens.len() - 1);
-            mission.gate_edge(index, Rule::has(tokens[pick]));
+            let scaled = depth.saturating_sub(1) as usize * unlocks.len() / max_depth;
+            let pick = scaled.min(unlocks.len() - 1);
+            mission.gate_edge(index, Rule::has(unlocks[pick]));
             gated += 1;
         }
         gated
@@ -644,7 +653,7 @@ mod tests {
     use crate::mission::Location;
 
     fn cap(name: &str) -> ObjectId {
-        ObjectId::derived("token", name)
+        ObjectId::derived("unlock", name)
     }
 
     fn item(name: &str) -> ObjectId {

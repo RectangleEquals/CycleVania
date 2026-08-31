@@ -3,7 +3,7 @@
 //! # What "content" is
 //!
 //! A host does not hand the generator *instances*; it declares **kinds of thing that may exist**: a
-//! heavy door, a bronze key, a blink-dash token, a relay puzzle. L0 turns those declarations
+//! heavy door, a bronze key, a blink-dash unlock, a relay puzzle. L0 turns those declarations
 //! into a registry, and every later layer draws from it. The registry is therefore the complete answer
 //! to "what could this world contain?", which is exactly why it is a fingerprint input (see
 //! [`crate::fingerprint`]): change what content exists and you have changed the recipe.
@@ -38,10 +38,14 @@ pub enum ContentKind {
     Item,
     /// A stateful Actor solved as a state graph.
     Puzzle,
-    /// A player ability the solver reasons about.
-    Token,
 
     // --- not schedulable: referenced or composed, never placed on their own ---
+    /// The project's progression vocabulary — an `UnlockTableResource`.
+    ///
+    /// ⚠ **The file is content; an atom is not.** A table is referenced by `grants` and by
+    /// `HoldsRule`, never placed, so it is not schedulable and fills no scope. The atoms inside it
+    /// are `Unlock` rows, which are data rather than registered content.
+    UnlockTable,
     /// A reusable concern attached to an Actor.
     Component,
     /// A triggered consequence.
@@ -66,7 +70,7 @@ impl ContentKind {
         ContentKind::Actor,
         ContentKind::Item,
         ContentKind::Puzzle,
-        ContentKind::Token,
+        ContentKind::UnlockTable,
         ContentKind::Component,
         ContentKind::Action,
         ContentKind::Shape,
@@ -83,25 +87,27 @@ impl ContentKind {
     pub fn is_schedulable(self) -> bool {
         matches!(
             self,
-            ContentKind::Actor | ContentKind::Item | ContentKind::Puzzle | ContentKind::Token
+            ContentKind::Actor | ContentKind::Item | ContentKind::Puzzle
         )
     }
 
     /// The scope kinds this content naturally fills.
     ///
-    /// A `Token` is scheduled at room granularity; an `Actor` may also land at an arbitrary point
-    /// inside one. Without this, scheduling a `Spatial` slot would count tokens among its available
-    /// variety and inflate the target with content that could never go there. A schedule may override
-    /// it, but the default should already be right.
+    /// Without this, a slot would count content among its available variety that could never go
+    /// there, and inflate its adaptive target by the difference.
+    ///
+    /// ⚠ **Every *schedulable* kind currently fills the same scopes.** The two that once differed are
+    /// both gone: `Biome` at Area became dial values on a spine slot, and `Token` at Space became an
+    /// `Unlock` table row, which is data rather than placed content. What this still separates is
+    /// **placeable from referenced**, which is what keeps a `Component` or an `UnlockTable` out of a
+    /// room's variety count. A schedule may override it.
     pub fn default_scopes(self) -> &'static [crate::node::NodeKind] {
         use crate::node::NodeKind::*;
         match self {
             ContentKind::Actor | ContentKind::Item | ContentKind::Puzzle => &[Space, Spatial],
-            // A token is scheduled as "when does this become available", which is a
-            // room-granularity question even though an Item is what physically grants it.
-            ContentKind::Token => &[Space],
             // Not schedulable: referenced or composed, never placed on their own.
-            ContentKind::Component
+            ContentKind::UnlockTable
+            | ContentKind::Component
             | ContentKind::Action
             | ContentKind::Shape
             | ContentKind::SurfaceProperty
@@ -118,7 +124,7 @@ impl ContentKind {
             ContentKind::Actor => "actor",
             ContentKind::Item => "item",
             ContentKind::Puzzle => "puzzle",
-            ContentKind::Token => "token",
+            ContentKind::UnlockTable => "unlock_table",
             ContentKind::Component => "component",
             ContentKind::Action => "action",
             ContentKind::Shape => "shape",
@@ -386,7 +392,8 @@ mod tests {
             .unwrap();
         r.register(ContentKind::Item, "crawler/key_bronze", 0x22)
             .unwrap();
-        r.register(ContentKind::Token, "blink_dash", 0x33).unwrap();
+        r.register(ContentKind::UnlockTable, "unlocks/core", 0x33)
+            .unwrap();
         r.register(ContentKind::Component, "hinge", 0x44).unwrap();
         r.register(ContentKind::StaticMesh, "kit/door_a", 0x55)
             .unwrap();
@@ -458,15 +465,13 @@ mod tests {
     #[test]
     fn the_schedulable_gate_is_explicit() {
         // Placeable things are schedulable; parts and resources are not.
-        for k in [
-            ContentKind::Actor,
-            ContentKind::Item,
-            ContentKind::Puzzle,
-            ContentKind::Token,
-        ] {
+        for k in [ContentKind::Actor, ContentKind::Item, ContentKind::Puzzle] {
             assert!(k.is_schedulable(), "{k} should be schedulable");
         }
+        // ⚠ `UnlockTable` sits here and not above: the file is content, but it is *referenced* by
+        // `grants` and `HoldsRule`, never placed. The atoms inside it are rows, which are data.
         for k in [
+            ContentKind::UnlockTable,
             ContentKind::Component,
             ContentKind::Action,
             ContentKind::Shape,
@@ -481,8 +486,8 @@ mod tests {
         let names: Vec<&str> = r.schedulable().map(|(_, e)| e.path()).collect();
         assert_eq!(
             names.len(),
-            3,
-            "door, key, blink_dash — not the component or mesh"
+            2,
+            "door and key — not the component, the mesh, or the unlock table"
         );
     }
 

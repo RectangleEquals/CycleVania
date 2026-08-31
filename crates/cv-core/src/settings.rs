@@ -84,13 +84,19 @@ pub struct Density {
 
 /// A lock type the project declares, and what answers it.
 ///
-/// The design law both halves of which should be checkable: *an instrument with no lock is a defect;
-/// a lock with no instrument is a bug.* Declaring the vocabulary is what makes the second half
-/// reportable at all.
+/// The design law both halves of which should be checkable: *an unlock with no lock is a defect; a
+/// lock with no unlock is a bug.* Declaring the vocabulary is what makes the second half reportable
+/// at all.
+///
+/// ⚠ Before M03a this said *"instrument"*, which was a third word for the same concept — the design
+/// had `token` as the symbol, `key` in prose and `instrument` here. There is one word now.
 #[derive(Clone, Debug, PartialEq)]
 pub struct LockType {
     pub name: String,
-    /// Content paths expected to answer it.
+    /// **Unlock ids** expected to answer it.
+    ///
+    /// ⚠ Ids rather than loose content paths, which is what makes the coverage check exact: an
+    /// entry naming an unlock that no table declares is itself reportable.
     pub answered_by: Vec<String>,
 }
 
@@ -105,7 +111,10 @@ pub struct Settings {
     /// tall and the floor detector starts missing ledges it should find.
     pub voxel_resolution: f64,
     pub player_profile: PlayerProfile,
-    /// Token class paths an occupant holds at sphere 0.
+    /// **Unlock ids** an occupant holds at sphere 0.
+    ///
+    /// ⚠ Ids, never display names — identity is the id, so a rename must not silently empty this
+    /// list. See [`crate::unlock`].
     ///
     /// ⚠ Without at least one, nothing can move and the first room cannot generate.
     pub starting_grants: Vec<String>,

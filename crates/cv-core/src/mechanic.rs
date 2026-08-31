@@ -110,8 +110,8 @@ impl Volume {
 /// may trade away — contrast [`Request`], which is negotiable.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Constraint {
-    /// The player must hold this token to reach the placement.
-    RequiresToken(ObjectId),
+    /// The player must hold this unlock to reach the placement.
+    RequiresUnlock(ObjectId),
     /// At least this much free space around the placement.
     MinClearance(f64),
     /// Only inside this kind of scope.
@@ -128,7 +128,7 @@ pub enum Constraint {
 impl fmt::Display for Constraint {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Constraint::RequiresToken(id) => write!(f, "requires token {id}"),
+            Constraint::RequiresUnlock(id) => write!(f, "requires unlock {id}"),
             Constraint::MinClearance(c) => write!(f, "needs {c} clearance"),
             Constraint::WithinScopeKind(k) => write!(f, "must sit in a {k}"),
             Constraint::AwayFrom {
@@ -182,10 +182,10 @@ impl Constraints {
         self.0.is_empty()
     }
 
-    /// Every token this placement depends on — what L2 needs to reason about accessibility.
-    pub fn required_tokens(&self) -> impl Iterator<Item = ObjectId> + '_ {
+    /// Every unlock this placement depends on — what L2 needs to reason about accessibility.
+    pub fn required_unlocks(&self) -> impl Iterator<Item = ObjectId> + '_ {
         self.0.iter().filter_map(|c| match c {
-            Constraint::RequiresToken(id) => Some(*id),
+            Constraint::RequiresUnlock(id) => Some(*id),
             _ => None,
         })
     }
@@ -225,7 +225,7 @@ pub enum TraversalKind {
 pub struct Traversal {
     /// The movement this enables.
     pub kind: TraversalKind,
-    /// Tokens or items the player must hold to use it.
+    /// Unlocks or items the player must hold to use it.
     pub requires: Vec<ObjectId>,
     /// Can it be traversed back the other way?
     ///
@@ -369,7 +369,7 @@ pub trait Mechanic: Send + Sync {
         Vec::new()
     }
 
-    /// What this grants when obtained — a token id, for an `Item`.
+    /// What this grants when obtained — a unlock id, for an `Item`.
     fn grants(&self, _ctx: &Context<'_>) -> Option<ObjectId> {
         None
     }
@@ -601,13 +601,13 @@ mod tests {
 
     #[test]
     fn constraints_expose_what_the_solver_needs() {
-        let dash = ObjectId::derived("token", "blink_dash");
+        let dash = ObjectId::derived("unlock", "blink_dash");
         let c = Constraints::none()
-            .and(Constraint::RequiresToken(dash))
+            .and(Constraint::RequiresUnlock(dash))
             .and(Constraint::MinClearance(2.0))
             .and(Constraint::WithinScopeKind(NodeKind::Space));
         assert_eq!(c.len(), 3);
-        assert_eq!(c.required_tokens().collect::<Vec<_>>(), vec![dash]);
+        assert_eq!(c.required_unlocks().collect::<Vec<_>>(), vec![dash]);
         assert!(Constraints::none().is_empty());
     }
 

@@ -52,6 +52,7 @@ pub mod settings;
 pub mod softlock;
 pub mod solver;
 pub mod spine;
+pub mod unlock;
 
 pub use arena::{Arena, Handle};
 pub use content::{ContentEntry, ContentKind, ContentRegistry, RegistryError};
@@ -85,8 +86,9 @@ pub use solver::{
 pub use spine::{
     Coverage, GrantSpec, Relaxation, SlotAssignment, SlotContents, SlotRole, SlotShape, SpineError,
     SpineInstance, SpineInstantiator, SpineSegment, SpineSlot, SpineTemplate, SpineValidation,
-    SpineWarning, Strictness, TokenRef,
+    SpineWarning, Strictness, UnlockRef,
 };
+pub use unlock::{GrantMap, TableError, Unlock, UnlockTable};
 
 /// This crate's version.
 pub fn version() -> &'static str {

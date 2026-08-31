@@ -10,7 +10,7 @@
 
 # API reference
 
-The tier-1 surface: **134 declarations** and **328 members**, generated from the manifest.
+The tier-1 surface: **136 declarations** and **330 members**, generated from the manifest.
 
 Notation: a **field** is a plain read and appears in a graph as a pure *get* node. A **method** takes an argument, computes, or mutates, and appears as a *call* node with execution pins — so the shape of a node tells you whether it costs anything. A **hook** is a question the core asks; hooks are what a schematic's `OVERRIDES` list is built from.
 
@@ -37,7 +37,6 @@ The root of everything with identity. Has metadata, has a rationale, can be aske
 |---|---|---|---|
 | `is_a(kind: Kind<Object>)` | `bool` | final | Class-membership test against a picked class path. |
 | `equals(other: Ref<Object>)` | `bool` | final | Identity comparison. Never a float comparison. |
-| `satisfied_by(candidate: Kind<Object>)` | `bool` |  | Does this candidate class satisfy a requirement for me? Runs on the CLASS DEFAULT, never an instance — which is how a longer rope satisfies a requirement for a shorter one without constructing either. *Default: candidate is-a my kind.* |
 | `format()` | `String` |  | Short display form. *Default: TypeName#id.* |
 | `explain()` | `String` |  | Prose a developer reads in the trace. *Default: format().* |
 | `meta(key: String)` | `MetaValue` | final | Read one metadata value. |
@@ -83,7 +82,7 @@ Something placeable in a world. The only thing the core places, and the sole poi
 | `scalable(ctx: Ref<Context>)` | `Span` | **hook** | Permitted uniform scale range. A lever a fixed-template system cannot have; convexity is affine-invariant, so the collision cache survives it. *Default: Span(1, 1).* |
 | `uniform_scale_only(ctx: Ref<Context>)` | `bool` | **hook** | Forbid non-uniform scaling. *Default: true.* |
 | `embed_depth(ctx: Ref<Context>)` | `Span` | **hook** | How far this may sink into the surface it mounts on. *Default: Span(0, 0).* |
-| `constraints(ctx: Ref<Context>)` | `Array<Ref<Constraint>>` | **hook** | Hard placement constraints. A door names its own token here, which is where key-to-lock distance is written. *Default: [].* |
+| `constraints(ctx: Ref<Context>)` | `Array<Ref<Constraint>>` | **hook** | Hard placement constraints. A door names its own unlock here, which is where key-to-lock distance is written. *Default: [].* |
 | `preferences(ctx: Ref<Context>)` | `Array<Ref<Preference>>` | **hook** | Soft placement biases. Relaxable, and reported when relaxed. *Default: [].* |
 | `eligible_roles(ctx: Ref<Context>)` | `Array<Role>` | **hook** | Which roles this actor may be assigned. Role is an output; this only narrows the candidate set. *Default: all roles.* |
 | `schedule(ctx: Ref<Context>)` | `Array<Ref<ScheduleRule>>` | **hook** | Ordering rules relative to other content. *Default: [].* |
@@ -96,7 +95,7 @@ Something placeable in a world. The only thing the core places, and the sole poi
 | `judge(ctx: Ref<Context>, path: Ref<Path>)` | `Ref<Verdict>` | **hook** | Is this proposal good, and how wrong is it? The magnitude is the point: a boolean turns the placement search into a reroll. *Default: AcceptedVerdict.* |
 | `gate(ctx: Ref<Context>)` | `Ref<Rule>` | **hook** | What the occupant must hold to pass. *Default: AlwaysRule.* |
 | `harm(ctx: Ref<Context>)` | `Harm` | **hook** | Is this dangerous, how much, and is it avoidable? *Default: Harm.NONE.* |
-| `grants(ctx: Ref<Context>)` | `Array<Kind<Object>>` | **hook** | Tokens the occupant keeps after reaching this. CLASSES, never instances — the lattice is over identities, and a token class already is one. *Default: aggregate enabled components in attach order.* |
+| `grants(ctx: Ref<Context>)` | `Array<Unlock>` | **hook** | Unlocks the occupant keeps after reaching this. ROWS of an UnlockTableResource, never classes — the lattice is over identities and a row id already is one. An unlock carries NO behaviour: every mechanical consequence belongs to a Component. *Default: aggregate enabled components in attach order.* |
 | `on_proposed(ctx: Ref<Context>)` | `void` | **hook** | Event: the solver is considering this position. |
 | `on_placed(ctx: Ref<Context>)` | `void` | **hook** | Event: this actor was committed to a position. |
 | `on_rejected(ctx: Ref<Context>, why: Ref<Verdict>)` | `void` | **hook** | Event: a candidate position was refused, with the verdict that refused it. |
@@ -107,7 +106,7 @@ Something placeable in a world. The only thing the core places, and the sole poi
 
 ### `Item` — extends `Actor`
 
-An obtainable actor. The thing that hands out tokens, as distinct from the tokens themselves.
+An obtainable actor. The thing that hands out unlocks, as distinct from the unlocks themselves.
 
 `/Core/Item`
 
@@ -213,7 +212,7 @@ A place that returns the world to a known-good state. P15's second satisfaction 
 
 | Field | Type | | |
 |---|---|---|---|
-| `restores` | `Array<Kind<Object>>` | mutable · exposed | What comes back here. |
+| `restores` | `Array<Kind<Object>>` | mutable · exposed | Which CLASSES OF PLACED CONTENT respawn here -- consumables, destructibles, enemies. NOT unlocks: an unlock is monotone and can never be lost, so restoring one has no meaning. |
 | `restores_occupant` | `bool` | mutable · exposed | Whether the occupant also returns here — which is what makes this a respawn point as well. *Default: false.* |
 | `scope` | `InstanceScope` | mutable · exposed | How far this checkpoint's effect reaches. |
 
@@ -282,7 +281,7 @@ Sealed on purpose: the solver walks this tree as the analysable half of a gate, 
 | Method | Returns | | |
 |---|---|---|---|
 | `is_open()` | `bool` | final | Does this rule currently hold? |
-| `referenced()` | `Array<Kind<Object>>` | final | Every token this rule mentions. The solver's dependency walk, and what lets requires() plant a source. |
+| `referenced()` | `Array<Unlock>` | final | Every unlock this rule mentions. The solver's dependency walk, and what lets requires() plant a source. |
 | `explain()` | `String` |  | Prose for a lock badge and the trace. |
 
 ### `AlwaysRule` — extends `Rule`
@@ -305,20 +304,20 @@ Never satisfied. The identity of AnyOfRule. On a sole route this is an authoring
 
 **sealed** — content may not subclass this
 
-The occupant holds something satisfying this kind.
+The occupant holds this unlock, or anything that supersedes it.
 
 `/Core/HoldsRule`
 
 | Field | Type | | |
 |---|---|---|---|
-| `kind` | `Kind<Object>` | mutable · exposed | The token class required. |
+| `unlock` | `Unlock` | mutable · exposed | The unlock required. Satisfied by this row, or by any held unlock whose supersedes closure contains it. |
 | `count` | `int` | mutable · exposed | How many. Quantity lives here, not in a number of instances. *Default: 1.* |
 
 ### `HasComponentRule` — extends `Rule`
 
 **sealed** — content may not subclass this
 
-The occupant holds something CARRYING a matching component. Branching on components is sound where branching on tokens is not.
+The occupant holds something CARRYING a matching component. A DIFFERENT question from HoldsRule: this asks about the things held, that asks about the lattice.
 
 `/Core/HasComponentRule`
 
@@ -787,6 +786,21 @@ Imported geometry. In a cooked build this is a hash and a bounds with no triangl
 | `derive_collision(mode: CollisionMode)` | `Ref<CollisionBody>` | final | Derive collision. In a cooked build this returns the baked body or ERRORS LOUDLY — never a silent empty body, which would turn a shipping bug into a world with no collision. |
 | `export(path: String)` | `void` | final | Write the mesh out. |
 
+### `UnlockTableResource` — extends `Resource`
+
+The project's progression vocabulary -- named rows, each one atom of the lattice. JSON, not the block notation, because it has no nodes to notate. A project may hold any number of these files anywhere under /Content; THE FILE IS THE UNIT OF SHARING, so copying it carries the vocabulary with it.
+
+`/Core/UnlockTableResource`
+
+| Field | Type | | |
+|---|---|---|---|
+| `rows` | `Array<String>` | final | The row names, in file order. |
+
+| Method | Returns | | |
+|---|---|---|---|
+| `row(name: String)` | `Unlock` | final | One row by display name. Convenience for authoring; by_id is the identity lookup. |
+| `by_id(id: String)` | `Unlock` | final | One row by its stable id. IDENTITY IS THE ID, never the name -- renaming a row must rewrite zero references. |
+
 ### `CurveTableResource` — extends `Resource`
 
 One or more NAMED CURVES over one NAMED DOMAIN AXIS. One resource type where UE has four: a vector curve is three rows, a colour curve is four. JSON, not the block notation, because it has no nodes to notate.
@@ -808,7 +822,7 @@ One or more NAMED CURVES over one NAMED DOMAIN AXIS. One resource type where UE 
 
 **abstract** — a subclass must answer
 
-Supplies the x a curve row is sampled at. Built-ins cover depth, space count, token count and sphere; a developer subclasses it for anything else, which is the only way to say 'complexity gains weight each time a boss is placed'.
+Supplies the x a curve row is sampled at. Built-ins cover depth, space count, unlock count and sphere; a developer subclasses it for anything else, which is the only way to say 'complexity gains weight each time a boss is placed'.
 
 `/Core/ProgressionAxis`
 
@@ -832,11 +846,11 @@ How many Spaces exist so far.
 
 `/Core/SpaceCount`
 
-### `TokenCount` — extends `ProgressionAxis`
+### `UnlockCount` — extends `ProgressionAxis`
 
-How many progression tokens are held.
+How many progression unlocks are held.
 
-`/Core/TokenCount`
+`/Core/UnlockCount`
 
 ### `Sphere` — extends `ProgressionAxis`
 
@@ -979,7 +993,7 @@ No sibling of this kind in the same scope.
 
 ### `MinDistanceFrom` — extends `Constraint`
 
-At least this far from a named kind. A door writes key-to-lock distance here, because the door names its own token and the key does not know its lock.
+At least this far from a named kind. A door writes key-to-lock distance here, because the door names its own unlock and the key does not know its lock.
 
 `/Core/MinDistanceFrom`
 
@@ -1150,7 +1164,7 @@ The lens handed into every hook. Scope reads are FIELDS because they are free; q
 | `slot` | `Ref<SpineSlot>` | final | The spine slot in play, or null outside a spine. Read-only. |
 | `occupant` | `Occupant` | final | Who is being reasoned about. |
 | `party` | `Array<Occupant>` | final | Everyone travelling together. |
-| `held` | `Array<Kind<Object>>` | final | Tokens held. CLASSES — one currency with grants() and HoldsRule. |
+| `held` | `Array<Unlock>` | final | Unlocks held. ROWS — one currency with grants() and HoldsRule. Already expanded through supersedes, so membership is a plain set test. |
 | `sphere` | `int` | final | The current accessibility sphere. |
 | `progression` | `float` | final | Normalised progress through the world. |
 | `role` | `Role` | final | The role assigned to the content under consideration. |
@@ -1166,7 +1180,7 @@ The lens handed into every hook. Scope reads are FIELDS because they are free; q
 | `setting(name: String)` | `MetaValue` | final | Read a project setting. |
 | `query()` | `Query` | final | The three-axis query builder: what to trace, what to consider, what to report. Declarative filters, never closures — a predicate callback survives neither the binding contract nor the palette. |
 | `path_to(target: Ref<Object>, f: QueryFilter)` | `Ref<Path>` | final | Realise a path to a target. |
-| `accessible(from: Vec3, to: Vec3, held: Array<Kind<Object>>)` | `Trivalent` | final | Can an occupant holding these tokens get from here to there? Trivalent, not bool, because the API must not be able to lie. |
+| `accessible(from: Vec3, to: Vec3, held: Array<Unlock>)` | `Trivalent` | final | Can an occupant holding these unlocks get from here to there? Trivalent, not bool, because the API must not be able to lie. |
 | `within(measured: float, limit: float)` | `Trivalent` | final | Trivalent for METRIC questions. Dual bounds answer set membership; this answers 'is this ledge within 30 m', which every Span and Budget comparison actually asks. |
 | `request(p: Ref<Preference>)` | `void` | final | Ask the solver for something, softly. |
 | `note(r: Ref<Rationale>)` | `void` | final | Add a reason to the trace. |
@@ -1186,12 +1200,12 @@ A handle on one scope.
 | `siblings` | `Array<ScopeHandle>` |  | Peers under the same parent. |
 | `floors` | `Array<ScopeHandle>` |  | Floors inside this scope, if it is a Space. |
 | `instances` | `Array<Ref<Actor>>` |  | Placed actors here. |
-| `granted_here` | `Array<Kind<Object>>` |  | Tokens obtainable in this scope. |
+| `granted_here` | `Array<Unlock>` |  | Unlocks obtainable in this scope. |
 
 | Method | Returns | | |
 |---|---|---|---|
 | `contains(a: Ref<Actor>)` | `bool` | final | Is this actor inside? |
-| `accessible_from(other: ScopeHandle, held: Array<Kind<Object>>)` | `Trivalent` | final | Can an occupant holding these get here from there? |
+| `accessible_from(other: ScopeHandle, held: Array<Unlock>)` | `Trivalent` | final | Can an occupant holding these get here from there? |
 | `instances_of(kind: Kind<Object>, scope: InstanceScope)` | `Array<Ref<Object>>` | final | Placed content of a kind. Space and up — there is deliberately no floor-scoped instance query, because it would stop at a boundary the geometry does not stop at. |
 | `dial(id: String)` | `float` | final | Read a numeric dial by its qualified <ClassName>.<DialName> id -- a scope handle may be any scope, so the owner is never implied. This is the DYNAMIC read; the typed one is the per-dial get node, which is picked and carries the dial's real type. Inherits OUTWARD-IN and an inner scope wins, so 'set saturation once at World scope' works. The trace records which scope supplied the value. |
 
@@ -1252,6 +1266,12 @@ Normal, d, distance_to(p).
 An inclusive range. min, max, contains, clamp, length, overlaps, lerp, is_bounded, and UNBOUNDED. A Span DECLARES a range; a Route OBLIGES one.
 
 `/Core/Span`
+
+### `Unlock`
+
+ONE ROW of an UnlockTableResource -- one atom of the progression lattice, something an occupant holds or knows. id, name, doc, supersedes. NOT A CLASS AND NOT A FILE: it carries no behaviour whatever, because every mechanical consequence belongs to a Component where affords/supports/judge can act on it. An unlock is an identity, and identity is all it is.
+
+`/Core/Unlock`
 
 ### `Curve`
 

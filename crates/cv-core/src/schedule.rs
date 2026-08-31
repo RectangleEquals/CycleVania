@@ -856,7 +856,7 @@ impl ContentPool {
 
     /// The entries eligible at a progression **for a kind of scope**.
     ///
-    /// Filtering by scope kind here is what keeps `unique` honest: a token is scheduled at *room*
+    /// Filtering by scope kind here is what keeps `unique` honest: a unlock is scheduled at *room*
     /// granularity, so counting it among a sub-volume's available variety would inflate that
     /// sub-volume's target with content it could never hold.
     ///

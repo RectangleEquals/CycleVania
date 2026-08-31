@@ -43,11 +43,13 @@ fn declaration_counts() {
     let structs = m.count_of(Kind::Struct);
     let enums = m.count_of(Kind::Enum);
 
-    assert_eq!(objects, 90, "object declarations");
-    assert_eq!(structs, 28, "struct declarations");
+    // M03a: +/Core/UnlockTableResource (object, 3 members) and +/Core/Unlock (struct, doc-only as
+    // every struct here is); -Object::satisfied_by. So 328 - 1 + 3 = 330.
+    assert_eq!(objects, 91, "object declarations");
+    assert_eq!(structs, 29, "struct declarations");
     assert_eq!(enums, 16, "enum declarations");
-    assert_eq!(m.classes.len(), 134, "total declarations");
-    assert_eq!(m.member_count(), 328, "fields + methods");
+    assert_eq!(m.classes.len(), 136, "total declarations");
+    assert_eq!(m.member_count(), 330, "fields + methods");
 }
 
 /// Spot-checks against `.notes/Design/v0.2b/06-api/reference.md`. Not exhaustive — the exhaustive
@@ -57,14 +59,15 @@ fn declaration_counts() {
 fn load_bearing_signatures() {
     let m = manifest();
 
-    // Tokens are CLASSES. The whole progression lattice depends on one currency on every side.
+    // The lattice trades in `Unlock` ROWS. One currency on every side, and the type is what bounds
+    // the editor's picker — see `the_lattice_is_never_bounded_at_the_root` below.
     let actor = m.get("/Core/Actor").expect("/Core/Actor");
     let grants = actor
         .methods
         .iter()
         .find(|x| x.name == "grants")
         .expect("Actor::grants");
-    assert_eq!(grants.returns, "Array<Kind<Object>>");
+    assert_eq!(grants.returns, "Array<Unlock>");
     assert!(grants.hook);
 
     let holds = m.get("/Core/HoldsRule").expect("/Core/HoldsRule");
@@ -72,10 +75,10 @@ fn load_bearing_signatures() {
         holds
             .fields
             .iter()
-            .find(|f| f.name == "kind")
+            .find(|f| f.name == "unlock")
             .map(|f| f.ty.as_str()),
-        Some("Kind<Object>"),
-        "HoldsRule tests a class, matching grants()"
+        Some("Unlock"),
+        "HoldsRule tests an unlock row, matching grants()"
     );
 
     // ctx.held is the third side of the same currency.
@@ -85,7 +88,21 @@ fn load_bearing_signatures() {
             .iter()
             .find(|f| f.name == "held")
             .map(|f| f.ty.as_str()),
-        Some("Array<Kind<Object>>")
+        Some("Array<Unlock>")
+    );
+
+    // An unlock carries no behaviour: identity and ordering, nothing else.
+    let unlock = m.get("/Core/Unlock").expect("/Core/Unlock");
+    assert!(
+        unlock.methods.is_empty(),
+        "/Core/Unlock must declare no methods — every mechanical consequence belongs to a Component"
+    );
+
+    // `satisfied_by` was deleted, not relocated. Its job is the `supersedes` column.
+    let object = m.get("/Core/Object").expect("/Core/Object");
+    assert!(
+        !object.methods.iter().any(|x| x.name == "satisfied_by"),
+        "Object must not carry a progression hook — MeshComponent would inherit it"
     );
 
     // Trivalent, never bool — the API must not be able to lie.
@@ -284,4 +301,63 @@ fn catches_kind_confusion() {
          [[class.field]]\nname = \"n\"\ntype = \"bool\"\ndoc = \"d\"\n"
     );
     assert!(violations_of(&src).contains(&"kind".to_string()));
+}
+
+/// The `lattice-bound` rule must actually fire. A validator nobody has seen fail is a validator
+/// nobody knows works — and this one guards the defect that made `grants()`'s picker offer the whole
+/// project, which is silent by nature.
+#[test]
+fn the_lattice_is_never_bounded_at_the_root() {
+    // The shipped manifest is clean.
+    assert!(
+        validate(&manifest())
+            .iter()
+            .all(|v| v.rule != "lattice-bound"),
+        "the shipped manifest widened a lattice bound"
+    );
+
+    // And widening one is caught — including in a *parameter*, which is where `held` lives.
+    for src in [
+        r#"
+[[class]]
+path = "/Core/Thing"
+kind = "object"
+status = "stable"
+doc = "d"
+  [[class.method]]
+  name = "grants"
+  args = []
+  returns = "Array<Kind<Object>>"
+  api = true
+  final = false
+  status = "stable"
+  doc = "d"
+"#,
+        r#"
+[[class]]
+path = "/Core/Thing"
+kind = "object"
+status = "stable"
+doc = "d"
+  [[class.method]]
+  name = "accessible"
+  args = [ { name = "held", type = "Array<Kind<Object>>" } ]
+  returns = "Trivalent"
+  api = true
+  final = true
+  status = "stable"
+  doc = "d"
+"#,
+    ] {
+        let m = cv_manifest::parse(&format!(
+            "version = 1
+{src}"
+        ))
+        .expect("fixture parses");
+        assert!(
+            validate(&m).iter().any(|v| v.rule == "lattice-bound"),
+            "a widened lattice bound went unreported:
+{src}"
+        );
+    }
 }

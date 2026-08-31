@@ -75,20 +75,6 @@
       ]
     },
     {
-      "op": "/Core/Object.satisfied_by",
-      "label": "satisfied_by",
-      "category": "Object",
-      "shape": "call",
-      "doc": "Does this candidate class satisfy a requirement for me? Runs on the CLASS DEFAULT, never an instance — which is how a longer rope satisfies a requirement for a shorter one without constructing either.",
-      "pins": [
-        { "name": "in", "type": "exec", "dir": "in" },
-        { "name": "self", "type": "Ref<Object>", "dir": "in" },
-        { "name": "candidate", "type": "Kind<Object>", "dir": "in" },
-        { "name": "out", "type": "exec", "dir": "out" },
-        { "name": "return", "type": "bool", "dir": "out" }
-      ]
-    },
-    {
       "op": "/Core/Object.format",
       "label": "format",
       "category": "Object",
@@ -566,7 +552,7 @@
       "label": "constraints",
       "category": "Actor",
       "shape": "call",
-      "doc": "Hard placement constraints. A door names its own token here, which is where key-to-lock distance is written.",
+      "doc": "Hard placement constraints. A door names its own unlock here, which is where key-to-lock distance is written.",
       "pins": [
         { "name": "in", "type": "exec", "dir": "in" },
         { "name": "self", "type": "Ref<Actor>", "dir": "in" },
@@ -749,13 +735,13 @@
       "label": "grants",
       "category": "Actor",
       "shape": "call",
-      "doc": "Tokens the occupant keeps after reaching this. CLASSES, never instances — the lattice is over identities, and a token class already is one.",
+      "doc": "Unlocks the occupant keeps after reaching this. ROWS of an UnlockTableResource, never classes — the lattice is over identities and a row id already is one. An unlock carries NO behaviour: every mechanical consequence belongs to a Component.",
       "pins": [
         { "name": "in", "type": "exec", "dir": "in" },
         { "name": "self", "type": "Ref<Actor>", "dir": "in" },
         { "name": "ctx", "type": "Ref<Context>", "dir": "in" },
         { "name": "out", "type": "exec", "dir": "out" },
-        { "name": "return", "type": "Array<Kind<Object>>", "dir": "out" }
+        { "name": "return", "type": "Array<Unlock>", "dir": "out" }
       ]
     },
     {
@@ -1448,7 +1434,7 @@
       "label": "get restores",
       "category": "CheckpointComponent",
       "shape": "pure",
-      "doc": "What comes back here.",
+      "doc": "Which CLASSES OF PLACED CONTENT respawn here -- consumables, destructibles, enemies. NOT unlocks: an unlock is monotone and can never be lost, so restoring one has no meaning.",
       "pins": [
         { "name": "self", "type": "Ref<CheckpointComponent>", "dir": "in" },
         { "name": "value", "type": "Array<Kind<Object>>", "dir": "out" }
@@ -1459,7 +1445,7 @@
       "label": "set restores",
       "category": "CheckpointComponent",
       "shape": "call",
-      "doc": "What comes back here.",
+      "doc": "Which CLASSES OF PLACED CONTENT respawn here -- consumables, destructibles, enemies. NOT unlocks: an unlock is monotone and can never be lost, so restoring one has no meaning.",
       "pins": [
         { "name": "in", "type": "exec", "dir": "in" },
         { "name": "self", "type": "Ref<CheckpointComponent>", "dir": "in" },
@@ -1846,12 +1832,12 @@
       "label": "referenced",
       "category": "Rule",
       "shape": "call",
-      "doc": "Every token this rule mentions. The solver's dependency walk, and what lets requires() plant a source.",
+      "doc": "Every unlock this rule mentions. The solver's dependency walk, and what lets requires() plant a source.",
       "pins": [
         { "name": "in", "type": "exec", "dir": "in" },
         { "name": "self", "type": "Ref<Rule>", "dir": "in" },
         { "name": "out", "type": "exec", "dir": "out" },
-        { "name": "return", "type": "Array<Kind<Object>>", "dir": "out" }
+        { "name": "return", "type": "Array<Unlock>", "dir": "out" }
       ]
     },
     {
@@ -1868,26 +1854,26 @@
       ]
     },
     {
-      "op": "/Core/HoldsRule.kind#get",
-      "label": "get kind",
+      "op": "/Core/HoldsRule.unlock#get",
+      "label": "get unlock",
       "category": "HoldsRule",
       "shape": "pure",
-      "doc": "The token class required.",
+      "doc": "The unlock required. Satisfied by this row, or by any held unlock whose supersedes closure contains it.",
       "pins": [
         { "name": "self", "type": "Ref<HoldsRule>", "dir": "in" },
-        { "name": "value", "type": "Kind<Object>", "dir": "out" }
+        { "name": "value", "type": "Unlock", "dir": "out" }
       ]
     },
     {
-      "op": "/Core/HoldsRule.kind#set",
-      "label": "set kind",
+      "op": "/Core/HoldsRule.unlock#set",
+      "label": "set unlock",
       "category": "HoldsRule",
       "shape": "call",
-      "doc": "The token class required.",
+      "doc": "The unlock required. Satisfied by this row, or by any held unlock whose supersedes closure contains it.",
       "pins": [
         { "name": "in", "type": "exec", "dir": "in" },
         { "name": "self", "type": "Ref<HoldsRule>", "dir": "in" },
-        { "name": "value", "type": "Kind<Object>", "dir": "in" },
+        { "name": "value", "type": "Unlock", "dir": "in" },
         { "name": "out", "type": "exec", "dir": "out" }
       ]
     },
@@ -4298,6 +4284,45 @@
       ]
     },
     {
+      "op": "/Core/UnlockTableResource.rows#get",
+      "label": "get rows",
+      "category": "UnlockTableResource",
+      "shape": "pure",
+      "doc": "The row names, in file order.",
+      "pins": [
+        { "name": "self", "type": "Ref<UnlockTableResource>", "dir": "in" },
+        { "name": "value", "type": "Array<String>", "dir": "out" }
+      ]
+    },
+    {
+      "op": "/Core/UnlockTableResource.row",
+      "label": "row",
+      "category": "UnlockTableResource",
+      "shape": "call",
+      "doc": "One row by display name. Convenience for authoring; by_id is the identity lookup.",
+      "pins": [
+        { "name": "in", "type": "exec", "dir": "in" },
+        { "name": "self", "type": "Ref<UnlockTableResource>", "dir": "in" },
+        { "name": "name", "type": "String", "dir": "in" },
+        { "name": "out", "type": "exec", "dir": "out" },
+        { "name": "return", "type": "Unlock", "dir": "out" }
+      ]
+    },
+    {
+      "op": "/Core/UnlockTableResource.by_id",
+      "label": "by_id",
+      "category": "UnlockTableResource",
+      "shape": "call",
+      "doc": "One row by its stable id. IDENTITY IS THE ID, never the name -- renaming a row must rewrite zero references.",
+      "pins": [
+        { "name": "in", "type": "exec", "dir": "in" },
+        { "name": "self", "type": "Ref<UnlockTableResource>", "dir": "in" },
+        { "name": "id", "type": "String", "dir": "in" },
+        { "name": "out", "type": "exec", "dir": "out" },
+        { "name": "return", "type": "Unlock", "dir": "out" }
+      ]
+    },
+    {
       "op": "/Core/CurveTableResource.domain#get",
       "label": "get domain",
       "category": "CurveTableResource",
@@ -5645,10 +5670,10 @@
       "label": "get held",
       "category": "Context",
       "shape": "pure",
-      "doc": "Tokens held. CLASSES — one currency with grants() and HoldsRule.",
+      "doc": "Unlocks held. ROWS — one currency with grants() and HoldsRule. Already expanded through supersedes, so membership is a plain set test.",
       "pins": [
         { "name": "self", "type": "Ref<Context>", "dir": "in" },
-        { "name": "value", "type": "Array<Kind<Object>>", "dir": "out" }
+        { "name": "value", "type": "Array<Unlock>", "dir": "out" }
       ]
     },
     {
@@ -5803,13 +5828,13 @@
       "label": "accessible",
       "category": "Context",
       "shape": "call",
-      "doc": "Can an occupant holding these tokens get from here to there? Trivalent, not bool, because the API must not be able to lie.",
+      "doc": "Can an occupant holding these unlocks get from here to there? Trivalent, not bool, because the API must not be able to lie.",
       "pins": [
         { "name": "in", "type": "exec", "dir": "in" },
         { "name": "self", "type": "Ref<Context>", "dir": "in" },
         { "name": "from", "type": "Vec3", "dir": "in" },
         { "name": "to", "type": "Vec3", "dir": "in" },
-        { "name": "held", "type": "Array<Kind<Object>>", "dir": "in" },
+        { "name": "held", "type": "Array<Unlock>", "dir": "in" },
         { "name": "out", "type": "exec", "dir": "out" },
         { "name": "return", "type": "Trivalent", "dir": "out" }
       ]
@@ -5919,10 +5944,10 @@
       "label": "get granted_here",
       "category": "ScopeHandle",
       "shape": "pure",
-      "doc": "Tokens obtainable in this scope.",
+      "doc": "Unlocks obtainable in this scope.",
       "pins": [
         { "name": "self", "type": "Ref<ScopeHandle>", "dir": "in" },
-        { "name": "value", "type": "Array<Kind<Object>>", "dir": "out" }
+        { "name": "value", "type": "Array<Unlock>", "dir": "out" }
       ]
     },
     {
@@ -5949,7 +5974,7 @@
         { "name": "in", "type": "exec", "dir": "in" },
         { "name": "self", "type": "Ref<ScopeHandle>", "dir": "in" },
         { "name": "other", "type": "ScopeHandle", "dir": "in" },
-        { "name": "held", "type": "Array<Kind<Object>>", "dir": "in" },
+        { "name": "held", "type": "Array<Unlock>", "dir": "in" },
         { "name": "out", "type": "exec", "dir": "out" },
         { "name": "return", "type": "Trivalent", "dir": "out" }
       ]

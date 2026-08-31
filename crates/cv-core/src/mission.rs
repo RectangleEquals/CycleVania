@@ -14,7 +14,7 @@
 //! # Spheres: the shape of progression
 //!
 //! Accessibility is not a single set — it is a sequence. With nothing, some rooms are accessible; the
-//! items in them grant tokens; those open more rooms; and so on. Each round is a **sphere**
+//! items in them grant unlocks; those open more rooms; and so on. Each round is a **sphere**
 //! ([`Sphere`]), and the sphere sequence *is* the progression structure:
 //!
 //! ```text
@@ -33,6 +33,7 @@
 use crate::node::{Node, NodeGraph, NodeKind};
 use crate::object::ObjectId;
 use crate::serialize::{Deserialize, Reader, SerError, SerResult, Serialize, Writer};
+use crate::unlock::GrantMap;
 use crate::Handle;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fmt;
@@ -57,7 +58,7 @@ pub enum Rule {
     Always,
     /// Never satisfied. Useful as a placeholder for "sealed until L3 decides".
     Never,
-    /// The player holds this token.
+    /// The player holds this unlock.
     Has(ObjectId),
     /// Every sub-rule holds.
     All(Vec<Rule>),
@@ -68,14 +69,14 @@ pub enum Rule {
 }
 
 impl Rule {
-    /// Requires holding a token.
-    pub fn has(token: ObjectId) -> Rule {
-        Rule::Has(token)
+    /// Requires holding a unlock.
+    pub fn has(unlock: ObjectId) -> Rule {
+        Rule::Has(unlock)
     }
 
-    /// Requires all of a set of tokens.
-    pub fn all_of(tokens: impl IntoIterator<Item = ObjectId>) -> Rule {
-        let rules: Vec<Rule> = tokens.into_iter().map(Rule::Has).collect();
+    /// Requires all of a set of unlocks.
+    pub fn all_of(unlocks: impl IntoIterator<Item = ObjectId>) -> Rule {
+        let rules: Vec<Rule> = unlocks.into_iter().map(Rule::Has).collect();
         match rules.len() {
             0 => Rule::Always,
             1 => rules.into_iter().next().expect("length checked"),
@@ -83,9 +84,9 @@ impl Rule {
         }
     }
 
-    /// Requires any one of a set of tokens.
-    pub fn any_of(tokens: impl IntoIterator<Item = ObjectId>) -> Rule {
-        let rules: Vec<Rule> = tokens.into_iter().map(Rule::Has).collect();
+    /// Requires any one of a set of unlocks.
+    pub fn any_of(unlocks: impl IntoIterator<Item = ObjectId>) -> Rule {
+        let rules: Vec<Rule> = unlocks.into_iter().map(Rule::Has).collect();
         match rules.len() {
             0 => Rule::Never, // "any of nothing" is unsatisfiable, not free
             1 => rules.into_iter().next().expect("length checked"),
@@ -93,7 +94,7 @@ impl Rule {
         }
     }
 
-    /// Is this satisfied by a set of held tokens?
+    /// Is this satisfied by a set of held unlocks?
     pub fn is_satisfied(&self, held: &BTreeSet<ObjectId>) -> bool {
         match self {
             Rule::Always => true,
@@ -110,17 +111,17 @@ impl Rule {
         matches!(self, Rule::Always)
     }
 
-    /// Every token mentioned anywhere in the rule.
+    /// Every unlock mentioned anywhere in the rule.
     ///
     /// What the solver needs to know which items gate this edge — and therefore which locks a key is
     /// "for" when [`crate::solver`] applies the locality dial.
-    pub fn tokens(&self) -> BTreeSet<ObjectId> {
+    pub fn unlocks(&self) -> BTreeSet<ObjectId> {
         let mut out = BTreeSet::new();
-        self.collect_tokens(&mut out);
+        self.collect_unlocks(&mut out);
         out
     }
 
-    fn collect_tokens(&self, out: &mut BTreeSet<ObjectId>) {
+    fn collect_unlocks(&self, out: &mut BTreeSet<ObjectId>) {
         match self {
             Rule::Always | Rule::Never => {}
             Rule::Has(c) => {
@@ -128,10 +129,10 @@ impl Rule {
             }
             Rule::All(rules) | Rule::Any(rules) => {
                 for r in rules {
-                    r.collect_tokens(out);
+                    r.collect_unlocks(out);
                 }
             }
-            Rule::Not(r) => r.collect_tokens(out),
+            Rule::Not(r) => r.collect_unlocks(out),
         }
     }
 
@@ -274,7 +275,7 @@ pub struct Sphere {
     pub scopes: Vec<Handle<Node>>,
     /// Locations that became available in this round.
     pub locations: Vec<LocationId>,
-    /// Tokens obtained from those locations, opening the next sphere.
+    /// Unlocks obtained from those locations, opening the next sphere.
     pub granted: Vec<ObjectId>,
 }
 
@@ -285,7 +286,7 @@ pub struct Accessibility {
     pub scopes: BTreeSet<Handle<Node>>,
     /// Every accessible location.
     pub locations: BTreeSet<LocationId>,
-    /// Every token obtainable.
+    /// Every unlock obtainable.
     pub held: BTreeSet<ObjectId>,
     /// The progression, round by round.
     pub spheres: Vec<Sphere>,
@@ -595,14 +596,14 @@ impl MissionGraph {
             .map(|(id, _)| *id)
     }
 
-    /// Edges that are gated on a token — the "locks" a key opens.
-    pub fn locks_for(&self, token: ObjectId) -> impl Iterator<Item = &MissionEdge> + '_ {
+    /// Edges that are gated on a unlock — the "locks" a key opens.
+    pub fn locks_for(&self, unlock: ObjectId) -> impl Iterator<Item = &MissionEdge> + '_ {
         self.edges
             .iter()
-            .filter(move |e| e.rule.tokens().contains(&token))
+            .filter(move |e| e.rule.unlocks().contains(&unlock))
     }
 
-    /// **Sweep**: what is accessible, given a starting token set and what sits at each location.
+    /// **Sweep**: what is accessible, given a starting unlock set and what sits at each location.
     ///
     /// A fixed point rather than a single traversal: reaching a room may yield an item that opens
     /// another room, so the search repeats until a round adds nothing. Each round is a [`Sphere`].
@@ -610,7 +611,7 @@ impl MissionGraph {
         &self,
         initial: &BTreeSet<ObjectId>,
         placements: &BTreeMap<LocationId, ObjectId>,
-        grants: &BTreeMap<ObjectId, ObjectId>,
+        grants: &GrantMap,
     ) -> Accessibility {
         self.sweep_from(self.start, initial, placements, grants)
     }
@@ -618,13 +619,13 @@ impl MissionGraph {
     /// A sweep starting somewhere other than the world's start.
     ///
     /// This is what the un-softlockable analysis needs: "the player has just dropped through a one-way
-    /// transition into `origin` holding only these tokens — what can they still reach?"
+    /// transition into `origin` holding only these unlocks — what can they still reach?"
     pub fn sweep_from(
         &self,
         origin: Handle<Node>,
         initial: &BTreeSet<ObjectId>,
         placements: &BTreeMap<LocationId, ObjectId>,
-        grants: &BTreeMap<ObjectId, ObjectId>,
+        grants: &GrantMap,
     ) -> Accessibility {
         let mut held = initial.clone();
         let mut scopes: BTreeSet<Handle<Node>> = BTreeSet::new();
@@ -648,9 +649,11 @@ impl MissionGraph {
             let mut granted: Vec<ObjectId> = Vec::new();
             for loc in &new_locations {
                 if let Some(item) = placements.get(loc) {
-                    if let Some(cap) = grants.get(item) {
-                        if !held.contains(cap) {
-                            granted.push(*cap);
+                    if let Some(unlocks) = grants.get(item) {
+                        for u in unlocks {
+                            if !held.contains(u) {
+                                granted.push(*u);
+                            }
                         }
                     }
                 }
@@ -682,15 +685,15 @@ impl MissionGraph {
         }
     }
 
-    /// One breadth-first traversal with a fixed token set.
+    /// One breadth-first traversal with a fixed unlock set.
     ///
     /// Deterministic: a `VecDeque` frontier and edges visited in index order, so the same graph and
-    /// tokens always yield the same set — and, more importantly, the same *sphere boundaries*.
+    /// unlocks always yield the same set — and, more importantly, the same *sphere boundaries*.
     pub fn traverse(&self, held: &BTreeSet<ObjectId>) -> BTreeSet<Handle<Node>> {
         self.traverse_from(self.start, held)
     }
 
-    /// One breadth-first traversal from an arbitrary origin with a fixed token set.
+    /// One breadth-first traversal from an arbitrary origin with a fixed unlock set.
     pub fn traverse_from(
         &self,
         origin: Handle<Node>,
@@ -854,7 +857,7 @@ mod tests {
     use crate::serialize::{from_bytes, to_bytes};
 
     fn cap(name: &str) -> ObjectId {
-        ObjectId::derived("token", name)
+        ObjectId::derived("unlock", name)
     }
 
     #[test]
@@ -891,8 +894,8 @@ mod tests {
             Rule::has(cap("dash")),
             Rule::Any(vec![Rule::has(cap("grapple")), Rule::has(cap("blink"))]),
         ]);
-        assert_eq!(rule.tokens().len(), 3);
-        assert!(rule.tokens().contains(&cap("blink")));
+        assert_eq!(rule.unlocks().len(), 3);
+        assert!(rule.unlocks().contains(&cap("blink")));
         assert_eq!(rule.depth(), 3);
         assert_eq!(Rule::Always.depth(), 1);
     }
@@ -951,7 +954,7 @@ mod tests {
             },
         );
 
-        let grants: BTreeMap<ObjectId, ObjectId> = [(key, dash)].into_iter().collect();
+        let grants: GrantMap = [(key, BTreeSet::from([dash]))].into_iter().collect();
         let placements: BTreeMap<LocationId, ObjectId> =
             [(LocationId(0), key)].into_iter().collect();
 
@@ -983,7 +986,7 @@ mod tests {
             },
         );
 
-        let grants: BTreeMap<ObjectId, ObjectId> = [(key, dash)].into_iter().collect();
+        let grants: GrantMap = [(key, BTreeSet::from([dash]))].into_iter().collect();
         let placements: BTreeMap<LocationId, ObjectId> =
             [(LocationId(0), key)].into_iter().collect();
 
@@ -1043,7 +1046,7 @@ mod tests {
                 slot: 0,
             },
         );
-        let grants: BTreeMap<ObjectId, ObjectId> = [(key, dash)].into_iter().collect();
+        let grants: GrantMap = [(key, BTreeSet::from([dash]))].into_iter().collect();
         let placements: BTreeMap<LocationId, ObjectId> =
             [(LocationId(0), key)].into_iter().collect();
 

@@ -8,7 +8,7 @@
 //!
 //! # The tier-1 surface, as data
 //!
-//! 134 declarations and 328 members. Every other surface in the toolchain — the VM's dispatch
+//! 136 declarations and 330 members. Every other surface in the toolchain — the VM's dispatch
 //! table, the inspector, the node palette, the reference — reads this rather than restating it.
 
 /// Which family a declaration belongs to.
@@ -210,20 +210,6 @@ pub const CLASSES: &[ClassDesc] = &[
                 status: Status::Stable,
                 doc: "Identity comparison. Never a float comparison.",
                 default: None,
-            },
-            MethodDesc {
-                name: "satisfied_by",
-                params: &[
-                    ParamDesc { name: "candidate", ty: "Kind<Object>" },
-                ],
-                returns: "bool",
-                api: true,
-                is_final: false,
-                is_abstract: false,
-                hook: false,
-                status: Status::Stable,
-                doc: "Does this candidate class satisfy a requirement for me? Runs on the CLASS DEFAULT, never an instance — which is how a longer rope satisfies a requirement for a shorter one without constructing either.",
-                default: Some("candidate is-a my kind"),
             },
             MethodDesc {
                 name: "format",
@@ -692,7 +678,7 @@ pub const CLASSES: &[ClassDesc] = &[
                 is_abstract: false,
                 hook: true,
                 status: Status::Stable,
-                doc: "Hard placement constraints. A door names its own token here, which is where key-to-lock distance is written.",
+                doc: "Hard placement constraints. A door names its own unlock here, which is where key-to-lock distance is written.",
                 default: Some("[]"),
             },
             MethodDesc {
@@ -869,13 +855,13 @@ pub const CLASSES: &[ClassDesc] = &[
                 params: &[
                     ParamDesc { name: "ctx", ty: "Ref<Context>" },
                 ],
-                returns: "Array<Kind<Object>>",
+                returns: "Array<Unlock>",
                 api: true,
                 is_final: false,
                 is_abstract: false,
                 hook: true,
                 status: Status::Stable,
-                doc: "Tokens the occupant keeps after reaching this. CLASSES, never instances — the lattice is over identities, and a token class already is one.",
+                doc: "Unlocks the occupant keeps after reaching this. ROWS of an UnlockTableResource, never classes — the lattice is over identities and a row id already is one. An unlock carries NO behaviour: every mechanical consequence belongs to a Component.",
                 default: Some("aggregate enabled components in attach order"),
             },
             MethodDesc {
@@ -988,7 +974,7 @@ pub const CLASSES: &[ClassDesc] = &[
         sealed: false,
         is_abstract: false,
         status: Status::Stable,
-        doc: "An obtainable actor. The thing that hands out tokens, as distinct from the tokens themselves.",
+        doc: "An obtainable actor. The thing that hands out unlocks, as distinct from the unlocks themselves.",
         fields: &[
         ],
         methods: &[
@@ -1516,7 +1502,7 @@ pub const CLASSES: &[ClassDesc] = &[
                 exposed: true,
                 mutable: true,
                 status: Status::Stable,
-                doc: "What comes back here.",
+                doc: "Which CLASSES OF PLACED CONTENT respawn here -- consumables, destructibles, enemies. NOT unlocks: an unlock is monotone and can never be lost, so restoring one has no meaning.",
                 default: None,
             },
             FieldDesc {
@@ -1818,13 +1804,13 @@ pub const CLASSES: &[ClassDesc] = &[
                 name: "referenced",
                 params: &[
                 ],
-                returns: "Array<Kind<Object>>",
+                returns: "Array<Unlock>",
                 api: true,
                 is_final: true,
                 is_abstract: false,
                 hook: false,
                 status: Status::Stable,
-                doc: "Every token this rule mentions. The solver's dependency walk, and what lets requires() plant a source.",
+                doc: "Every unlock this rule mentions. The solver's dependency walk, and what lets requires() plant a source.",
                 default: None,
             },
             MethodDesc {
@@ -1881,17 +1867,17 @@ pub const CLASSES: &[ClassDesc] = &[
         sealed: true,
         is_abstract: false,
         status: Status::Stable,
-        doc: "The occupant holds something satisfying this kind.",
+        doc: "The occupant holds this unlock, or anything that supersedes it.",
         fields: &[
             FieldDesc {
-                name: "kind",
-                ty: "Kind<Object>",
+                name: "unlock",
+                ty: "Unlock",
                 api: true,
                 is_final: false,
                 exposed: true,
                 mutable: true,
                 status: Status::Stable,
-                doc: "The token class required.",
+                doc: "The unlock required. Satisfied by this row, or by any held unlock whose supersedes closure contains it.",
                 default: None,
             },
             FieldDesc {
@@ -1918,7 +1904,7 @@ pub const CLASSES: &[ClassDesc] = &[
         sealed: true,
         is_abstract: false,
         status: Status::Stable,
-        doc: "The occupant holds something CARRYING a matching component. Branching on components is sound where branching on tokens is not.",
+        doc: "The occupant holds something CARRYING a matching component. A DIFFERENT question from HoldsRule: this asks about the things held, that asks about the lattice.",
         fields: &[
             FieldDesc {
                 name: "kind",
@@ -3749,6 +3735,60 @@ pub const CLASSES: &[ClassDesc] = &[
         ],
     },
     ClassDesc {
+        path: "/Core/UnlockTableResource",
+        extends: Some("/Core/Resource"),
+        kind: DeclKind::Object,
+        sealed: false,
+        is_abstract: false,
+        status: Status::Stable,
+        doc: "The project's progression vocabulary -- named rows, each one atom of the lattice. JSON, not the block notation, because it has no nodes to notate. A project may hold any number of these files anywhere under /Content; THE FILE IS THE UNIT OF SHARING, so copying it carries the vocabulary with it.",
+        fields: &[
+            FieldDesc {
+                name: "rows",
+                ty: "Array<String>",
+                api: true,
+                is_final: true,
+                exposed: false,
+                mutable: false,
+                status: Status::Stable,
+                doc: "The row names, in file order.",
+                default: None,
+            },
+        ],
+        methods: &[
+            MethodDesc {
+                name: "row",
+                params: &[
+                    ParamDesc { name: "name", ty: "String" },
+                ],
+                returns: "Unlock",
+                api: true,
+                is_final: true,
+                is_abstract: false,
+                hook: false,
+                status: Status::Stable,
+                doc: "One row by display name. Convenience for authoring; by_id is the identity lookup.",
+                default: None,
+            },
+            MethodDesc {
+                name: "by_id",
+                params: &[
+                    ParamDesc { name: "id", ty: "String" },
+                ],
+                returns: "Unlock",
+                api: true,
+                is_final: true,
+                is_abstract: false,
+                hook: false,
+                status: Status::Stable,
+                doc: "One row by its stable id. IDENTITY IS THE ID, never the name -- renaming a row must rewrite zero references.",
+                default: None,
+            },
+        ],
+        values: &[
+        ],
+    },
+    ClassDesc {
         path: "/Core/CurveTableResource",
         extends: Some("/Core/Resource"),
         kind: DeclKind::Object,
@@ -3832,7 +3872,7 @@ pub const CLASSES: &[ClassDesc] = &[
         sealed: false,
         is_abstract: true,
         status: Status::Stable,
-        doc: "Supplies the x a curve row is sampled at. Built-ins cover depth, space count, token count and sphere; a developer subclasses it for anything else, which is the only way to say 'complexity gains weight each time a boss is placed'.",
+        doc: "Supplies the x a curve row is sampled at. Built-ins cover depth, space count, unlock count and sphere; a developer subclasses it for anything else, which is the only way to say 'complexity gains weight each time a boss is placed'.",
         fields: &[
             FieldDesc {
                 name: "name",
@@ -3896,13 +3936,13 @@ pub const CLASSES: &[ClassDesc] = &[
         ],
     },
     ClassDesc {
-        path: "/Core/TokenCount",
+        path: "/Core/UnlockCount",
         extends: Some("/Core/ProgressionAxis"),
         kind: DeclKind::Object,
         sealed: false,
         is_abstract: false,
         status: Status::Stable,
-        doc: "How many progression tokens are held.",
+        doc: "How many progression unlocks are held.",
         fields: &[
         ],
         methods: &[
@@ -4460,7 +4500,7 @@ pub const CLASSES: &[ClassDesc] = &[
         sealed: false,
         is_abstract: false,
         status: Status::Stable,
-        doc: "At least this far from a named kind. A door writes key-to-lock distance here, because the door names its own token and the key does not know its lock.",
+        doc: "At least this far from a named kind. A door writes key-to-lock distance here, because the door names its own unlock and the key does not know its lock.",
         fields: &[
             FieldDesc {
                 name: "kind",
@@ -5091,13 +5131,13 @@ pub const CLASSES: &[ClassDesc] = &[
             },
             FieldDesc {
                 name: "held",
-                ty: "Array<Kind<Object>>",
+                ty: "Array<Unlock>",
                 api: true,
                 is_final: true,
                 exposed: false,
                 mutable: false,
                 status: Status::Stable,
-                doc: "Tokens held. CLASSES — one currency with grants() and HoldsRule.",
+                doc: "Unlocks held. ROWS — one currency with grants() and HoldsRule. Already expanded through supersedes, so membership is a plain set test.",
                 default: None,
             },
             FieldDesc {
@@ -5254,7 +5294,7 @@ pub const CLASSES: &[ClassDesc] = &[
                 params: &[
                     ParamDesc { name: "from", ty: "Vec3" },
                     ParamDesc { name: "to", ty: "Vec3" },
-                    ParamDesc { name: "held", ty: "Array<Kind<Object>>" },
+                    ParamDesc { name: "held", ty: "Array<Unlock>" },
                 ],
                 returns: "Trivalent",
                 api: true,
@@ -5262,7 +5302,7 @@ pub const CLASSES: &[ClassDesc] = &[
                 is_abstract: false,
                 hook: false,
                 status: Status::Stable,
-                doc: "Can an occupant holding these tokens get from here to there? Trivalent, not bool, because the API must not be able to lie.",
+                doc: "Can an occupant holding these unlocks get from here to there? Trivalent, not bool, because the API must not be able to lie.",
                 default: None,
             },
             MethodDesc {
@@ -5383,13 +5423,13 @@ pub const CLASSES: &[ClassDesc] = &[
             },
             FieldDesc {
                 name: "granted_here",
-                ty: "Array<Kind<Object>>",
+                ty: "Array<Unlock>",
                 api: true,
                 is_final: false,
                 exposed: false,
                 mutable: false,
                 status: Status::Stable,
-                doc: "Tokens obtainable in this scope.",
+                doc: "Unlocks obtainable in this scope.",
                 default: None,
             },
         ],
@@ -5412,7 +5452,7 @@ pub const CLASSES: &[ClassDesc] = &[
                 name: "accessible_from",
                 params: &[
                     ParamDesc { name: "other", ty: "ScopeHandle" },
-                    ParamDesc { name: "held", ty: "Array<Kind<Object>>" },
+                    ParamDesc { name: "held", ty: "Array<Unlock>" },
                 ],
                 returns: "Trivalent",
                 api: true,
@@ -5584,6 +5624,21 @@ pub const CLASSES: &[ClassDesc] = &[
         is_abstract: false,
         status: Status::Stable,
         doc: "An inclusive range. min, max, contains, clamp, length, overlaps, lerp, is_bounded, and UNBOUNDED. A Span DECLARES a range; a Route OBLIGES one.",
+        fields: &[
+        ],
+        methods: &[
+        ],
+        values: &[
+        ],
+    },
+    ClassDesc {
+        path: "/Core/Unlock",
+        extends: None,
+        kind: DeclKind::Struct,
+        sealed: false,
+        is_abstract: false,
+        status: Status::Stable,
+        doc: "ONE ROW of an UnlockTableResource -- one atom of the progression lattice, something an occupant holds or knows. id, name, doc, supersedes. NOT A CLASS AND NOT A FILE: it carries no behaviour whatever, because every mechanical consequence belongs to a Component where affords/supports/judge can act on it. An unlock is an identity, and identity is all it is.",
         fields: &[
         ],
         methods: &[
@@ -6182,7 +6237,7 @@ pub const CLASSES: &[ClassDesc] = &[
 ];
 
 /// Declaration counts, asserted by the manifest's own tests.
-pub const OBJECT_COUNT: usize = 90;
-pub const STRUCT_COUNT: usize = 28;
+pub const OBJECT_COUNT: usize = 91;
+pub const STRUCT_COUNT: usize = 29;
 pub const ENUM_COUNT: usize = 16;
-pub const MEMBER_COUNT: usize = 328;
+pub const MEMBER_COUNT: usize = 330;

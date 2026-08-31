@@ -45,8 +45,51 @@ pub fn validate(m: &Manifest) -> Vec<Violation> {
     no_overloads(m, &mut v);
     documented(m, &mut v);
     kind_consistency(m, &mut v);
+    lattice_is_not_bounded_at_the_root(m, &mut v);
     v.sort();
     v
+}
+
+/// The progression lattice may never be typed `Kind<Object>`.
+///
+/// # Why this is a rule and not a review note
+///
+/// `Object` is the root of everything, so a `Kind<Object>` pin bounds the editor's picker at *the whole
+/// project*: every Actor, Component, Rule and authored schematic. A developer answering *"what does the
+/// Hookshot grant?"* could pick a door class, nothing downstream would reject it, and the lock it was
+/// meant to open would be **silently ungated**.
+///
+/// ⚠ That is a typed-string failure wearing a picker's clothes — the exact class of error the visual
+/// pivot exists to prevent, reintroduced by a type that still compiles. The lattice trades in `Unlock`
+/// rows, and this check keeps it that way: widening it back is a build failure, not a review catch.
+fn lattice_is_not_bounded_at_the_root(m: &Manifest, out: &mut Vec<Violation>) {
+    /// Members that carry lattice atoms, by the name the design gives them.
+    const LATTICE: &[&str] = &["grants", "held", "granted_here", "referenced", "unlock"];
+
+    let mut flag = |c: &Class, member: &str, ty: &str| {
+        if LATTICE.contains(&member) && split_type(ty).iter().any(|p| p == "Object") {
+            out.push(Violation {
+                rule: "lattice-bound",
+                where_: format!("{}::{member}", c.path),
+                detail: format!(
+                    "`{ty}` bounds the picker at the root of everything; the lattice trades in `Unlock`"
+                ),
+            });
+        }
+    };
+    for c in &m.classes {
+        for f in &c.fields {
+            flag(c, &f.name, &f.ty);
+        }
+        for me in &c.methods {
+            flag(c, &me.name, &me.returns);
+            // ⚠ Params are checked on the PARAM name, not the method's: `accessible(from, to, held)`
+            // carries a lattice set in `held`, and matching on `accessible` would miss it.
+            for p in &me.params {
+                flag(c, &p.name, &p.ty);
+            }
+        }
+    }
 }
 
 fn unique_paths(m: &Manifest, out: &mut Vec<Violation>) {

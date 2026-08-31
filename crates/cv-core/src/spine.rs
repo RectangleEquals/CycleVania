@@ -135,21 +135,21 @@ pub enum SlotRole {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Symbolic token references
+// Symbolic unlock references
 // ---------------------------------------------------------------------------------------------
 
-/// A token named either directly or **by whichever slot granted it**.
+/// A unlock named either directly or **by whichever slot granted it**.
 ///
-/// [`TokenRef::GrantedBy`] is what makes the Zelda-dungeon pattern expressible at all: a
-/// generated dungeon cannot *name* the token it hands out, so a spine says "gate this segment on
+/// [`UnlockRef::GrantedBy`] is what makes the Zelda-dungeon pattern expressible at all: a
+/// generated dungeon cannot *name* the unlock it hands out, so a spine says "gate this segment on
 /// whatever the precursor granted, and make the boss require it too". Both references resolve to the
 /// same choice at instantiation, so the theme holds however the generator resolves it.
 ///
-/// Without this, the pattern could only be written by hard-coding a token — defeating the point
+/// Without this, the pattern could only be written by hard-coding a unlock — defeating the point
 /// of generating.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum TokenRef {
-    /// This exact token.
+pub enum UnlockRef {
+    /// This exact unlock.
     Explicit(ObjectId),
     /// Whatever the named slot ended up granting.
     GrantedBy(String),
@@ -158,12 +158,12 @@ pub enum TokenRef {
 /// What a slot's content may grant. The generator picks; the dev constrains.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct GrantSpec {
-    /// Candidate tokens. The instantiator chooses one deterministically.
+    /// Candidate unlocks. The instantiator chooses one deterministically.
     pub any_of: Vec<ObjectId>,
 }
 
 impl GrantSpec {
-    /// Any one of these tokens.
+    /// Any one of these unlocks.
     pub fn any_of(caps: impl IntoIterator<Item = ObjectId>) -> Self {
         GrantSpec {
             any_of: caps.into_iter().collect(),
@@ -206,7 +206,7 @@ pub struct SlotContents {
     /// Content preferred here — the soft counterpart.
     pub prefer_contain: Vec<ObjectId>,
     /// State the player must hold to reach this slot.
-    pub requires: Option<TokenRef>,
+    pub requires: Option<UnlockRef>,
     /// What the content placed here grants.
     pub grants: Option<GrantSpec>,
     /// **The generator places nothing here.** No scheduled content, no item locations, no gates
@@ -302,12 +302,12 @@ impl SpineSlot {
     }
 
     /// Require state to reach here.
-    pub fn requires(mut self, requirement: TokenRef) -> Self {
+    pub fn requires(mut self, requirement: UnlockRef) -> Self {
         self.contents.requires = Some(requirement);
         self
     }
 
-    /// Declare that this slot grants a token.
+    /// Declare that this slot grants a unlock.
     pub fn grants(mut self, spec: GrantSpec) -> Self {
         self.contents.grants = Some(spec);
         self
@@ -386,7 +386,7 @@ pub struct SpineSegment {
     /// Per-segment dial override — free-form here, tight there.
     pub linearity: Option<LinearityOverride>,
     /// What the path through here requires.
-    pub gated_by: Option<TokenRef>,
+    pub gated_by: Option<UnlockRef>,
 }
 
 impl SpineSegment {
@@ -433,7 +433,7 @@ impl SpineSegment {
     }
 
     /// Gate the path through this segment.
-    pub fn gated_by(mut self, requirement: TokenRef) -> Self {
+    pub fn gated_by(mut self, requirement: UnlockRef) -> Self {
         self.gated_by = Some(requirement);
         self
     }
@@ -717,7 +717,7 @@ pub enum SpineError {
     UnknownSlot { referenced_by: String, name: String },
     /// Two slots share a name, so references are ambiguous.
     DuplicateSlot { name: String },
-    /// A slot requires a token granted only by a *later* slot — an unsatisfiable order.
+    /// A slot requires a unlock granted only by a *later* slot — an unsatisfiable order.
     GrantOrderViolation { slot: String, granted_by: String },
     /// A slot needs more connections than the instance can supply.
     DegreeInfeasible {
@@ -957,7 +957,7 @@ impl SpineTemplate {
                 }
             }
             // ...and a requirement must be granted by something *earlier*, or no route satisfies it.
-            if let Some(TokenRef::GrantedBy(source)) = &slot.contents.requires {
+            if let Some(UnlockRef::GrantedBy(source)) = &slot.contents.requires {
                 match index_of(source) {
                     None => v.errors.push(SpineError::UnknownSlot {
                         referenced_by: slot.name.clone(),
@@ -1028,7 +1028,7 @@ impl SpineTemplate {
                     });
                 }
             }
-            if let Some(TokenRef::GrantedBy(source)) = &segment.gated_by {
+            if let Some(UnlockRef::GrantedBy(source)) = &segment.gated_by {
                 match (index_of(source), index_of(&segment.to)) {
                     (None, _) => v.errors.push(SpineError::UnknownSlot {
                         referenced_by: format!("segment {}→{}", segment.from, segment.to),
@@ -1058,7 +1058,7 @@ pub struct SlotAssignment {
     pub slot: String,
     /// The scope it was allocated.
     pub scope: Handle<Node>,
-    /// The token resolved from its [`GrantSpec`], if it had one.
+    /// The unlock resolved from its [`GrantSpec`], if it had one.
     pub granted: Option<ObjectId>,
 }
 
@@ -1116,7 +1116,7 @@ impl SpineInstance {
         &self.empty
     }
 
-    /// The token a named slot granted.
+    /// The unlock a named slot granted.
     pub fn granted_by(&self, slot: &str) -> Option<ObjectId> {
         self.assignments
             .iter()
@@ -1452,17 +1452,17 @@ impl<'a> SpineInstantiator<'a> {
         }
     }
 
-    /// Resolve symbolic token references and gate the corresponding edges.
+    /// Resolve symbolic unlock references and gate the corresponding edges.
     fn apply_gating(
         &self,
         template: &SpineTemplate,
         assignments: &[SlotAssignment],
         mission: &mut MissionGraph,
     ) {
-        let resolve = |r: &TokenRef| -> Option<ObjectId> {
+        let resolve = |r: &UnlockRef| -> Option<ObjectId> {
             match r {
-                TokenRef::Explicit(c) => Some(*c),
-                TokenRef::GrantedBy(slot) => assignments
+                UnlockRef::Explicit(c) => Some(*c),
+                UnlockRef::GrantedBy(slot) => assignments
                     .iter()
                     .find(|a| a.slot == *slot)
                     .and_then(|a| a.granted),
@@ -1596,14 +1596,14 @@ impl Deserialize for Strictness {
     }
 }
 
-impl Serialize for TokenRef {
+impl Serialize for UnlockRef {
     fn serialize(&self, w: &mut Writer) {
         match self {
-            TokenRef::Explicit(c) => {
+            UnlockRef::Explicit(c) => {
                 w.u8(0);
                 w.write(c);
             }
-            TokenRef::GrantedBy(slot) => {
+            UnlockRef::GrantedBy(slot) => {
                 w.u8(1);
                 w.str(slot);
             }
@@ -1611,12 +1611,12 @@ impl Serialize for TokenRef {
     }
 }
 
-impl Deserialize for TokenRef {
+impl Deserialize for UnlockRef {
     fn deserialize(r: &mut Reader<'_>) -> SerResult<Self> {
         Ok(match r.u8()? {
-            0 => TokenRef::Explicit(r.read()?),
-            1 => TokenRef::GrantedBy(r.str()?),
-            _ => return Err(SerError::InvalidValue("unknown TokenRef tag")),
+            0 => UnlockRef::Explicit(r.read()?),
+            1 => UnlockRef::GrantedBy(r.str()?),
+            _ => return Err(SerError::InvalidValue("unknown UnlockRef tag")),
         })
     }
 }
@@ -1678,7 +1678,7 @@ mod tests {
         for (ns, path) in paths {
             let kind = match *ns {
                 "actor" => ContentKind::Actor,
-                "token" => ContentKind::Token,
+                "unlock" => ContentKind::Item,
                 _ => ContentKind::Actor,
             };
             r.register(kind, *path, 1).unwrap();
@@ -1791,8 +1791,8 @@ mod tests {
     fn a_requirement_granted_only_later_is_rejected() {
         // The reference cycle the design names: a slot depending on something further along.
         let backwards = SpineTemplate::new(oid("spine", "cycle"), NodeKind::Reach)
-            .slot(SpineSlot::new("start").requires(TokenRef::GrantedBy("capstone".into())))
-            .slot(SpineSlot::new("capstone").grants(GrantSpec::any_of([oid("token", "dash")])));
+            .slot(SpineSlot::new("start").requires(UnlockRef::GrantedBy("capstone".into())))
+            .slot(SpineSlot::new("capstone").grants(GrantSpec::any_of([oid("unlock", "dash")])));
         let v = backwards.validate(&ContentRegistry::new(), 10);
         assert!(v
             .errors
@@ -1800,8 +1800,8 @@ mod tests {
             .any(|e| matches!(e, SpineError::GrantOrderViolation { .. })));
         // Forwards is fine.
         let forwards = SpineTemplate::new(oid("spine", "ok"), NodeKind::Reach)
-            .slot(SpineSlot::new("precursor").grants(GrantSpec::any_of([oid("token", "dash")])))
-            .slot(SpineSlot::new("capstone").requires(TokenRef::GrantedBy("precursor".into())));
+            .slot(SpineSlot::new("precursor").grants(GrantSpec::any_of([oid("unlock", "dash")])))
+            .slot(SpineSlot::new("capstone").requires(UnlockRef::GrantedBy("precursor".into())));
         assert!(forwards.validate(&ContentRegistry::new(), 10).is_ok());
     }
 
@@ -1996,15 +1996,15 @@ mod tests {
     #[test]
     fn a_symbolic_grant_resolves_once_and_is_used_everywhere() {
         // The Zelda pattern: the precursor grants *something*, and the path onward is gated on it.
-        let dash = oid("token", "dash");
-        let grapple = oid("token", "grapple");
+        let dash = oid("unlock", "dash");
+        let grapple = oid("unlock", "grapple");
         let spine = SpineTemplate::new(oid("spine", "dungeon"), NodeKind::Area)
             .slot(SpineSlot::new("start").role(SlotRole::Start))
             .slot(SpineSlot::new("precursor").grants(GrantSpec::any_of([dash, grapple])))
             .slot(
                 SpineSlot::new("capstone")
                     .role(SlotRole::Goal)
-                    .requires(TokenRef::GrantedBy("precursor".into())),
+                    .requires(UnlockRef::GrantedBy("precursor".into())),
             )
             .segment(SpineSegment::new(
                 "start",
@@ -2013,7 +2013,7 @@ mod tests {
             ))
             .segment(
                 SpineSegment::new("precursor", "capstone", AdaptiveRange::new(1, 2))
-                    .gated_by(TokenRef::GrantedBy("precursor".into())),
+                    .gated_by(UnlockRef::GrantedBy("precursor".into())),
             );
 
         let (g, _) = world(1, 8);
@@ -2029,12 +2029,12 @@ mod tests {
             granted == dash || granted == grapple,
             "chosen from the declared candidates"
         );
-        // The same token now gates an edge — the theme holds however it resolved.
+        // The same unlock now gates an edge — the theme holds however it resolved.
         assert!(
             mission
                 .edges()
                 .iter()
-                .any(|e| e.rule.tokens().contains(&granted)),
+                .any(|e| e.rule.unlocks().contains(&granted)),
             "the segment must be gated on what the precursor actually granted"
         );
     }

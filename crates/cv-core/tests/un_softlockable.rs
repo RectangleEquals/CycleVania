@@ -7,21 +7,22 @@
 //!    that does not work.
 //! 2. **Generated worlds end up safe.** Run the whole pipeline with one-way commits enabled across
 //!    many seeds, repair, and verify nothing strands.
-//! 3. **The cost is bounded and measured.** The pass enumerates token sets, so its price has to
+//! 3. **The cost is bounded and measured.** The pass enumerates unlock sets, so its price has to
 //!    be a known quantity rather than a hope.
 //!
 //! Note that (2) is meaningless without (1): a detector that always returns "safe" would pass the
 //! property test trivially. They are tested together for that reason.
 
+use cv_core::unlock::GrantMap;
 use cv_core::{
     Linearity, LinearityResolver, Location, LocationId, MissionEdge, MissionGraph, NodeGraph,
     NodeState, ObjectId, Rule, SoftlockAnalyzer, SoftlockKind, Solver,
 };
 use cv_determinism::{Aabb, Rng, Vec3};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 fn cap(i: usize) -> ObjectId {
-    ObjectId::derived("token", &format!("cap_{i}"))
+    ObjectId::derived("unlock", &format!("cap_{i}"))
 }
 fn item(i: usize) -> ObjectId {
     ObjectId::derived("item", &format!("item_{i}"))
@@ -79,7 +80,7 @@ fn the_classic_trap_is_detected() {
 
     let placements: BTreeMap<LocationId, ObjectId> =
         [(LocationId(0), item(0))].into_iter().collect();
-    let grants: BTreeMap<ObjectId, ObjectId> = [(item(0), cap(0))].into_iter().collect();
+    let grants: GrantMap = [(item(0), BTreeSet::from([cap(0)]))].into_iter().collect();
 
     let analysis = SoftlockAnalyzer::new(&m, &placements, &grants).analyze();
     assert!(!analysis.is_un_softlockable());
@@ -120,8 +121,12 @@ fn a_trap_needing_partial_progress_is_detected() {
         [(LocationId(0), item(0)), (LocationId(1), item(1))]
             .into_iter()
             .collect();
-    let grants: BTreeMap<ObjectId, ObjectId> =
-        [(item(0), cap(0)), (item(1), cap(1))].into_iter().collect();
+    let grants: GrantMap = [
+        (item(0), BTreeSet::from([cap(0)])),
+        (item(1), BTreeSet::from([cap(1)])),
+    ]
+    .into_iter()
+    .collect();
 
     let analysis = SoftlockAnalyzer::new(&m, &placements, &grants).analyze();
     assert!(
@@ -160,11 +165,7 @@ fn a_safe_one_way_is_not_flagged() {
 // ---------------------------------------------------------------------------------------------
 
 /// A generated world: its mission graph, what was placed where, and what each item grants.
-type GeneratedWorld = (
-    MissionGraph,
-    BTreeMap<LocationId, ObjectId>,
-    BTreeMap<ObjectId, ObjectId>,
-);
+type GeneratedWorld = (MissionGraph, BTreeMap<LocationId, ObjectId>, GrantMap);
 
 /// Build a world with gating, cycles and one-way commits, then fill it.
 ///
@@ -316,7 +317,7 @@ fn repair_preserves_solvability() {
 
 #[test]
 fn a_world_without_commits_needs_no_repair() {
-    // Monotone tokens mean collecting cannot strand you. With no one-way edges the pass should
+    // Monotone unlocks mean collecting cannot strand you. With no one-way edges the pass should
     // find nothing and cost nothing.
     let (g, spaces) = world(3, 4);
     for seed in 0..20u64 {
@@ -338,7 +339,7 @@ fn a_world_without_commits_needs_no_repair() {
 
 #[test]
 fn the_cost_is_measured_and_stays_modest() {
-    // ▶ The no-softlock cost model. Monotone pruning is what makes enumerating token sets
+    // ▶ The no-softlock cost model. Monotone pruning is what makes enumerating unlock sets
     // affordable; this records the actual figure so a regression in the pruning is visible rather
     // than merely slow.
     let (g, spaces) = world(4, 5);
@@ -359,7 +360,7 @@ fn the_cost_is_measured_and_stays_modest() {
         }
     }
 
-    // With 6 tokens the naive lattice is 64 sets *per commit*; pruning must keep the real
+    // With 6 unlocks the naive lattice is 64 sets *per commit*; pruning must keep the real
     // figure far below commits × 64.
     let naive = worst_commits * 64;
     assert!(
@@ -381,7 +382,7 @@ fn an_oversized_world_declines_rather_than_stalling() {
         panic!("fixture must generate");
     };
     let analysis = SoftlockAnalyzer::new(&m, &placements, &grants)
-        .with_max_tokens(2)
+        .with_max_unlocks(2)
         .analyze();
     assert!(analysis.limit.is_some());
     assert!(!analysis.is_un_softlockable(), "declined is not safe");

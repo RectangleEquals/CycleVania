@@ -25,7 +25,7 @@ fn registry() -> ContentRegistry {
         .unwrap();
     r.register(ContentKind::Item, "crawler/key_bronze", 0x1002)
         .unwrap();
-    r.register(ContentKind::Token, "blink_dash", 0x1003)
+    r.register(ContentKind::UnlockTable, "unlocks/core", 0x1003)
         .unwrap();
     r.register(ContentKind::Puzzle, "crawler/gate_relay", 0x1004)
         .unwrap();
@@ -138,7 +138,7 @@ fn changing_the_recipe_changes_the_fingerprint() {
     // Content whose *source* changed — same declaration, different behaviour.
     let mut rebuilt = ContentRegistry::new();
     for (_, e) in reg.iter() {
-        let digest = if e.path() == "blink_dash" {
+        let digest = if e.path() == "unlocks/core" {
             0xBEEF
         } else {
             e.source_digest()
@@ -188,7 +188,7 @@ fn the_registry_actually_influences_the_world() {
         .register(ContentKind::Item, "other/key", 0x1002)
         .unwrap();
     swapped
-        .register(ContentKind::Token, "other_dash", 0x1003)
+        .register(ContentKind::UnlockTable, "unlocks/other", 0x1003)
         .unwrap();
     swapped
         .register(ContentKind::Puzzle, "crawler/other_relay", 0x1004)
@@ -215,8 +215,8 @@ fn non_schedulable_content_is_never_placed() {
     );
     assert_eq!(
         reg.schedulable().count(),
-        4,
-        "door, key, blink_dash, caverns"
+        3,
+        "door, key and the relay puzzle — not the component, and not the unlock table, which is          referenced rather than placed"
     );
 }
 

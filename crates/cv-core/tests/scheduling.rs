@@ -495,16 +495,23 @@ fn chance_gates_whether_content_is_offered_at_all() {
 
 #[test]
 fn content_is_only_offered_to_scopes_that_can_hold_it() {
-    // The correctness point: a token is scheduled at *room* granularity — "when does this become
-    // available" — so it can never land in a sub-volume like a ledge or an alcove. Counting it among
-    // a Spatial slot's variety would inflate that slot's adaptive target with content it could never
-    // use.
+    // The correctness point: a slot's variety count must include only content that could actually go
+    // there. Counting the rest inflates the adaptive target by the difference, and the world gets a
+    // room told to hold five things when two were ever possible.
+    //
+    // ⚠ The subject moved at M03a. This used to be proved through a *scope-restricted* schedulable
+    // kind — `Biome` at Area, then `Token` at Space — and neither exists now: theming is dial values
+    // on a spine slot, and an unlock is a table row rather than placed content. What survives, and
+    // what this proves, is the **placeable-versus-referenced** line: an `UnlockTable` is referenced by
+    // `grants` and `HoldsRule` and is never placed anywhere, at any scope.
     let mut reg = ContentRegistry::new();
     let actor = reg.register(ContentKind::Actor, "prop", 1).unwrap();
-    let token = reg.register(ContentKind::Token, "blink_dash", 2).unwrap();
+    let table = reg
+        .register(ContentKind::UnlockTable, "unlocks/core", 2)
+        .unwrap();
     let mut book = ScheduleBook::new();
     book.set(actor, Schedule::for_kind(ContentKind::Actor));
-    book.set(token, Schedule::for_kind(ContentKind::Token));
+    book.set(table, Schedule::always());
     let pool = ContentPool::resolve(&reg, &book);
 
     // `world` stops at Space, so give one room a sub-volume to schedule into.
@@ -524,28 +531,24 @@ fn content_is_only_offered_to_scopes_that_can_hold_it() {
         .with_rule(SlotRule::new(NodeKind::Spatial, AdaptiveRange::new(0, 5)))
         .plan(&Rng::new(1));
 
+    let mut slots = 0;
     for slot in plan.slots() {
-        let kind = g.node(slot.scope).unwrap().kind();
+        slots += 1;
         let offered: Vec<ObjectId> = slot.candidates.iter().map(|c| c.content).collect();
-        match kind {
-            NodeKind::Space => {
-                assert!(offered.contains(&actor));
-                assert!(offered.contains(&token));
-            }
-            NodeKind::Spatial => {
-                assert!(offered.contains(&actor), "an Actor may fill a sub-volume");
-                assert!(
-                    !offered.contains(&token),
-                    "a token is room-granularity and cannot go in a sub-volume"
-                );
-                assert_eq!(
-                    slot.reasoning.unique, 1,
-                    "unique must not count unusable content"
-                );
-            }
-            _ => unreachable!(),
-        }
+        assert!(
+            offered.contains(&actor),
+            "an Actor fills both Space and Spatial"
+        );
+        assert!(
+            !offered.contains(&table),
+            "an unlock table is referenced, never placed — not at any scope"
+        );
+        assert_eq!(
+            slot.reasoning.unique, 1,
+            "unique must not count unusable content"
+        );
     }
+    assert!(slots > 0, "the plan produced no slots to check");
 }
 
 #[test]

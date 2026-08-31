@@ -17,7 +17,7 @@ use cv_core::{
 use cv_determinism::{Aabb, Rng, Vec3};
 
 fn cap(i: usize) -> ObjectId {
-    ObjectId::derived("token", &format!("cap_{i}"))
+    ObjectId::derived("unlock", &format!("cap_{i}"))
 }
 
 fn item(i: usize) -> ObjectId {
@@ -121,7 +121,7 @@ fn every_generated_world_is_completable() {
                         panic!("{areas}x{per_area} dial {dial:?} seed {seed}: {e}")
                     });
 
-                // Every token is obtainable...
+                // Every unlock is obtainable...
                 for i in 0..3 {
                     assert!(
                         solution.accessibility.held.contains(&cap(i)),
@@ -165,7 +165,7 @@ fn a_key_is_never_placed_behind_the_lock_it_opens() {
             else {
                 continue;
             };
-            // Accessibility with every token *except* this one.
+            // Accessibility with every unlock *except* this one.
             let without: std::collections::BTreeSet<ObjectId> =
                 (0..3).map(cap).filter(|c| *c != granted).collect();
             let r = mission.sweep(
@@ -278,7 +278,7 @@ fn gating_creates_real_progression_structure() {
         "gating must produce progression, got {} spheres",
         staged.depth()
     );
-    // Sphere 0 needs nothing; later spheres exist only because tokens were found.
+    // Sphere 0 needs nothing; later spheres exist only because unlocks were found.
     assert!(!staged.accessibility.spheres[0].granted.is_empty() || staged.depth() == 1);
 }
 
@@ -347,6 +347,6 @@ fn the_solution_explains_itself() {
     // Rules read back as something a human can check.
     for edge in mission.edges().iter().filter(|e| e.is_gated()) {
         assert!(!edge.rule.to_string().is_empty());
-        assert!(!edge.rule.tokens().is_empty());
+        assert!(!edge.rule.unlocks().is_empty());
     }
 }

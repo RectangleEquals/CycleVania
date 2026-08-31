@@ -20,13 +20,13 @@ use cv_core::{
     Coverage, DescriptorBuilder, Fingerprint, GrantSpec, Handle, Linearity, LinearityResolver,
     Location, LocationId, MissionGraph, Node, NodeGraph, NodeKind, NodeState, ObjectId, SlotRole,
     SoftlockAnalyzer, Solver, SpineError, SpineInstantiator, SpineSegment, SpineSlot, SpineSlotTag,
-    SpineTemplate, Strictness, TokenRef,
+    SpineTemplate, Strictness, UnlockRef,
 };
 use cv_determinism::{Aabb, Rng, Vec3};
 use std::collections::{BTreeMap, BTreeSet};
 
 fn cap(name: &str) -> ObjectId {
-    ObjectId::derived("token", name)
+    ObjectId::derived("unlock", name)
 }
 fn item(name: &str) -> ObjectId {
     ObjectId::derived("item", name)
@@ -100,7 +100,7 @@ fn dungeon() -> SpineTemplate {
             SpineSlot::new("capstone")
                 .role(SlotRole::Goal)
                 .must_contain([actor("boss")])
-                .requires(TokenRef::GrantedBy("precursor".into())),
+                .requires(UnlockRef::GrantedBy("precursor".into())),
         )
         .segment(SpineSegment::new(
             "start",
@@ -109,7 +109,7 @@ fn dungeon() -> SpineTemplate {
         ))
         .segment(
             SpineSegment::new("precursor", "capstone", AdaptiveRange::new(1, 3))
-                .gated_by(TokenRef::GrantedBy("precursor".into())),
+                .gated_by(UnlockRef::GrantedBy("precursor".into())),
         )
 }
 
@@ -131,8 +131,8 @@ fn registry() -> ContentRegistry {
     let mut r = ContentRegistry::new();
     r.register(ContentKind::Actor, "boss", 1).unwrap();
     r.register(ContentKind::Actor, "waypoint", 1).unwrap();
-    r.register(ContentKind::Token, "hook", 1).unwrap();
-    r.register(ContentKind::Token, "bombs", 1).unwrap();
+    r.register(ContentKind::Item, "hook", 1).unwrap();
+    r.register(ContentKind::Item, "bombs", 1).unwrap();
     r
 }
 
@@ -905,7 +905,7 @@ fn a_repeating_spine_yields_one_start_and_one_goal() {
 }
 
 #[test]
-fn a_symbolic_grant_resolves_to_one_token_everywhere_it_is_named() {
+fn a_symbolic_grant_resolves_to_one_unlock_everywhere_it_is_named() {
     // The dungeon pattern's load-bearing trick: three references, one resolution.
     let (g, _) = world(1, 10);
     let mut mission = MissionGraph::new(g.of_kind(NodeKind::Space).next().unwrap().0);
@@ -920,7 +920,7 @@ fn a_symbolic_grant_resolves_to_one_token_everywhere_it_is_named() {
         mission
             .edges()
             .iter()
-            .any(|e| e.rule.tokens().contains(&granted)),
+            .any(|e| e.rule.unlocks().contains(&granted)),
         "the gated segment must use exactly what the precursor granted"
     );
 }

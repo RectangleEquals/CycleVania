@@ -6,18 +6,32 @@
 //!
 //! # Why a test and not a review habit
 //!
-//! Two of the three renames are *near-synonyms of a surviving word*. `Reach` is a scope and stays;
-//! `reachable` is drift and goes. `Token` is the concept; `Capability` was its old name. A reviewer
-//! reading one diff hunk cannot reliably tell which sense is in front of them, and the wrong one
-//! reads fine. A compiler cannot help either, because both spellings are valid identifiers.
+//! Most of these are *near-synonyms of a surviving word*. `Reach` is a scope and stays; `reachable`
+//! is drift and goes. A *lexer* token stays; `ContentKind::Token` goes. A reviewer reading one diff
+//! hunk cannot reliably tell which sense is in front of them, and the wrong one reads fine. A
+//! compiler cannot help either, because both spellings are valid identifiers.
 //!
-//! # The three renames
+//! # The renames
 //!
 //! | Old | New | Why |
 //! |---|---|---|
-//! | `Capability` | a **token** — `Kind<Object>` | tokens are *classes*, and a class already is an identity |
+//! | `Capability` → `Token` | **`Unlock`** | ⚠ renamed **twice**. M03 made it `Token`; M03a made it an `Unlock` **row** of an `UnlockTableResource`, because it was a class with no behaviour — data wearing a class's clothes |
 //! | `reachable` / `reachability` | `accessible` / `accessibility` | `Reach` is a scope; the adjective was colliding with it |
 //! | `Biome`, `Motif` | no type at all | both are *patterns* — dial values on an Area-scoped spine slot |
+//!
+//! # ⚠ Symbols, not prose
+//!
+//! The rule enforced here is the one `07-naming.md` §5 states:
+//!
+//! > **The concept keeps its name in prose; no *symbol* uses the stem unless it means the scope.**
+//!
+//! *"Reachability analysis"* is the domain term for the mathematics and is explicitly **kept** in
+//! prose; `struct Reachability` is a symbol and is not. Likewise a *"text token in a file"* is a lexer
+//! token and stays, while `ContentKind::Token` goes. So this lint reads **code only** — a stem inside
+//! a `//` comment is left alone, deliberately.
+//!
+//! ⚠ M03 got this wrong in the other direction: it rewrote prose too, which broke grammar
+//! (*"a accessibility sweep"*) and would have rejected the exact wording the design mandates.
 //!
 //! ⚠ **`reach` itself is not banned.** `Reach` the scope, `reaches` as a plural of it, and `ctx.reach`
 //! are all correct and common. Only the adjective forms were ever drift, which is exactly why this
@@ -28,13 +42,10 @@ use std::path::{Path, PathBuf};
 
 /// A banned stem, and what to write instead.
 const BANNED: &[(&str, &str)] = &[
-    (
-        "Capabilit",
-        "a token — `Kind<Object>`; see `ContentKind::Token`",
-    ),
+    ("Capabilit", "an `Unlock` — a row of an UnlockTableResource"),
     (
         "capabilit",
-        "a token; the English word is fine in prose, the *type* is not",
+        "an unlock — the English word is fine in prose, a symbol is not",
     ),
     ("reachable", "accessible"),
     ("Reachable", "Accessible"),
@@ -48,11 +59,28 @@ const BANNED: &[(&str, &str)] = &[
         "ContentKind::Motif",
         "nothing — a motif is a chain the solver invents",
     ),
+    // M03a: the lattice atom is an `Unlock` row, not a token class.
+    (
+        "Token",
+        "`Unlock` — a row of an UnlockTableResource, not a class",
+    ),
+    (
+        "token",
+        "an unlock — the lexer sense is fine in prose, a symbol is not",
+    ),
 ];
 
-/// `unreachable!` is a std macro and contains a banned stem. It is not drift.
+/// Strip what a banned stem is allowed to hide inside.
+///
+/// Two exemptions, both deliberate:
+/// * `unreachable!` is a std macro, not our vocabulary.
+/// * everything from `//` onward is **prose**, which the naming rule explicitly leaves alone.
 fn strip_allowed(line: &str) -> String {
-    line.replace("unreachable!", "").replace("unreachable", "")
+    let code = match line.find("//") {
+        Some(i) => &line[..i],
+        None => line,
+    };
+    code.replace("unreachable!", "").replace("unreachable", "")
 }
 
 fn rust_files(dir: &Path, out: &mut Vec<PathBuf>) {
@@ -126,12 +154,18 @@ fn the_manifest_uses_the_current_vocabulary() {
 
     let mut offenders = Vec::new();
     for (i, line) in src.lines().enumerate() {
+        // A manifest line is `key = value` or a doc string. Only keys and type names are symbols;
+        // `doc = "…"` is prose and plays by the prose rule.
+        let symbols = match line.split_once("doc = ") {
+            Some((before, _)) => before,
+            None => line,
+        };
         for (stem, fix) in BANNED {
             // The manifest declares no Rust paths, so the ContentKind entries cannot appear.
             if stem.starts_with("ContentKind") {
                 continue;
             }
-            if line.contains(stem) {
+            if symbols.contains(stem) {
                 offenders.push(format!("tier1.toml:{}: `{stem}` — write {fix}", i + 1));
             }
         }

@@ -26,30 +26,30 @@
 //!
 //! # Where the danger actually lives
 //!
-//! Tokens are monotone — you gain them and never lose them — so more progress is never worse.
+//! Unlocks are monotone — you gain them and never lose them — so more progress is never worse.
 //! That means a player cannot strand themselves by *collecting*; only by **committing**. The commit
 //! points are:
 //!
 //! * **one-way transitions** — a drop you cannot climb back up, a one-way shortcut, a door that seals;
 //! * (later) **consumables**, which break monotonicity and are noted as a GAP below.
 //!
-//! So the analysis is: for every one-way edge, and every token set a player could plausibly hold
+//! So the analysis is: for every one-way edge, and every unlock set a player could plausibly hold
 //! when crossing it, is the goal still accessible from the far side?
 //!
 //! # Why this is tractable
 //!
-//! "Every token set" sounds exponential, and in the abstract it is — `2^n` over tokens. Two
+//! "Every unlock set" sounds exponential, and in the abstract it is — `2^n` over unlocks. Two
 //! things rescue it:
 //!
-//! 1. **`n` is small.** Progression tokens in a metroidvania number in the handful; MP1 has
+//! 1. **`n` is small.** Progression unlocks in a metroidvania number in the handful; MP1 has
 //!    roughly a dozen. `2^12` is four thousand, and each check is a graph traversal over a few hundred
 //!    nodes.
 //! 2. **Safety is monotone, so it prunes.** If a player is safe crossing with set `S`, they are safe
-//!    with any superset — more tokens cannot reduce accessibility. So once `S` is proven safe,
+//!    with any superset — more unlocks cannot reduce accessibility. So once `S` is proven safe,
 //!    every superset of it is skipped. In practice most of the lattice disappears.
 //!
 //! The analysis reports its own cost ([`SoftlockAnalysis::states_examined`]) and refuses rather than
-//! stalls when a world exceeds [`SoftlockAnalyzer::max_tokens`] — a bounded honest failure beats
+//! stalls when a world exceeds [`SoftlockAnalyzer::max_unlocks`] — a bounded honest failure beats
 //! an unbounded wait.
 //!
 //! # Conservatism
@@ -61,6 +61,7 @@
 use crate::mission::{LocationId, MissionGraph};
 use crate::node::Node;
 use crate::object::ObjectId;
+use crate::unlock::GrantMap;
 use crate::Handle;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
@@ -86,7 +87,7 @@ impl fmt::Display for SoftlockKind {
 
 /// A concrete way a player can strand themselves.
 ///
-/// Deliberately carries the **exact token set** that traps them, not just "this edge is risky".
+/// Deliberately carries the **exact unlock set** that traps them, not just "this edge is risky".
 /// A hazard a dev cannot reproduce is a hazard they will not fix.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Softlock {
@@ -96,7 +97,7 @@ pub struct Softlock {
     pub from: Handle<Node>,
     /// Where they land.
     pub to: Handle<Node>,
-    /// The tokens they hold at the moment of crossing — the reproduction case.
+    /// The unlocks they hold at the moment of crossing — the reproduction case.
     pub holding: BTreeSet<ObjectId>,
     /// What kind of trap.
     pub kind: SoftlockKind,
@@ -106,7 +107,7 @@ impl fmt::Display for Softlock {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "one-way edge {} strands a player holding {} token{}: {}",
+            "one-way edge {} strands a player holding {} unlock{}: {}",
             self.edge,
             self.holding.len(),
             if self.holding.len() == 1 { "" } else { "s" },
@@ -118,8 +119,8 @@ impl fmt::Display for Softlock {
 /// Why the analysis could not be completed.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AnalysisLimit {
-    /// More tokens than the configured bound, so the state space was not enumerated.
-    TooManyTokens { found: usize, limit: usize },
+    /// More unlocks than the configured bound, so the state space was not enumerated.
+    TooManyUnlocks { found: usize, limit: usize },
     /// The graph declares no goal, so "the goal stays accessible" has no meaning.
     NoGoal,
 }
@@ -127,10 +128,10 @@ pub enum AnalysisLimit {
 impl fmt::Display for AnalysisLimit {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            AnalysisLimit::TooManyTokens { found, limit } => write!(
+            AnalysisLimit::TooManyUnlocks { found, limit } => write!(
                 f,
-                "{found} tokens exceeds the analysis bound of {limit}; \
-                 raise SoftlockAnalyzer::max_tokens or reduce progression items"
+                "{found} unlocks exceeds the analysis bound of {limit}; \
+                 raise SoftlockAnalyzer::max_unlocks or reduce progression items"
             ),
             AnalysisLimit::NoGoal => {
                 write!(
@@ -149,7 +150,7 @@ pub struct SoftlockAnalysis {
     pub hazards: Vec<Softlock>,
     /// How many one-way commits were examined.
     pub commits_checked: usize,
-    /// Token sets evaluated — the cost model. Reported so the bound can be tuned against real
+    /// Unlock sets evaluated — the cost model. Reported so the bound can be tuned against real
     /// worlds rather than guessed.
     pub states_examined: usize,
     /// Set when the analysis could not run to completion.
@@ -208,15 +209,15 @@ impl fmt::Display for Repair {
 /// Runs the accessibility-preservation pass.
 pub struct SoftlockAnalyzer<'a> {
     mission: &'a MissionGraph,
-    grants: &'a BTreeMap<ObjectId, ObjectId>,
+    grants: &'a GrantMap,
     placements: &'a BTreeMap<LocationId, ObjectId>,
     initial: BTreeSet<ObjectId>,
-    /// Above this many distinct tokens the pass declines rather than enumerating `2^n`.
-    max_tokens: usize,
+    /// Above this many distinct unlocks the pass declines rather than enumerating `2^n`.
+    max_unlocks: usize,
 }
 
 impl<'a> SoftlockAnalyzer<'a> {
-    /// The default token bound. `2^14` sets is a few seconds at worst and covers every real
+    /// The default unlock bound. `2^14` sets is a few seconds at worst and covers every real
     /// metroidvania; beyond it, declining loudly is better than stalling.
     pub const DEFAULT_MAX_CAPABILITIES: usize = 14;
 
@@ -224,26 +225,26 @@ impl<'a> SoftlockAnalyzer<'a> {
     pub fn new(
         mission: &'a MissionGraph,
         placements: &'a BTreeMap<LocationId, ObjectId>,
-        grants: &'a BTreeMap<ObjectId, ObjectId>,
+        grants: &'a GrantMap,
     ) -> Self {
         SoftlockAnalyzer {
             mission,
             grants,
             placements,
             initial: BTreeSet::new(),
-            max_tokens: Self::DEFAULT_MAX_CAPABILITIES,
+            max_unlocks: Self::DEFAULT_MAX_CAPABILITIES,
         }
     }
 
-    /// Tokens the player starts with.
-    pub fn with_initial(mut self, tokens: impl IntoIterator<Item = ObjectId>) -> Self {
-        self.initial.extend(tokens);
+    /// Unlocks the player starts with.
+    pub fn with_initial(mut self, unlocks: impl IntoIterator<Item = ObjectId>) -> Self {
+        self.initial.extend(unlocks);
         self
     }
 
     /// Raise or lower the enumeration bound.
-    pub fn with_max_tokens(mut self, max: usize) -> Self {
-        self.max_tokens = max;
+    pub fn with_max_unlocks(mut self, max: usize) -> Self {
+        self.max_unlocks = max;
         self
     }
 
@@ -261,22 +262,22 @@ impl<'a> SoftlockAnalyzer<'a> {
             return analysis;
         };
 
-        // Only tokens actually obtainable in this world matter; a registered-but-unplaced item
+        // Only unlocks actually obtainable in this world matter; a registered-but-unplaced item
         // cannot be part of any state a player reaches.
         let full = self
             .mission
             .sweep(&self.initial, self.placements, self.grants);
         let universe: Vec<ObjectId> = full.held.iter().copied().collect();
 
-        if universe.len() > self.max_tokens {
-            analysis.limit = Some(AnalysisLimit::TooManyTokens {
+        if universe.len() > self.max_unlocks {
+            analysis.limit = Some(AnalysisLimit::TooManyUnlocks {
                 found: universe.len(),
-                limit: self.max_tokens,
+                limit: self.max_unlocks,
             });
             return analysis;
         }
 
-        // One-way edges are the only commit points, because tokens are monotone: collecting
+        // One-way edges are the only commit points, because unlocks are monotone: collecting
         // never hurts, so a player can only trap themselves by moving somewhere they cannot leave.
         let one_ways: Vec<(usize, Handle<Node>, Handle<Node>)> = self
             .mission
@@ -291,7 +292,7 @@ impl<'a> SoftlockAnalyzer<'a> {
             analysis.commits_checked += 1;
             let rule = &self.mission.edges()[edge_index].rule;
 
-            // Safety is monotone in tokens, so a superset of a safe set is safe. Enumerating in
+            // Safety is monotone in unlocks, so a superset of a safe set is safe. Enumerating in
             // increasing size lets each proven-safe set prune everything above it.
             let mut safe: Vec<BTreeSet<ObjectId>> = Vec::new();
 
@@ -361,7 +362,10 @@ impl<'a> SoftlockAnalyzer<'a> {
             .flat_map(|s| self.mission.locations_in(*s))
             .filter_map(|loc| self.placements.get(&loc))
             .filter_map(|item| self.grants.get(item))
-            .copied()
+            // ⚠ An item may grant several unlocks; flatten rather than take one, or a
+            // multi-grant pickup would look partially collectible and the set would read as
+            // unachievable when a real route produces it.
+            .flat_map(|unlocks| unlocks.iter().copied())
             .chain(self.initial.iter().copied())
             .collect();
         held.is_subset(&collectible)
@@ -412,7 +416,7 @@ mod tests {
     use cv_determinism::{Aabb, Vec3};
 
     fn cap(name: &str) -> ObjectId {
-        ObjectId::derived("token", name)
+        ObjectId::derived("unlock", name)
     }
     fn item(name: &str) -> ObjectId {
         ObjectId::derived("item", name)
@@ -441,7 +445,7 @@ mod tests {
         NodeGraph,
         MissionGraph,
         BTreeMap<LocationId, ObjectId>,
-        BTreeMap<ObjectId, ObjectId>,
+        GrantMap,
     ) {
         let (g, r) = rooms(4);
         let mut m = MissionGraph::new(r[0]);
@@ -460,8 +464,9 @@ mod tests {
 
         let placements: BTreeMap<LocationId, ObjectId> =
             [(LocationId(0), item("key"))].into_iter().collect();
-        let grants: BTreeMap<ObjectId, ObjectId> =
-            [(item("key"), cap("key"))].into_iter().collect();
+        let grants: GrantMap = [(item("key"), BTreeSet::from([cap("key")]))]
+            .into_iter()
+            .collect();
         (g, m, placements, grants)
     }
 
@@ -526,8 +531,9 @@ mod tests {
 
         let placements: BTreeMap<LocationId, ObjectId> =
             [(LocationId(0), item("key"))].into_iter().collect();
-        let grants: BTreeMap<ObjectId, ObjectId> =
-            [(item("key"), cap("key"))].into_iter().collect();
+        let grants: GrantMap = [(item("key"), BTreeSet::from([cap("key")]))]
+            .into_iter()
+            .collect();
 
         let analysis = SoftlockAnalyzer::new(&m, &placements, &grants).analyze();
         assert!(analysis.is_un_softlockable(), "{:?}", analysis.hazards);
@@ -573,7 +579,7 @@ mod tests {
 
     #[test]
     fn a_world_with_no_one_way_edges_is_trivially_safe() {
-        // Monotone tokens mean collecting can never strand you, so without commits there is
+        // Monotone unlocks mean collecting can never strand you, so without commits there is
         // nothing to check — and the pass should cost nothing rather than enumerate anyway.
         let (_, r) = rooms(4);
         let mut m = MissionGraph::new(r[0]);
@@ -605,7 +611,7 @@ mod tests {
             "no goal means undefined, never safe"
         );
 
-        // Too many tokens → declined, not safe.
+        // Too many unlocks → declined, not safe.
         let mut placements = BTreeMap::new();
         let mut grants = BTreeMap::new();
         for i in 0..5 {
@@ -617,11 +623,17 @@ mod tests {
                 },
             );
             placements.insert(LocationId(i), item(&format!("i{i}")));
-            grants.insert(item(&format!("i{i}")), cap(&format!("c{i}")));
+            grants.insert(
+                item(&format!("i{i}")),
+                BTreeSet::from([cap(&format!("c{i}"))]),
+            );
         }
-        let limited = SoftlockAnalyzer::new(&m, &placements, &grants).with_max_tokens(2);
+        let limited = SoftlockAnalyzer::new(&m, &placements, &grants).with_max_unlocks(2);
         let a = limited.analyze();
-        assert!(matches!(a.limit, Some(AnalysisLimit::TooManyTokens { .. })));
+        assert!(matches!(
+            a.limit,
+            Some(AnalysisLimit::TooManyUnlocks { .. })
+        ));
         assert!(!a.is_un_softlockable());
         assert!(a
             .limit
@@ -632,7 +644,7 @@ mod tests {
 
     #[test]
     fn safety_pruning_keeps_the_cost_down() {
-        // With several tokens and a safe drop, monotone pruning should stop the pass exploring
+        // With several unlocks and a safe drop, monotone pruning should stop the pass exploring
         // the whole lattice — the property that makes the analysis affordable.
         let (_, r) = rooms(5);
         let mut m = MissionGraph::new(r[0]);
@@ -653,7 +665,10 @@ mod tests {
                 },
             );
             placements.insert(LocationId(i), item(&format!("i{i}")));
-            grants.insert(item(&format!("i{i}")), cap(&format!("c{i}")));
+            grants.insert(
+                item(&format!("i{i}")),
+                BTreeSet::from([cap(&format!("c{i}"))]),
+            );
         }
 
         let analysis = SoftlockAnalyzer::new(&m, &placements, &grants).analyze();

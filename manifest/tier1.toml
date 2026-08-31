@@ -83,16 +83,6 @@ doc = "The root of everything with identity. Has metadata, has a rationale, can 
   doc = "Identity comparison. Never a float comparison."
 
   [[class.method]]
-  name = "satisfied_by"
-  args = [ { name = "candidate", type = "Kind<Object>" } ]
-  returns = "bool"
-  api = true
-  final = false
-  status = "stable"
-  default = "candidate is-a my kind"
-  doc = "Does this candidate class satisfy a requirement for me? Runs on the CLASS DEFAULT, never an instance — which is how a longer rope satisfies a requirement for a shorter one without constructing either."
-
-  [[class.method]]
   name = "format"
   args = []
   returns = "String"
@@ -442,7 +432,7 @@ doc = "Something placeable in a world. The only thing the core places, and the s
   hook = true
   status = "stable"
   default = "[]"
-  doc = "Hard placement constraints. A door names its own token here, which is where key-to-lock distance is written."
+  doc = "Hard placement constraints. A door names its own unlock here, which is where key-to-lock distance is written."
 
   [[class.method]]
   name = "preferences"
@@ -578,13 +568,13 @@ doc = "Something placeable in a world. The only thing the core places, and the s
   [[class.method]]
   name = "grants"
   args = [ { name = "ctx", type = "Ref<Context>" } ]
-  returns = "Array<Kind<Object>>"
+  returns = "Array<Unlock>"
   api = true
   final = false
   hook = true
   status = "stable"
   default = "aggregate enabled components in attach order"
-  doc = "Tokens the occupant keeps after reaching this. CLASSES, never instances — the lattice is over identities, and a token class already is one."
+  doc = "Unlocks the occupant keeps after reaching this. ROWS of an UnlockTableResource, never classes — the lattice is over identities and a row id already is one. An unlock carries NO behaviour: every mechanical consequence belongs to a Component."
 
   [[class.method]]
   name = "on_proposed"
@@ -662,7 +652,7 @@ extends = "/Core/Actor"
 kind = "object"
 sealed = false
 status = "stable"
-doc = "An obtainable actor. The thing that hands out tokens, as distinct from the tokens themselves."
+doc = "An obtainable actor. The thing that hands out unlocks, as distinct from the unlocks themselves."
 
   [[class.method]]
   name = "classification"
@@ -1052,7 +1042,7 @@ doc = "A place that returns the world to a known-good state. P15's second satisf
   mutable = true
   exposed = true
   status = "stable"
-  doc = "What comes back here."
+  doc = "Which CLASSES OF PLACED CONTENT respawn here -- consumables, destructibles, enemies. NOT unlocks: an unlock is monotone and can never be lost, so restoring one has no meaning."
 
   [[class.field]]
   name = "restores_occupant"
@@ -1276,11 +1266,11 @@ doc = "Sealed on purpose: the solver walks this tree as the analysable half of a
   [[class.method]]
   name = "referenced"
   args = []
-  returns = "Array<Kind<Object>>"
+  returns = "Array<Unlock>"
   api = true
   final = true
   status = "stable"
-  doc = "Every token this rule mentions. The solver's dependency walk, and what lets requires() plant a source."
+  doc = "Every unlock this rule mentions. The solver's dependency walk, and what lets requires() plant a source."
 
   [[class.method]]
   name = "explain"
@@ -1313,16 +1303,16 @@ extends = "/Core/Rule"
 kind = "object"
 sealed = true
 status = "stable"
-doc = "The occupant holds something satisfying this kind."
+doc = "The occupant holds this unlock, or anything that supersedes it."
 
   [[class.field]]
-  name = "kind"
-  type = "Kind<Object>"
+  name = "unlock"
+  type = "Unlock"
   api = true
   mutable = true
   exposed = true
   status = "stable"
-  doc = "The token class required."
+  doc = "The unlock required. Satisfied by this row, or by any held unlock whose supersedes closure contains it."
 
   [[class.field]]
   name = "count"
@@ -1340,7 +1330,7 @@ extends = "/Core/Rule"
 kind = "object"
 sealed = true
 status = "stable"
-doc = "The occupant holds something CARRYING a matching component. Branching on components is sound where branching on tokens is not."
+doc = "The occupant holds something CARRYING a matching component. A DIFFERENT question from HoldsRule: this asks about the things held, that asks about the lattice."
 
   [[class.field]]
   name = "kind"
@@ -2553,6 +2543,39 @@ doc = "Imported geometry. In a cooked build this is a hash and a bounds with no 
   doc = "Write the mesh out."
 
 [[class]]
+path = "/Core/UnlockTableResource"
+extends = "/Core/Resource"
+kind = "object"
+status = "stable"
+doc = "The project's progression vocabulary -- named rows, each one atom of the lattice. JSON, not the block notation, because it has no nodes to notate. A project may hold any number of these files anywhere under /Content; THE FILE IS THE UNIT OF SHARING, so copying it carries the vocabulary with it."
+
+  [[class.field]]
+  name = "rows"
+  type = "Array<String>"
+  api = true
+  final = true
+  status = "stable"
+  doc = "The row names, in file order."
+
+  [[class.method]]
+  name = "row"
+  args = [ { name = "name", type = "String" } ]
+  returns = "Unlock"
+  api = true
+  final = true
+  status = "stable"
+  doc = "One row by display name. Convenience for authoring; by_id is the identity lookup."
+
+  [[class.method]]
+  name = "by_id"
+  args = [ { name = "id", type = "String" } ]
+  returns = "Unlock"
+  api = true
+  final = true
+  status = "stable"
+  doc = "One row by its stable id. IDENTITY IS THE ID, never the name -- renaming a row must rewrite zero references."
+
+[[class]]
 path = "/Core/CurveTableResource"
 extends = "/Core/Resource"
 kind = "object"
@@ -2599,7 +2622,7 @@ extends = "/Core/Object"
 kind = "object"
 abstract = true
 status = "stable"
-doc = "Supplies the x a curve row is sampled at. Built-ins cover depth, space count, token count and sphere; a developer subclasses it for anything else, which is the only way to say 'complexity gains weight each time a boss is placed'."
+doc = "Supplies the x a curve row is sampled at. Built-ins cover depth, space count, unlock count and sphere; a developer subclasses it for anything else, which is the only way to say 'complexity gains weight each time a boss is placed'."
   [[class.field]]
   name = "name"
   type = "String"
@@ -2632,11 +2655,11 @@ status = "stable"
 doc = "How many Spaces exist so far."
 
 [[class]]
-path = "/Core/TokenCount"
+path = "/Core/UnlockCount"
 extends = "/Core/ProgressionAxis"
 kind = "object"
 status = "stable"
-doc = "How many progression tokens are held."
+doc = "How many progression unlocks are held."
 
 [[class]]
 path = "/Core/Sphere"
@@ -2975,7 +2998,7 @@ path = "/Core/MinDistanceFrom"
 extends = "/Core/Constraint"
 kind = "object"
 status = "stable"
-doc = "At least this far from a named kind. A door writes key-to-lock distance here, because the door names its own token and the key does not know its lock."
+doc = "At least this far from a named kind. A door writes key-to-lock distance here, because the door names its own unlock and the key does not know its lock."
   [[class.field]]
   name = "kind"
   type = "Kind<Object>"
@@ -3374,11 +3397,11 @@ doc = "The lens handed into every hook. Scope reads are FIELDS because they are 
   doc = "Everyone travelling together."
   [[class.field]]
   name = "held"
-  type = "Array<Kind<Object>>"
+  type = "Array<Unlock>"
   api = true
   final = true
   status = "stable"
-  doc = "Tokens held. CLASSES — one currency with grants() and HoldsRule."
+  doc = "Unlocks held. ROWS — one currency with grants() and HoldsRule. Already expanded through supersedes, so membership is a plain set test."
   [[class.field]]
   name = "sphere"
   type = "int"
@@ -3470,12 +3493,12 @@ doc = "The lens handed into every hook. Scope reads are FIELDS because they are 
   doc = "Realise a path to a target."
   [[class.method]]
   name = "accessible"
-  args = [ { name = "from", type = "Vec3" }, { name = "to", type = "Vec3" }, { name = "held", type = "Array<Kind<Object>>" } ]
+  args = [ { name = "from", type = "Vec3" }, { name = "to", type = "Vec3" }, { name = "held", type = "Array<Unlock>" } ]
   returns = "Trivalent"
   api = true
   final = true
   status = "stable"
-  doc = "Can an occupant holding these tokens get from here to there? Trivalent, not bool, because the API must not be able to lie."
+  doc = "Can an occupant holding these unlocks get from here to there? Trivalent, not bool, because the API must not be able to lie."
   [[class.method]]
   name = "within"
   args = [ { name = "measured", type = "float" }, { name = "limit", type = "float" } ]
@@ -3542,10 +3565,10 @@ doc = "A handle on one scope."
   doc = "Placed actors here."
   [[class.field]]
   name = "granted_here"
-  type = "Array<Kind<Object>>"
+  type = "Array<Unlock>"
   api = true
   status = "stable"
-  doc = "Tokens obtainable in this scope."
+  doc = "Unlocks obtainable in this scope."
   [[class.method]]
   name = "contains"
   args = [ { name = "a", type = "Ref<Actor>" } ]
@@ -3556,7 +3579,7 @@ doc = "A handle on one scope."
   doc = "Is this actor inside?"
   [[class.method]]
   name = "accessible_from"
-  args = [ { name = "other", type = "ScopeHandle" }, { name = "held", type = "Array<Kind<Object>>" } ]
+  args = [ { name = "other", type = "ScopeHandle" }, { name = "held", type = "Array<Unlock>" } ]
   returns = "Trivalent"
   api = true
   final = true
@@ -3636,6 +3659,12 @@ path = "/Core/Span"
 kind = "struct"
 status = "stable"
 doc = "An inclusive range. min, max, contains, clamp, length, overlaps, lerp, is_bounded, and UNBOUNDED. A Span DECLARES a range; a Route OBLIGES one."
+
+[[class]]
+path = "/Core/Unlock"
+kind = "struct"
+status = "stable"
+doc = "ONE ROW of an UnlockTableResource -- one atom of the progression lattice, something an occupant holds or knows. id, name, doc, supersedes. NOT A CLASS AND NOT A FILE: it carries no behaviour whatever, because every mechanical consequence belongs to a Component where affords/supports/judge can act on it. An unlock is an identity, and identity is all it is."
 
 [[class]]
 path = "/Core/Curve"

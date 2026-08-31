@@ -405,7 +405,7 @@ mod tests {
 
         // Adding content.
         let mut more = registry();
-        more.register(ContentKind::Token, "dash", 0xCC).unwrap();
+        more.register(ContentKind::Item, "dash", 0xCC).unwrap();
         assert_ne!(
             original,
             FingerprintBuilder::new("0.1.0")
