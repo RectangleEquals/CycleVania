@@ -1,0 +1,13 @@
+[package]
+name = "xtask"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+description = "Build-time tooling. `cargo xtask generate` regenerates every artifact derived from the manifest."
+
+[lints]
+workspace = true
+
+[dependencies]
+cv-manifest = { workspace = true }

@@ -132,6 +132,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "914a755b7c2d4af2bdcff7ce1739e2db9a1b81a9b07123d8015786ae03c0980d"
 
 [[package]]
+name = "cv-api"
+version = "0.1.0"
+dependencies = [
+ "cv-manifest",
+]
+
+[[package]]
 name = "cv-bindings"
 version = "0.1.0"
 dependencies = [
@@ -543,4 +550,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ae137229bcbd6cdf0f7b80a31df61766145077ddf49416a728b02cb3921ff3fc"
 dependencies = [
  "windows-link",
+]
+
+[[package]]
+name = "xtask"
+version = "0.1.0"
+dependencies = [
+ "cv-manifest",
 ]

@@ -1,0 +1,16 @@
+[package]
+name = "cv-api"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "GENERATED from manifest/tier1.toml by `cargo xtask generate`. Do not edit by hand."
+
+[lints]
+workspace = true
+
+[dependencies]
+
+[dev-dependencies]
+# Cross-checking the generated table against its own source is what makes "generated" a claim the
+# build verifies rather than a comment nobody re-reads.
+cv-manifest = { workspace = true }

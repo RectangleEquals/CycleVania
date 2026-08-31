@@ -3,12 +3,14 @@ resolver = "2"
 members = [
     "crates/cv-determinism",
     "crates/cv-manifest",
+    "crates/cv-api",
     "crates/cv-core",
     "crates/cv-script",
     "crates/cv-vm",
     "crates/cv-bindings",
     "crates/cv-cli",
     "crates/cv-editor-backend",
+    "crates/xtask",
 ]
 
 [workspace.package]
@@ -20,6 +22,7 @@ rust-version = "1.89"
 # Internal crates (path-referenced so versions stay in lockstep).
 cv-determinism = { path = "crates/cv-determinism" }
 cv-manifest = { path = "crates/cv-manifest" }
+cv-api = { path = "crates/cv-api" }
 cv-core = { path = "crates/cv-core" }
 cv-script = { path = "crates/cv-script" }
 cv-vm = { path = "crates/cv-vm" }

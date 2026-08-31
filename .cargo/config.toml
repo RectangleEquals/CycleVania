@@ -1,0 +1,3 @@
+# `cargo xtask …` — build-time tooling that must not be a workspace dependency of the shipping crates.
+[alias]
+xtask = "run --quiet --package xtask --"

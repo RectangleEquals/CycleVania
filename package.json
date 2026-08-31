@@ -9,7 +9,9 @@
     "verify:addon": "cargo build -p cv-bindings && node scripts/smoke-addon.cjs",
     "build:wasm-probes": "cargo build -p cv-determinism --example determinism_probe --target wasm32-unknown-unknown && cargo build -p cv-core --example core_probe --target wasm32-unknown-unknown",
     "verify:wasm-golden": "npm run build:wasm-probes && node scripts/wasm-golden.cjs",
+    "generate": "cargo xtask generate",
+    "verify:generated": "cargo xtask check",
     "verify:determinism": "cargo test -p cv-determinism -p cv-core && npm run verify:wasm-golden",
-    "verify": "cargo test && npm run verify:wasm-golden && npm run verify:addon"
+    "verify": "npm run verify:generated && cargo test && npm run verify:wasm-golden && npm run verify:addon"
   }
 }
