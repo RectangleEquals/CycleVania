@@ -316,7 +316,7 @@ impl Accessibility {
 #[derive(Clone, Debug, PartialEq)]
 pub struct MissionGraph {
     start: Handle<Node>,
-    /// Where the world is considered complete. The un-softlockable guarantee (M10) is stated against
+    /// Where the world is considered complete. The un-softlockable guarantee is stated against
     /// this: from every accessible state, *the goal* must stay accessible.
     goal: Option<Handle<Node>>,
     /// Scopes from which a stranded player can get back — a warp, a checkpoint, a hub return.

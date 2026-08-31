@@ -157,7 +157,7 @@ impl Default for Span {
 /// A piecewise-linear curve over progression — the "weight over time" a dev draws in the editor.
 ///
 /// Deliberately simple: keyframes with linear interpolation, clamped outside the range. Richer
-/// interpolation belongs with the editor's curve tool (M25), where a dev can see what they are
+/// interpolation belongs with the editor's curve tool, where a dev can see what they are
 /// getting; inventing spline modes nobody can preview would be guessing.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Curve {
@@ -1123,7 +1123,7 @@ impl<'a> Scheduler<'a> {
 /// How much world to keep resolved around the frontier, and how long it should be.
 ///
 /// ▶ **GAP:** `lookahead`/`lookbehind` only earn their keep once generation is genuinely on-demand
-/// (M35). They are defined here because they belong to the project descriptor and therefore to the
+///. They are defined here because they belong to the project descriptor and therefore to the
 /// fingerprint; the streaming policy that consumes them is M35's.
 #[derive(Clone, Debug, PartialEq)]
 pub struct SeedPolicy {

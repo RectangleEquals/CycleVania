@@ -12,158 +12,29 @@
 //! opens — impossible to create, so there is nothing to check afterwards. Every world the solver
 //! returns is completable, and the sphere analysis it produces along the way *proves* it.
 //!
-//! # The two dials, and why they are inputs rather than emergent
+//! # How much the world loops
 //!
-//! How linear a world feels is a design decision, not an artefact of the algorithm:
+//! `cycle_density` — `0.0` is a pure chain; `1.0` adds every shortcut it reasonably can, producing
+//! fork-and-reconverge structure. It is an input rather than an artefact because a generator whose
+//! looping was an accident of implementation would give a developer nothing to choose.
 //!
-//! * **`progression_locality`** — how far a key may sit from the lock it opens. `0.0` puts it in or
-//!   beside the gated room (Portal-style, no backtracking); `1.0` allows anywhere accessible
-//!   (MP1-style, heavy backtracking).
-//! * **`cycle_density`** — how much the topology loops. `0.0` is a pure chain; `1.0` adds every
-//!   shortcut it reasonably can, producing fork-and-reconverge structure.
+//! ▶ It becomes a **user-authored dial** when the dial machinery lands. That is the right home for it
+//! and the design says why: *"a dial exists for what only the generator can decide"* — no Actor can
+//! state *"this world has many loops"*.
 //!
-//! If these were left implicit, a generator's linearity would be an accident of implementation and a
-//! dev could not choose it. They resolve **content override → nearest enclosing scope → world
-//! default**, so a mostly non-linear world can contain a strictly linear stretch without special
-//! cases. See `01-core/pipeline.md` for the full linearity model.
+//! ⚠ **Key-to-lock distance is deliberately not a second dial here.** A pre-v0.2 `progression_locality`
+//! dial used to sit beside this one and was deleted, because *"a constraint exists for what content can
+//! state, and key-to-lock distance is stateable"* — the door writes `MinDistanceFrom` itself, and a
+//! dial would be a second way to say the same thing.
 
 use crate::mission::{Accessibility, Location, LocationId, MissionEdge, MissionGraph, Rule};
 use crate::node::{Node, NodeGraph, NodeKind};
 use crate::object::ObjectId;
 use crate::unlock::GrantMap;
 use crate::Handle;
-use cv_determinism::{math, Rng};
+use cv_determinism::Rng;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
-
-// ---------------------------------------------------------------------------------------------
-// Linearity dials
-// ---------------------------------------------------------------------------------------------
-
-/// The dials controlling how non-linear a world is.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Linearity {
-    /// How far a key may sit from its lock. `0.0` adjacent, `1.0` anywhere.
-    pub progression_locality: f64,
-    /// How much the topology loops. `0.0` a chain, `1.0` densely connected.
-    pub cycle_density: f64,
-}
-
-impl Linearity {
-    /// Portal-style: keys beside their locks, no loops.
-    pub const LINEAR: Linearity = Linearity {
-        progression_locality: 0.0,
-        cycle_density: 0.0,
-    };
-
-    /// MP1-style: keys anywhere, dense loops and shortcuts.
-    pub const OPEN: Linearity = Linearity {
-        progression_locality: 1.0,
-        cycle_density: 0.8,
-    };
-
-    /// Custom values, clamped to `[0, 1]`.
-    pub fn new(progression_locality: f64, cycle_density: f64) -> Self {
-        Linearity {
-            progression_locality: math::saturate(progression_locality),
-            cycle_density: math::saturate(cycle_density),
-        }
-    }
-}
-
-impl Default for Linearity {
-    fn default() -> Self {
-        // A middle default: some backtracking, some loops. Neither extreme is a safe assumption.
-        Linearity {
-            progression_locality: 0.5,
-            cycle_density: 0.35,
-        }
-    }
-}
-
-/// A partial override of the dials, for a scope or a piece of content.
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub struct LinearityOverride {
-    /// Override the locality dial.
-    pub progression_locality: Option<f64>,
-    /// Override the cycle dial.
-    pub cycle_density: Option<f64>,
-}
-
-impl LinearityOverride {
-    /// Override only the locality dial.
-    pub fn locality(v: f64) -> Self {
-        LinearityOverride {
-            progression_locality: Some(math::saturate(v)),
-            cycle_density: None,
-        }
-    }
-
-    /// Override only the cycle dial.
-    pub fn cycles(v: f64) -> Self {
-        LinearityOverride {
-            progression_locality: None,
-            cycle_density: Some(math::saturate(v)),
-        }
-    }
-
-    /// Apply this override onto a base.
-    pub fn apply_to(self, base: Linearity) -> Linearity {
-        Linearity {
-            progression_locality: self
-                .progression_locality
-                .unwrap_or(base.progression_locality),
-            cycle_density: self.cycle_density.unwrap_or(base.cycle_density),
-        }
-    }
-}
-
-/// Resolves the dials for a given scope, honouring the override chain.
-///
-/// The chain is what makes mixing possible: **content override → nearest enclosing scope → world
-/// default**. A heavily-backtracking world can hold one strictly self-contained Area simply by
-/// overriding it there; nothing else needs to know.
-#[derive(Clone, Debug, Default)]
-pub struct LinearityResolver {
-    world: Linearity,
-    per_scope: BTreeMap<Handle<Node>, LinearityOverride>,
-}
-
-impl LinearityResolver {
-    /// A resolver with a world-level default.
-    pub fn new(world: Linearity) -> Self {
-        LinearityResolver {
-            world,
-            per_scope: BTreeMap::new(),
-        }
-    }
-
-    /// Override the dials for a scope and everything inside it.
-    pub fn override_scope(&mut self, scope: Handle<Node>, over: LinearityOverride) -> &mut Self {
-        self.per_scope.insert(scope, over);
-        self
-    }
-
-    /// The world-level default.
-    pub fn world(&self) -> Linearity {
-        self.world
-    }
-
-    /// The dials in force at a scope.
-    ///
-    /// Walks outward from the scope, so the **nearest** enclosing override wins — a Space override
-    /// beats its Area's, which beats the world's.
-    pub fn at(&self, graph: &NodeGraph, scope: Handle<Node>) -> Linearity {
-        let mut chain: Vec<Handle<Node>> = vec![scope];
-        chain.extend(graph.ancestors_of(scope));
-        for node in chain {
-            if let Some(over) = self.per_scope.get(&node) {
-                return over.apply_to(self.world);
-            }
-        }
-        self.world
-    }
-}
 
 // ---------------------------------------------------------------------------------------------
 // Errors
@@ -223,8 +94,6 @@ pub struct PlacementTrace {
     pub candidates: usize,
     /// Hops from the placement to the nearest lock it opens; `None` if it gates nothing.
     pub distance_to_lock: Option<u32>,
-    /// The locality dial in force at the chosen scope.
-    pub locality: f64,
 }
 
 /// A solved world.
@@ -265,7 +134,12 @@ impl Solution {
 /// Places progression items so the result is solvable by construction.
 pub struct Solver<'a> {
     graph: &'a NodeGraph,
-    linearity: &'a LinearityResolver,
+    /// How often a shortcut closes a loop, 0..1.
+    ///
+    /// ▶ **M09 turns this into a user-authored dial read.** It is a plain field for now because
+    /// `cycle_density` is *"a dial for what only the generator can decide"* — no Actor can say
+    /// *"this world has many loops"* — and the dial machinery does not exist yet.
+    cycle_density: f64,
     /// Item content id → the unlocks obtaining it grants.
     grants: GrantMap,
     /// Unlocks the player starts with.
@@ -274,13 +148,23 @@ pub struct Solver<'a> {
 
 impl<'a> Solver<'a> {
     /// A solver over a scope graph and dial set.
-    pub fn new(graph: &'a NodeGraph, linearity: &'a LinearityResolver) -> Self {
+    pub fn new(graph: &'a NodeGraph) -> Self {
         Solver {
             graph,
-            linearity,
+            cycle_density: 0.35,
             grants: BTreeMap::new(),
             initial: BTreeSet::new(),
         }
+    }
+
+    /// How often a shortcut closes a loop, 0..1.
+    ///
+    /// ▶ **M09 makes this a dial read.** `cycle_density` is legitimately *"a dial for what only the
+    /// generator can decide"* — no Actor can say *"this world has many loops"* — so it stays, and
+    /// becomes a **user-authored** dial rather than a core default when the dial machinery lands.
+    pub fn with_cycle_density(mut self, density: f64) -> Self {
+        self.cycle_density = density.clamp(0.0, 1.0);
+        self
     }
 
     /// Declare that obtaining `item` grants `unlock`.
@@ -336,7 +220,7 @@ impl<'a> Solver<'a> {
                     continue;
                 }
                 // The dial in force where the shortcut would live.
-                let density = self.linearity.at(self.graph, *a).cycle_density;
+                let density = self.cycle_density;
                 if density <= 0.0 {
                     continue;
                 }
@@ -434,14 +318,13 @@ impl<'a> Solver<'a> {
                 });
             }
 
-            let (location, distance, locality) =
+            let (location, distance) =
                 self.choose_location(mission, item, &open, &choose.fork(&item.to_string()));
             traces.push(PlacementTrace {
                 item,
                 location,
                 candidates: open.len(),
                 distance_to_lock: distance,
-                locality,
             });
             placements.insert(location, item);
         }
@@ -457,18 +340,21 @@ impl<'a> Solver<'a> {
         })
     }
 
-    /// Pick where an item goes, honouring the locality dial.
+    /// Pick where an item goes, uniformly among the legal locations.
     ///
-    /// Locality is applied as a **bias, not a filter**. Filtering would make a low dial unsatisfiable
-    /// whenever no nearby location happened to be open, turning a preference into a failure; biasing
-    /// degrades to "the closest available" instead. `1.0` is uniform over everything accessible.
+    /// ▶ **M07 P07 restores key-to-lock distance control**, driven by the door's own
+    /// `MinDistanceFrom` / `MaxDistanceFrom` constraints. ⚠ It is **not** restored as a dial: the design
+    /// refuses one, because *"a dial exists for what only the generator can decide; a constraint for what
+    /// content can state, and key-to-lock distance is stateable"*
+    /// ([`05-object-model.md`](../../../.notes/Design/v0.2b/05-object-model.md) §4.2). The pre-v0.1
+    /// `progression_locality` dial that used to weight this was deleted at M04a.
     fn choose_location(
         &self,
         mission: &MissionGraph,
         item: ObjectId,
         open: &[LocationId],
         rng: &Rng,
-    ) -> (LocationId, Option<u32>, f64) {
+    ) -> (LocationId, Option<u32>) {
         // The locks this item opens, if any.
         // ⚠ Every unlock this item grants, not just one: an item that opens two lock families is
         // placed against both, and taking only the first would ignore half its own consequences.
@@ -480,22 +366,16 @@ impl<'a> Solver<'a> {
             None => Vec::new(),
         };
 
-        // Locality is read at the *lock*, since that is the part of the world whose character the dev
-        // was describing when they set it.
-        let locality = match lock_scopes.first() {
-            Some(scope) => self.linearity.at(self.graph, *scope).progression_locality,
-            None => self.linearity.world().progression_locality,
-        };
-
         let mut picker = rng.fork("where");
 
         if lock_scopes.is_empty() {
             // Nothing to be near; uniform.
             let idx = picker.below(open.len() as u64) as usize;
-            return (open[idx], None, locality);
+            return (open[idx], None);
         }
 
-        // Distance from each open location to the nearest lock.
+        // Distance from each open location to the nearest lock it opens. Kept because the trace
+        // reports it and a reader wants it — not used to bias the choice.
         let distance_maps: Vec<BTreeMap<Handle<Node>, u32>> = lock_scopes
             .iter()
             .map(|s| mission.distances_from(*s))
@@ -520,41 +400,15 @@ impl<'a> Solver<'a> {
             })
             .collect();
 
-        let max_d = scored
-            .iter()
-            .map(|(_, d)| *d)
-            .filter(|d| *d != u32::MAX)
-            .max()
-            .unwrap_or(0);
-
-        // Weight each candidate. At locality 0 the nearest dominates; at 1 everything is equal.
-        let weights: Vec<f64> = scored
-            .iter()
-            .map(|(_, d)| {
-                if *d == u32::MAX {
-                    return 0.001; // unreachable-by-hops: possible, but a last resort
-                }
-                let normalised = if max_d == 0 {
-                    0.0
-                } else {
-                    *d as f64 / max_d as f64
-                };
-                // closeness ∈ (0, 1]: 1 at the lock, falling off with distance.
-                let closeness = 1.0 - normalised;
-                // Blend between "strongly prefer close" and "no preference".
-                math::lerp(closeness * closeness + 0.001, 1.0, locality)
-            })
-            .collect();
-
-        let index = picker.weighted_choice(&weights);
-        (scored[index].0, Some(scored[index].1), locality)
+        let idx = picker.below(scored.len() as u64) as usize;
+        (scored[idx].0, Some(scored[idx].1))
     }
 
     /// Turn a fraction of edges into **one-way commits** — a drop you cannot climb back up.
     ///
     /// These are what make a world feel like it has consequences, and they are also the only way a
     /// player can strand themselves (unlocks are monotone, so collecting never hurts). The
-    /// un-softlockable pass (M10) exists to check exactly what this introduces, and should be run
+    /// un-softlockable pass exists to check exactly what this introduces, and should be run
     /// afterwards — generating commits without validating them is how a shipped softlock happens.
     ///
     /// Shortcuts are left alone: a loop-closing edge that only worked one way would defeat its purpose.
@@ -688,26 +542,9 @@ mod tests {
         m
     }
 
-    #[test]
-    fn dials_resolve_nearest_override_first() {
-        let (mut g, rooms) = chain_world(3);
-        let area = g.scope_of(rooms[0], NodeKind::Area).unwrap();
-        let _ = &mut g;
-
-        let mut resolver = LinearityResolver::new(Linearity::OPEN);
-        resolver.override_scope(area, LinearityOverride::locality(0.5));
-        resolver.override_scope(rooms[1], LinearityOverride::locality(0.0));
-
-        // The room's own override wins over its Area's.
-        assert_eq!(resolver.at(&g, rooms[1]).progression_locality, 0.0);
-        // A sibling with no override falls back to the Area.
-        assert_eq!(resolver.at(&g, rooms[0]).progression_locality, 0.5);
-        // Partial overrides leave the other dial alone.
-        assert_eq!(
-            resolver.at(&g, rooms[0]).cycle_density,
-            Linearity::OPEN.cycle_density
-        );
-    }
+    // ⚠ `dials_resolve_nearest_override_first` was deleted at M04a. It tested outward-in override
+    // resolution for `progression_locality`, a dial the design refuses. **Dial inheritance itself is
+    // design-backed** — outward-in, inner scope wins — and returns at M09 P04a over real dials.
 
     #[test]
     fn assumed_fill_never_puts_a_key_behind_its_own_door() {
@@ -719,8 +556,7 @@ mod tests {
         // Gate the middle of the chain on the dash.
         mission.gate_edge(2, Rule::has(dash));
 
-        let resolver = LinearityResolver::new(Linearity::default());
-        let solver = Solver::new(&g, &resolver).with_grant(key, dash);
+        let solver = Solver::new(&g).with_grant(key, dash);
         let solution = solver
             .fill(&mission, &[key], &Rng::new(1))
             .expect("solvable");
@@ -758,8 +594,7 @@ mod tests {
 
         for seed in 0..40u64 {
             let mut mission = mission_with_locations(&g, &rooms);
-            let resolver = LinearityResolver::new(Linearity::default());
-            let mut solver = Solver::new(&g, &resolver);
+            let mut solver = Solver::new(&g);
             for (it, c) in items.iter().zip(&caps) {
                 solver = solver.with_grant(*it, *c);
             }
@@ -784,39 +619,16 @@ mod tests {
         }
     }
 
-    #[test]
-    fn locality_zero_keeps_keys_near_their_locks() {
-        let (g, rooms) = chain_world(10);
-        let dash = cap("dash");
-        let key = item("key");
-
-        let near = LinearityResolver::new(Linearity::new(0.0, 0.0));
-        let far = LinearityResolver::new(Linearity::new(1.0, 0.0));
-
-        let mut near_total = 0u32;
-        let mut far_total = 0u32;
-        for seed in 0..30u64 {
-            for (resolver, total) in [(&near, &mut near_total), (&far, &mut far_total)] {
-                let mut mission = mission_with_locations(&g, &rooms);
-                mission.gate_edge(6, Rule::has(dash)); // gate deep in the chain
-                let solver = Solver::new(&g, resolver).with_grant(key, dash);
-                let solution = solver.fill(&mission, &[key], &Rng::new(seed)).unwrap();
-                *total += solution.traces[0].distance_to_lock.unwrap_or(0);
-            }
-        }
-        assert!(
-            near_total < far_total,
-            "locality 0 should place keys closer to their locks ({near_total} vs {far_total})"
-        );
-    }
+    // ⚠ `locality_zero_keeps_keys_near_their_locks` was deleted at M04a: it measured
+    // `progression_locality`, which the design refuses. ▶ **M07 P07 restores the behaviour** driven by
+    // the door's own `MinDistanceFrom` / `MaxDistanceFrom`, and this test returns against those.
 
     #[test]
     fn cycle_density_controls_how_much_the_world_loops() {
         let (g, rooms) = chain_world(10);
 
         let count_shortcuts = |density: f64| {
-            let resolver = LinearityResolver::new(Linearity::new(0.5, density));
-            let solver = Solver::new(&g, &resolver);
+            let solver = Solver::new(&g).with_cycle_density(density);
             let mut mission = mission_with_locations(&g, &rooms);
             solver.add_cycles(&mut mission, &Rng::new(7));
             mission.shortcut_count()
@@ -840,8 +652,7 @@ mod tests {
 
         let solve = || {
             let mut mission = mission_with_locations(&g, &rooms);
-            let resolver = LinearityResolver::new(Linearity::default());
-            let mut solver = Solver::new(&g, &resolver);
+            let mut solver = Solver::new(&g);
             for (it, c) in items.iter().zip(&caps) {
                 solver = solver.with_grant(*it, *c);
             }
@@ -871,8 +682,7 @@ mod tests {
             },
         );
 
-        let resolver = LinearityResolver::new(Linearity::default());
-        let solver = Solver::new(&g, &resolver);
+        let solver = Solver::new(&g);
         let items = [item("a"), item("b")];
         assert_eq!(
             solver.fill(&mission, &items, &Rng::new(1)),
@@ -899,8 +709,7 @@ mod tests {
             },
         );
 
-        let resolver = LinearityResolver::new(Linearity::default());
-        let solver = Solver::new(&g, &resolver);
+        let solver = Solver::new(&g);
         let result = solver.fill(&mission, &[item("a")], &Rng::new(1));
         assert!(matches!(
             result,
@@ -920,15 +729,13 @@ mod tests {
         let key = item("key");
         mission.gate_edge(3, Rule::has(dash));
 
-        let resolver = LinearityResolver::new(Linearity::new(0.2, 0.0));
-        let solver = Solver::new(&g, &resolver).with_grant(key, dash);
+        let solver = Solver::new(&g).with_grant(key, dash);
         let solution = solver.fill(&mission, &[key], &Rng::new(3)).unwrap();
 
         assert_eq!(solution.traces.len(), 1);
         let t = &solution.traces[0];
         assert_eq!(t.item, key);
         assert!(t.candidates > 0);
-        assert_eq!(t.locality, 0.2, "the dial actually in force is recorded");
         assert!(
             t.distance_to_lock.is_some(),
             "this key gates something, so distance is meaningful"
@@ -939,9 +746,8 @@ mod tests {
     fn items_that_gate_nothing_are_placed_freely() {
         let (g, rooms) = chain_world(5);
         let mission = mission_with_locations(&g, &rooms);
-        let resolver = LinearityResolver::new(Linearity::default());
         // No grants at all — pure treasure.
-        let solver = Solver::new(&g, &resolver);
+        let solver = Solver::new(&g);
         let items = [item("gold"), item("gem")];
         let solution = solver.fill(&mission, &items, &Rng::new(9)).unwrap();
         assert_eq!(solution.placements.len(), 2);

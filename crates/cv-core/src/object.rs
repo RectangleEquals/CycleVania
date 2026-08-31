@@ -20,7 +20,7 @@
 //!   deterministic, but a given object's id shifts if anything earlier in the run changes.
 //! * [`ObjectId::derived`] hashes a **namespace + path**, so identity is content-addressed: the id of
 //!   `("actor", "crawler/door_heavy")` is the same in every run, every build, and every target, no
-//!   matter what else the generator did. Registered L0 content (M05) wants this, because its identity
+//!   matter what else the generator did. Registered L0 content wants this, because its identity
 //!   should track *what it is*, not *when it was created*.
 
 use cv_determinism::hash;
@@ -171,7 +171,7 @@ impl ObjectHeader {
 ///
 /// Kept tiny on purpose: it is the common denominator the trace, the editor inspector, and
 /// serialization rely on, and every method a subclass might *override* belongs to the `api` surface
-/// (M19) rather than here.
+/// rather than here.
 pub trait Object {
     /// This object's header.
     fn header(&self) -> &ObjectHeader;

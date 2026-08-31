@@ -279,7 +279,7 @@ pub struct ScopeRecord {
     pub envelope: Option<Aabb>,
     /// Spatially adjacent peers.
     pub neighbors: Vec<ScopeRef>,
-    /// The spine slot this scope was allocated to, if any (M10a).
+    /// The spine slot this scope was allocated to, if any.
     ///
     /// **This is how a host finds the room a spine guaranteed.** Example must know *which* Space is
     /// the Rest Treasury in order to place its Beacon interaction; a Zelda-like must know which is the
@@ -425,7 +425,7 @@ impl WorldDescriptor {
         self.meshes.iter().filter(move |m| m.scope == r)
     }
 
-    /// The scope allocated to a named spine slot, if a spine ran (M10a).
+    /// The scope allocated to a named spine slot, if a spine ran.
     ///
     /// This is the host's entry point to a guarantee: `spine_slot(template, "terminal")` answers
     /// "which room is the treasury?" without re-deriving structure the generator already knew.
@@ -581,7 +581,7 @@ impl DescriptorBuilder {
                         n.sort();
                         n
                     },
-                    // Filled in by the spine pass (M10a) if one ran; `None` is the normal case.
+                    // Filled in by the spine pass if one ran; `None` is the normal case.
                     spine_slot: None,
                 }
             })
@@ -618,7 +618,7 @@ impl DescriptorBuilder {
         self
     }
 
-    /// Tag a scope as the one a spine slot was allocated to (M10a).
+    /// Tag a scope as the one a spine slot was allocated to.
     ///
     /// Returns `false` if the handle is not in this descriptor. Hosts read the tag back through
     /// [`WorldDescriptor::spine_slot`]: a guaranteed room is only useful if the host can *find* it.

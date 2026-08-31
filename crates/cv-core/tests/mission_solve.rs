@@ -11,8 +11,7 @@
 //! is a requirement, not a nicety.
 
 use cv_core::{
-    Linearity, LinearityOverride, LinearityResolver, Location, LocationId, MissionGraph, NodeGraph,
-    NodeKind, NodeState, ObjectId, Rule, SolveError, Solver,
+    Location, LocationId, MissionGraph, NodeGraph, NodeState, ObjectId, Rule, SolveError, Solver,
 };
 use cv_determinism::{Aabb, Rng, Vec3};
 
@@ -72,7 +71,7 @@ fn mission_for(g: &NodeGraph, spaces: &[cv_core::Handle<cv_core::Node>]) -> Miss
 fn generate(
     g: &NodeGraph,
     spaces: &[cv_core::Handle<cv_core::Node>],
-    resolver: &LinearityResolver,
+    cycle_density: f64,
     item_count: usize,
     gate_fraction: f64,
     seed: u64,
@@ -80,7 +79,7 @@ fn generate(
     let caps: Vec<ObjectId> = (0..item_count).map(cap).collect();
     let items: Vec<ObjectId> = (0..item_count).map(item).collect();
 
-    let mut solver = Solver::new(g, resolver);
+    let mut solver = Solver::new(g).with_cycle_density(cycle_density);
     for i in 0..item_count {
         solver = solver.with_grant(item(i), cap(i));
     }
@@ -99,26 +98,19 @@ fn generate(
 
 #[test]
 fn every_generated_world_is_completable() {
-    // The property the milestone exists to establish, swept across shapes, dials and seeds.
+    // The property the milestone exists to establish, swept across shapes, densities and seeds.
     let shapes = [(2, 4), (3, 3), (4, 5), (1, 10)];
-    let dials = [
-        Linearity::LINEAR,
-        Linearity::OPEN,
-        Linearity::default(),
-        Linearity::new(0.0, 1.0),
-        Linearity::new(1.0, 0.0),
-    ];
+    let densities = [0.0, 0.35, 1.0];
 
     let mut worlds = 0;
     let mut retried = 0;
     for (areas, per_area) in shapes {
         let (g, spaces) = build_world(areas, per_area);
-        for dial in dials {
-            let resolver = LinearityResolver::new(dial);
+        for density in densities {
             for seed in 0..25u64 {
                 let (_, solution) =
-                    generate(&g, &spaces, &resolver, 3, 0.6, seed).unwrap_or_else(|e| {
-                        panic!("{areas}x{per_area} dial {dial:?} seed {seed}: {e}")
+                    generate(&g, &spaces, density, 3, 0.6, seed).unwrap_or_else(|e| {
+                        panic!("{areas}x{per_area} density {density} seed {seed}: {e}")
                     });
 
                 // Every unlock is obtainable...
@@ -140,7 +132,9 @@ fn every_generated_world_is_completable() {
             }
         }
     }
-    assert_eq!(worlds, 500);
+    // 4 shapes x 3 densities x 25 seeds. Was 500 when the sweep ran 5 `Linearity` presets,
+    // two of which varied a dial the design refuses.
+    assert_eq!(worlds, 300);
     // Retries are legitimate but should be the exception; a high rate means gating is too tight.
     assert!(
         retried * 4 < worlds,
@@ -153,10 +147,9 @@ fn a_key_is_never_placed_behind_the_lock_it_opens() {
     // Stated directly rather than inferred from completability: for every placement, the room holding
     // the key must be accessible *without* that key.
     let (g, spaces) = build_world(3, 4);
-    let resolver = LinearityResolver::new(Linearity::default());
 
     for seed in 0..40u64 {
-        let (mission, solution) = generate(&g, &spaces, &resolver, 3, 0.7, seed).unwrap();
+        let (mission, solution) = generate(&g, &spaces, 0.5, 3, 0.7, seed).unwrap();
         for (loc, placed) in &solution.placements {
             let Some(granted) = [0, 1, 2]
                 .iter()
@@ -192,70 +185,40 @@ fn a_key_is_never_placed_behind_the_lock_it_opens() {
 // ---------------------------------------------------------------------------------------------
 
 #[test]
-fn the_dials_produce_measurably_different_worlds() {
-    let (g, spaces) = build_world(3, 5);
+fn cycle_density_changes_how_much_the_world_loops() {
+    // ⚠ This replaced two tests at M04a that profiled `Linearity::LINEAR` vs `Linearity::OPEN`.
+    // `progression_locality` — half of what they measured — is a dial the design **refuses**: a door
+    // states key-to-lock distance as a `MinDistanceFrom` constraint, so a dial would be a second way
+    // to say the same thing. `cycle_density` survives, because no Actor can state *"this world has
+    // many loops"* — that is genuinely the generator's to decide.
+    let (g, spaces) = build_world(3, 4);
 
-    let profile = |dial: Linearity| {
-        let resolver = LinearityResolver::new(dial);
-        let mut shortcuts = 0usize;
-        let mut distance = 0u32;
-        for seed in 0..25u64 {
-            let (mission, solution) = generate(&g, &spaces, &resolver, 3, 0.6, seed).unwrap();
-            shortcuts += mission.shortcut_count();
-            distance += solution
-                .traces
-                .iter()
-                .filter_map(|t| t.distance_to_lock)
-                .sum::<u32>();
+    let loops_at = |density: f64| {
+        let mut total = 0usize;
+        for seed in 0..12u64 {
+            let (mission, _) = generate(&g, &spaces, density, 3, 0.6, seed).unwrap();
+            total += mission.edges().iter().filter(|e| e.is_shortcut).count();
         }
-        (shortcuts, distance)
+        total
     };
 
-    let (linear_loops, linear_distance) = profile(Linearity::LINEAR);
-    let (open_loops, open_distance) = profile(Linearity::OPEN);
-
-    assert_eq!(linear_loops, 0, "a linear world has no shortcuts at all");
-    assert!(open_loops > 0, "an open world loops");
+    let chain = loops_at(0.0);
+    let webbed = loops_at(1.0);
+    assert_eq!(chain, 0, "at density 0 no shortcut may be added");
     assert!(
-        open_distance > linear_distance,
-        "open worlds should scatter keys further from their locks ({open_distance} vs {linear_distance})"
+        webbed > chain,
+        "density 1 must loop more than density 0 — {webbed} vs {chain}"
     );
-}
-
-#[test]
-fn a_linear_stretch_can_sit_inside_an_open_world() {
-    // The mixing case: mostly non-linear, but one Area deliberately kept self-contained.
-    let (g, spaces) = build_world(3, 4);
-    let quiet_area = g.scope_of(spaces[4], NodeKind::Area).unwrap();
-
-    let mut resolver = LinearityResolver::new(Linearity::OPEN);
-    resolver.override_scope(quiet_area, LinearityOverride::cycles(0.0));
-
-    let mut inside = 0usize;
-    let mut outside = 0usize;
-    for seed in 0..30u64 {
-        let (mission, _) = generate(&g, &spaces, &resolver, 3, 0.5, seed).unwrap();
-        for edge in mission.edges().iter().filter(|e| e.is_shortcut) {
-            if g.scope_of(edge.from, NodeKind::Area) == Some(quiet_area) {
-                inside += 1;
-            } else {
-                outside += 1;
-            }
-        }
-    }
-    assert_eq!(inside, 0, "the overridden Area stays loop-free");
-    assert!(outside > 0, "while the rest of the world still loops");
 }
 
 #[test]
 fn gating_creates_real_progression_structure() {
     let (g, spaces) = build_world(3, 4);
-    let resolver = LinearityResolver::new(Linearity::default());
 
     // Ungated: everything is accessible immediately — a single sphere.
     let caps: Vec<ObjectId> = (0..3).map(cap).collect();
     let items: Vec<ObjectId> = (0..3).map(item).collect();
-    let mut solver = Solver::new(&g, &resolver);
+    let mut solver = Solver::new(&g);
     for i in 0..3 {
         solver = solver.with_grant(item(i), cap(i));
     }
@@ -289,10 +252,9 @@ fn gating_creates_real_progression_structure() {
 #[test]
 fn generation_is_reproducible() {
     let (g, spaces) = build_world(3, 4);
-    let resolver = LinearityResolver::new(Linearity::default());
     for seed in [1u64, 42, 0xDEAD] {
-        let a = generate(&g, &spaces, &resolver, 3, 0.6, seed).unwrap();
-        let b = generate(&g, &spaces, &resolver, 3, 0.6, seed).unwrap();
+        let a = generate(&g, &spaces, 0.5, 3, 0.6, seed).unwrap();
+        let b = generate(&g, &spaces, 0.5, 3, 0.6, seed).unwrap();
         assert_eq!(a.0, b.0, "the same seed must build the same graph");
         assert_eq!(a.1, b.1, "and place the same items");
     }
@@ -301,9 +263,8 @@ fn generation_is_reproducible() {
 #[test]
 fn different_seeds_explore_different_worlds() {
     let (g, spaces) = build_world(3, 4);
-    let resolver = LinearityResolver::new(Linearity::default());
-    let a = generate(&g, &spaces, &resolver, 3, 0.6, 1).unwrap().1;
-    let b = generate(&g, &spaces, &resolver, 3, 0.6, 2).unwrap().1;
+    let a = generate(&g, &spaces, 0.5, 3, 0.6, 1).unwrap().1;
+    let b = generate(&g, &spaces, 0.5, 3, 0.6, 2).unwrap().1;
     assert_ne!(a.placements, b.placements);
 }
 
@@ -322,8 +283,7 @@ fn an_unsolvable_world_is_reported_rather_than_returned_broken() {
         },
     );
 
-    let resolver = LinearityResolver::new(Linearity::default());
-    let solver = Solver::new(&g, &resolver);
+    let solver = Solver::new(&g);
     let err = solver.fill(&mission, &[item(0)], &Rng::new(1)).unwrap_err();
     assert!(matches!(err, SolveError::NoAccessibleLocation { .. }));
 }
@@ -331,16 +291,11 @@ fn an_unsolvable_world_is_reported_rather_than_returned_broken() {
 #[test]
 fn the_solution_explains_itself() {
     let (g, spaces) = build_world(3, 4);
-    let resolver = LinearityResolver::new(Linearity::new(0.25, 0.4));
-    let (mission, solution) = generate(&g, &spaces, &resolver, 3, 0.6, 11).unwrap();
+    let (mission, solution) = generate(&g, &spaces, 0.5, 3, 0.6, 11).unwrap();
 
     assert_eq!(solution.traces.len(), 3);
     for t in &solution.traces {
         assert!(t.candidates > 0, "a placement always had somewhere to go");
-        assert_eq!(
-            t.locality, 0.25,
-            "the dial in force is recorded, not assumed"
-        );
         assert!(solution.placements.get(&t.location) == Some(&t.item));
     }
     assert!(solution.attempts >= 1);

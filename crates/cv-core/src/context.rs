@@ -5,8 +5,8 @@
 //! A callback receives a `Context` and nothing else. That is a deliberate constraint rather than a
 //! convenience: it means the complete set of things a mechanic can learn, and the complete set of
 //! things it can ask for, is enumerable in one place. There is no ambient state to discover, no global
-//! to reach for, and — crucially for the API-signature checker (M16) and the read-only header view
-//! (M19) — no surface that varies per callback.
+//! to reach for, and — crucially for the API-signature checker and the read-only header view
+//! — no surface that varies per callback.
 //!
 //! # Four channels, with different authority
 //!
@@ -74,7 +74,7 @@ struct WorldView<'a> {
     registry: &'a ContentRegistry,
     /// Content already placed, by scope — what the committed-state queries count.
     placed: &'a [(Handle<Node>, ObjectId)],
-    /// The coarse boxes the spatial primitives run against (M11). Absent until something builds them,
+    /// The coarse boxes the spatial primitives run against. Absent until something builds them,
     /// in which case every primitive answers "nothing there" rather than refusing to run.
     geometry: Option<&'a CoarseGeometry>,
 }
@@ -122,7 +122,7 @@ impl<'a> Context<'a> {
         self
     }
 
-    /// Give this context the coarse geometry the spatial primitives run against (M11).
+    /// Give this context the coarse geometry the spatial primitives run against.
     ///
     /// Optional on purpose: L0–L2 callbacks have no geometry to speak of, and a mechanic that asks
     /// anyway gets an empty world rather than a panic — the same forgiving shape
@@ -179,7 +179,7 @@ impl<'a> Context<'a> {
 
     /// How many scopes of a kind are **realized**.
     ///
-    /// Committed state, so this re-derives correctly across backtracking. A `ProgressionAxis` (M12)
+    /// Committed state, so this re-derives correctly across backtracking. A `ProgressionAxis`
     /// built on queries like this rolls back for free.
     pub fn count_realized(&self, kind: NodeKind) -> u32 {
         self.count_scopes(kind, NodeState::Realized)
@@ -242,7 +242,7 @@ impl<'a> Context<'a> {
         }
     }
 
-    // --- spatial primitives (M11) --------------------------------------------------------------
+    // --- spatial primitives --------------------------------------------------------------
 
     /// The coarse geometry behind this call, if it has any.
     pub fn geometry(&self) -> Option<&CoarseGeometry> {

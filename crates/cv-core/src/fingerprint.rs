@@ -105,7 +105,7 @@ pub struct FingerprintBuilder {
     core_version: String,
     /// Digest of the registered content, if any.
     content: Option<u64>,
-    /// Compiled-script digests by id (M17). Ordered, so order of addition cannot matter.
+    /// Compiled-script digests by id. Ordered, so order of addition cannot matter.
     scripts: BTreeMap<String, u64>,
     /// Configuration, ordered by key for the same reason.
     config: BTreeMap<String, ConfigValue>,
@@ -136,7 +136,7 @@ impl FingerprintBuilder {
         self
     }
 
-    /// Fold in a compiled script's digest (M17 supplies these from `.cvb` hashes).
+    /// Fold in a compiled script's digest (the schematic compiler supplies these from bytecode hashes).
     pub fn script(mut self, id: impl Into<String>, digest: u64) -> Self {
         self.scripts.insert(id.into(), digest);
         self

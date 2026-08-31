@@ -40,7 +40,6 @@ use crate::mission::{MissionEdge, MissionGraph, Rule};
 use crate::node::{Node, NodeGraph, NodeKind};
 use crate::object::{Object, ObjectId};
 use crate::schedule::{AdaptiveRange, Curve, Progression};
-use crate::solver::LinearityOverride;
 use crate::Handle;
 use cv_determinism::{math, Rng};
 use std::collections::{BTreeMap, BTreeSet};
@@ -383,8 +382,9 @@ pub struct SpineSegment {
     pub to: String,
     /// How many scopes of connective tissue. `0..=0` means a direct connection.
     pub length: AdaptiveRange,
-    /// Per-segment dial override — free-form here, tight there.
-    pub linearity: Option<LinearityOverride>,
+    // ▶ **M09.** A per-segment dial override belongs here — *"free-form here, tight there"* — but
+    // as a **user-authored dial** on the slot, not a core struct. The pre-v0.1 `LinearityOverride`
+    // that used to sit here carried `progression_locality`, which the design refuses outright.
     /// What the path through here requires.
     pub gated_by: Option<UnlockRef>,
 }
@@ -396,7 +396,6 @@ impl SpineSegment {
             from: from.into(),
             to: to.into(),
             length,
-            linearity: None,
             gated_by: None,
         }
     }
@@ -435,12 +434,6 @@ impl SpineSegment {
     /// Gate the path through this segment.
     pub fn gated_by(mut self, requirement: UnlockRef) -> Self {
         self.gated_by = Some(requirement);
-        self
-    }
-
-    /// Override the dials along this segment.
-    pub fn linearity(mut self, over: LinearityOverride) -> Self {
-        self.linearity = Some(over);
         self
     }
 

@@ -13,19 +13,20 @@
 //! * [`fingerprint`] — recipe identity (deliberately excluding the seed) and reproduction bundles.
 //! * [`descriptor`] — the host-facing `WorldDescriptor`: what goes where and why, never geometry.
 //! * [`events`] — the one-way, batched notification bridge to the host.
-//! * [`mechanic`] — the api-shaped callback seam that breaks the core↔CVScript cycle (M07).
-//! * [`context`] — the per-call lens handed into every mechanic callback.
-//! * [`fixtures`] — hand-written mechanics standing in for CVScript until the VM lands (M18).
-//! * [`schedule`] — L0 content resolution and the L1 plan, including `AdaptiveRange` (M08).
-//! * [`mission`] — the L2 mission graph, the `Rule` grammar, and sphere reachability (M09).
-//! * [`solver`] — assumed-fill placement, cycle generation, and the linearity dials (M09).
-//! * [`softlock`] — the un-softlockable guarantee: no accessible state strands the goal (M10).
-//! * [`spine`] — opt-in macro-structure: guaranteed slots, free-form segments (M10a).
-//! * [`geometry`] — coarse colliders and the spatial primitives mechanics reason through (M11).
+//! * [`context`] — the per-call lens handed into every authored callback.
+//! * [`unlock`] — the progression vocabulary: `Unlock` rows and their `supersedes` ordering.
+//! * [`schedule`] — L0 content resolution and the L1 plan, including `AdaptiveRange`.
+//! * [`mission`] — the L2 mission graph, the `Rule` grammar, and sphere reachability.
+//! * [`solver`] — assumed-fill placement and cycle generation.
+//! * [`softlock`] — the un-softlockable guarantee: no accessible state strands the goal.
+//! * [`spine`] — opt-in macro-structure: guaranteed slots, free-form segments.
+//! * [`geometry`] — coarse colliders and the spatial primitives content reasons through.
 //! * [`serialize`] — the deterministic binary spine for reproduction bundles and round-trips.
 //! * [`probe`] — the cross-target determinism blob for the data model.
 //!
-//! The pipeline (M06–M14) builds on these.
+//! ⚠ **Milestone numbers are deliberately absent.** They used to appear throughout and cited the
+//! **v0.1** plan, which v0.2b reuses for unrelated work — `` meant the mission graph there and
+//! means dials here. Stripped at M04a; the plan is the place that tracks the plan.
 
 // No `unsafe` anywhere in the core. The arena's stale-handle guarantee is an explicit generation
 // check rather than a pointer trick, so it is enforced by the compiler and by tests — which is a
@@ -74,9 +75,7 @@ pub use serialize::{Deserialize, Reader, SerError, SerResult, Serialize, Writer}
 pub use softlock::{
     AnalysisLimit, Repair, Softlock, SoftlockAnalysis, SoftlockAnalyzer, SoftlockKind,
 };
-pub use solver::{
-    Linearity, LinearityOverride, LinearityResolver, PlacementTrace, Solution, SolveError, Solver,
-};
+pub use solver::{PlacementTrace, Solution, SolveError, Solver};
 pub use spine::{
     Coverage, GrantSpec, Relaxation, SlotAssignment, SlotContents, SlotRole, SlotShape, SpineError,
     SpineInstance, SpineInstantiator, SpineSegment, SpineSlot, SpineTemplate, SpineValidation,

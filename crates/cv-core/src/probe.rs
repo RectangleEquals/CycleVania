@@ -317,7 +317,7 @@ fn build() -> ProbeWorld {
     }
 }
 
-/// Spatial primitives across the cases where float behaviour actually differs (M11).
+/// Spatial primitives across the cases where float behaviour actually differs.
 ///
 /// These decide *where a beam stops* and *where a body ends up*, so a drift between targets would not
 /// merely encode differently — it would put the laser on the wrong side of the glass. The sweep covers
@@ -412,7 +412,7 @@ fn build_geometry_values() -> (Vec<Face>, Vec<Hit>, Vec<u8>) {
     (Face::ALL.to_vec(), hits, w.finish())
 }
 
-/// Spine encodings and the arithmetic that decides structure (M10a).
+/// Spine encodings and the arithmetic that decides structure.
 ///
 /// A spine's promises are *structural* — which scope is the boss arena, which instances are covered.
 /// If that arithmetic drifted between targets, two players on different platforms would get worlds
@@ -552,7 +552,7 @@ fn build_descriptor(scopes: &NodeGraph, fingerprint: Fingerprint, seed: u64) -> 
         rationale: Rationale::new(PlacementReason::Connector),
     });
 
-    // A spine tag, so the field a host reads a guarantee back through is in the blob too (M10a).
+    // A spine tag, so the field a host reads a guarantee back through is in the blob too.
     let spaces: Vec<_> = scopes.of_kind(NodeKind::Space).map(|(h, _)| h).collect();
     b.tag_spine_slot(
         spaces[0],

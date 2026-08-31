@@ -58,7 +58,7 @@ pub enum ContentKind {
     StaticMesh,
     /// A disk-backed curve.
     CurveTable,
-    /// An **opt-in** macro-structure template constraining L2's topology (M10a).
+    /// An **opt-in** macro-structure template constraining L2's topology.
     ///
     /// Not schedulable: a spine is not *placed*, it shapes where placement happens.
     Spine,
@@ -161,7 +161,7 @@ pub struct ContentEntry {
     /// The dev-facing path this was registered under (`"crawler/door_heavy"`) — the id's preimage, and
     /// what a diagnostic should show a human.
     path: String,
-    /// A digest of whatever *defines* this content: its compiled script (M17), its asset bytes, or its
+    /// A digest of whatever *defines* this content: its compiled script, its asset bytes, or its
     /// declaration. Two builds whose content differs only in behaviour still get different
     /// fingerprints because of this.
     source_digest: u64,

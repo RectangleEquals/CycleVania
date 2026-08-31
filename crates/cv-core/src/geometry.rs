@@ -1,4 +1,4 @@
-//! **Coarse geometry and the spatial primitives mechanics reason through** (M11).
+//! **Coarse geometry and the spatial primitives mechanics reason through**.
 //!
 //! # Why "coarse"
 //!
@@ -9,7 +9,7 @@
 //!
 //! That is not a placeholder. A mechanic asking *"can the laser reach the catcher from here?"* is
 //! asking a question about layout, and layout is settled long before geometry is. When L5 lands
-//! (M29) it refines what a [`Collider`] is; the questions and their shapes stay put.
+//! it refines what a [`Collider`] is; the questions and their shapes stay put.
 //!
 //! # The primitives are flow-agnostic, on purpose
 //!
@@ -30,7 +30,7 @@
 //!
 //! [`raycast_all`](CoarseGeometry::raycast_all) returns hits **sorted by distance** so that loop is
 //! correct by construction, and it returns a plain `Vec` rather than taking a predicate because this
-//! surface has to survive being exposed to CVScript (M19) — a closure would not translate, an array
+//! surface has to survive being exposed to CVScript — a closure would not translate, an array
 //! does.
 //!
 //! # Determinism

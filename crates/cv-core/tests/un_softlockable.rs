@@ -15,8 +15,8 @@
 
 use cv_core::unlock::GrantMap;
 use cv_core::{
-    Linearity, LinearityResolver, Location, LocationId, MissionEdge, MissionGraph, NodeGraph,
-    NodeState, ObjectId, Rule, SoftlockAnalyzer, SoftlockKind, Solver,
+    Location, LocationId, MissionEdge, MissionGraph, NodeGraph, NodeState, ObjectId, Rule,
+    SoftlockAnalyzer, SoftlockKind, Solver,
 };
 use cv_determinism::{Aabb, Rng, Vec3};
 use std::collections::{BTreeMap, BTreeSet};
@@ -179,14 +179,13 @@ fn generate(
     spaces: &[cv_core::Handle<cv_core::Node>],
     items: usize,
     one_way_fraction: f64,
-    linearity: Linearity,
+    cycle_density: f64,
     seed: u64,
 ) -> Option<GeneratedWorld> {
     let caps: Vec<ObjectId> = (0..items).map(cap).collect();
     let pool: Vec<ObjectId> = (0..items).map(item).collect();
 
-    let resolver = LinearityResolver::new(linearity);
-    let mut solver = Solver::new(g, &resolver);
+    let mut solver = Solver::new(g).with_cycle_density(cycle_density);
     for i in 0..items {
         solver = solver.with_grant(item(i), cap(i));
     }
@@ -212,7 +211,7 @@ fn generated_worlds_are_made_un_softlockable() {
     // how often a trap actually appeared — a run where none did would prove nothing.
     // No cycles: loops are themselves a softlock mitigation (see the test below), so isolating the
     // hazard means removing the escape routes.
-    let dangerous = Linearity::new(0.5, 0.0);
+    let dangerous = 0.0;
     let (g, spaces) = world(3, 4);
     let mut generated = 0;
     let mut had_hazards = 0;
@@ -264,11 +263,13 @@ fn loops_are_themselves_a_softlock_mitigation() {
     let mut hazards_with_loops = 0usize;
 
     for seed in 0..40u64 {
-        for (linearity, tally) in [
-            (Linearity::new(0.5, 0.0), &mut hazards_without_loops),
-            (Linearity::new(0.5, 0.8), &mut hazards_with_loops),
+        for (cycle_density, tally) in [
+            (0.0, &mut hazards_without_loops),
+            (0.8, &mut hazards_with_loops),
         ] {
-            if let Some((m, placements, grants)) = generate(&g, &spaces, 3, 0.5, linearity, seed) {
+            if let Some((m, placements, grants)) =
+                generate(&g, &spaces, 3, 0.5, cycle_density, seed)
+            {
                 *tally += SoftlockAnalyzer::new(&m, &placements, &grants)
                     .analyze()
                     .hazards
@@ -293,9 +294,7 @@ fn repair_preserves_solvability() {
     // Worth asserting rather than assuming: a repair that broke the M09 guarantee would be a poor trade.
     let (g, spaces) = world(3, 4);
     for seed in 0..40u64 {
-        let Some((mut m, placements, grants)) =
-            generate(&g, &spaces, 3, 0.4, Linearity::new(0.5, 0.0), seed)
-        else {
+        let Some((mut m, placements, grants)) = generate(&g, &spaces, 3, 0.4, 0.0, seed) else {
             continue;
         };
         let analysis = SoftlockAnalyzer::new(&m, &placements, &grants).analyze();
@@ -321,9 +320,7 @@ fn a_world_without_commits_needs_no_repair() {
     // find nothing and cost nothing.
     let (g, spaces) = world(3, 4);
     for seed in 0..20u64 {
-        let Some((m, placements, grants)) =
-            generate(&g, &spaces, 3, 0.0, Linearity::default(), seed)
-        else {
+        let Some((m, placements, grants)) = generate(&g, &spaces, 3, 0.0, 0.35, seed) else {
             continue;
         };
         let analysis = SoftlockAnalyzer::new(&m, &placements, &grants).analyze();
@@ -348,8 +345,7 @@ fn the_cost_is_measured_and_stays_modest() {
 
     for items in [2usize, 4, 6] {
         for seed in 0..20u64 {
-            let Some((m, placements, grants)) =
-                generate(&g, &spaces, items, 0.4, Linearity::default(), seed)
+            let Some((m, placements, grants)) = generate(&g, &spaces, items, 0.4, 0.35, seed)
             else {
                 continue;
             };
@@ -377,8 +373,7 @@ fn the_cost_is_measured_and_stays_modest() {
 fn an_oversized_world_declines_rather_than_stalling() {
     // A bounded honest failure beats an unbounded wait — and must never read as "safe".
     let (g, spaces) = world(2, 4);
-    let Some((m, placements, grants)) = generate(&g, &spaces, 5, 0.4, Linearity::default(), 1)
-    else {
+    let Some((m, placements, grants)) = generate(&g, &spaces, 5, 0.4, 0.35, 1) else {
         panic!("fixture must generate");
     };
     let analysis = SoftlockAnalyzer::new(&m, &placements, &grants)
@@ -391,7 +386,7 @@ fn an_oversized_world_declines_rather_than_stalling() {
 #[test]
 fn analysis_is_deterministic_across_runs() {
     let (g, spaces) = world(3, 4);
-    let (m, placements, grants) = generate(&g, &spaces, 3, 0.4, Linearity::default(), 7).unwrap();
+    let (m, placements, grants) = generate(&g, &spaces, 3, 0.4, 0.35, 7).unwrap();
     let a = SoftlockAnalyzer::new(&m, &placements, &grants).analyze();
     let b = SoftlockAnalyzer::new(&m, &placements, &grants).analyze();
     assert_eq!(a, b);

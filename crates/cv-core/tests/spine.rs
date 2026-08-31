@@ -17,10 +17,10 @@ use cv_core::{
     Scheduler, SlotRule,
 };
 use cv_core::{
-    Coverage, DescriptorBuilder, Fingerprint, GrantSpec, Handle, Linearity, LinearityResolver,
-    Location, LocationId, MissionGraph, Node, NodeGraph, NodeKind, NodeState, ObjectId, SlotRole,
-    SoftlockAnalyzer, Solver, SpineError, SpineInstantiator, SpineSegment, SpineSlot, SpineSlotTag,
-    SpineTemplate, Strictness, UnlockRef,
+    Coverage, DescriptorBuilder, Fingerprint, GrantSpec, Handle, Location, LocationId,
+    MissionGraph, Node, NodeGraph, NodeKind, NodeState, ObjectId, SlotRole, SoftlockAnalyzer,
+    Solver, SpineError, SpineInstantiator, SpineSegment, SpineSlot, SpineSlotTag, SpineTemplate,
+    Strictness, UnlockRef,
 };
 use cv_determinism::{Aabb, Rng, Vec3};
 use std::collections::{BTreeMap, BTreeSet};
@@ -145,8 +145,7 @@ fn registering_no_spine_reproduces_the_pipeline_exactly() {
     // The strongest form of "opt-in": run the *whole* solve twice, once with the spine pass wired in
     // but empty. Anything the pass touched — an extra edge, one RNG draw — would show up here.
     let (g, spaces) = world(2, 5);
-    let resolver = LinearityResolver::new(Linearity::new(0.5, 0.3));
-    let solver = Solver::new(&g, &resolver).with_grant(item("dash_item"), cap("dash"));
+    let solver = Solver::new(&g).with_grant(item("dash_item"), cap("dash"));
 
     let run = |use_pass: bool| {
         let mut mission = MissionGraph::from_scopes(&g, spaces[0]);
@@ -259,8 +258,7 @@ fn a_spined_world_still_solves_and_stays_un_softlockable() {
     // possible and this test would assert safety about a world that could not have been unsafe —
     // the M10 lesson, which cost a rewrite of that milestone's fixture.
     let (g, spaces) = world(2, 8);
-    let resolver = LinearityResolver::new(Linearity::new(0.4, 0.4));
-    let solver = Solver::new(&g, &resolver)
+    let solver = Solver::new(&g)
         .with_grant(item("hook_item"), cap("hook"))
         .with_grant(item("bomb_item"), cap("bombs"));
     let mut seeds_with_a_hazard = 0;
@@ -434,9 +432,10 @@ fn a_dead_end_slot_survives_free_form_growth_and_maximum_cycle_density() {
     );
     assert_eq!(mission.degree(terminal), 1, "the treasury is a dead end");
 
-    // Now turn the cycle dial to maximum and confirm the cap holds where discipline would not.
-    let resolver = LinearityResolver::new(Linearity::new(0.5, 1.0));
-    let added = Solver::new(&g, &resolver).add_cycles(&mut mission, &rng);
+    // Now turn the cycle density to maximum and confirm the cap holds where discipline would not.
+    let added = Solver::new(&g)
+        .with_cycle_density(1.0)
+        .add_cycles(&mut mission, &rng);
     assert!(
         added > 0,
         "the dial must actually have done something, or this proves nothing"
@@ -544,8 +543,7 @@ fn a_dead_end_treasury_does_not_strand_anyone() {
         mission.add_location(LocationId(i as u32), Location { scope: *s, slot: 0 });
     }
 
-    let resolver = LinearityResolver::new(Linearity::new(0.4, 0.4));
-    let solver = Solver::new(&g, &resolver).with_grant(item("hook_item"), cap("hook"));
+    let solver = Solver::new(&g).with_grant(item("hook_item"), cap("hook"));
     solver.add_one_way_commits(&mut mission, 0.4, &rng);
     let solution = solver.fill(&mission, &[item("hook_item")], &rng).unwrap();
 
@@ -654,8 +652,7 @@ fn a_free_segment_may_branch_and_reconverge() {
         );
     }
 
-    let resolver = LinearityResolver::new(Linearity::new(0.5, 1.0));
-    Solver::new(&g, &resolver).add_cycles(&mut mission, &rng);
+    Solver::new(&g).add_cycles(&mut mission, &rng);
 
     // Branching: some room has three or more ways out.
     let branchiest = spaces.iter().map(|s| mission.degree(*s)).max().unwrap();

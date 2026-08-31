@@ -4,7 +4,7 @@
 //! # Algorithm-owned, script-readable
 //!
 //! Nodes are *structure*, and structure belongs to the algorithm. A script may read a node freely but
-//! never write one; changes arrive as `Context` requests the core may grant, adapt, or deny (M12). That
+//! never write one; changes arrive as `Context` requests the core may grant, adapt, or deny. That
 //! is enforced here rather than merely documented: [`Node`] exposes **getters only**, and every mutation
 //! lives on [`NodeGraph`] where the invariants can be checked. There is no way to obtain a
 //! `&mut Node` — a realized node is immutable because no API can hand you one.
