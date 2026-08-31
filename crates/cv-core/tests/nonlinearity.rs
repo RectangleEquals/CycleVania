@@ -214,10 +214,12 @@ fn depth_of_projection_is_unbounded_in_both_directions() {
         let reach = g.add_child(world, format!("r{r}")).unwrap();
         let area = g.add_child(reach, "a").unwrap();
         let space = g.add_child(area, "s").unwrap();
-        let spatial = g.add_child(space, "sp").unwrap();
-        assert_eq!(g.depth_of(spatial), 4);
+        let floor = g.add_child(space, "f").unwrap();
+        let spatial = g.add_child(floor, "sp").unwrap();
+        assert_eq!(g.depth_of(spatial), 5);
     }
     assert_eq!(g.of_kind(NodeKind::Reach).count(), 50);
+    assert_eq!(g.of_kind(NodeKind::Floor).count(), 50);
     assert_eq!(g.of_kind(NodeKind::Spatial).count(), 50);
     assert!(g.check_invariants().is_none());
 }

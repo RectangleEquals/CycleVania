@@ -42,6 +42,7 @@ pub mod events;
 pub mod fingerprint;
 pub mod floor;
 pub mod geometry;
+pub mod intra;
 pub mod mission;
 pub mod node;
 pub mod object;
@@ -65,7 +66,10 @@ pub use events::{EventLog, GenEvent, Verbosity};
 pub use fingerprint::{Fingerprint, FingerprintBuilder, ReproductionBundle, ReproductionError};
 pub use floor::{ConvexHull, FloorSurface, ScopeBounds};
 pub use geometry::{CoarseGeometry, Collider, ColliderId, Face, Hit, Sweep};
-pub use mission::{Accessibility, Location, LocationId, MissionEdge, MissionGraph, Rule, Sphere};
+pub use intra::{EdgeSource, FloorEdge, IntraSpace};
+pub use mission::{
+    Accessibility, EdgeSpan, Location, LocationId, MissionEdge, MissionGraph, Rule, Sphere,
+};
 pub use node::{Node, NodeError, NodeGraph, NodeKind, NodeResult, NodeState};
 pub use object::{IdAllocator, Object, ObjectHeader, ObjectId};
 pub use schedule::{

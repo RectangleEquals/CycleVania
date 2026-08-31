@@ -66,17 +66,28 @@ pub enum NodeKind {
     Area,
     /// A room: the unit most puzzles and encounters are scoped to.
     Space,
+    /// **One mutually-accessible set of standable positions inside a Space.**
+    ///
+    /// ⚠ **Derived, never authored.** A Space's `floor_count` is a *preference* the solver may miss
+    /// under content scarcity, never a guarantee — floors fall out of geometry, and a single-level
+    /// room simply has exactly one, so nothing changes for it.
+    ///
+    /// ⚠ **Floor collision is not the `Floor` scope.** L2a produces standable *geometry*
+    /// ([`crate::floor`]); this is the *topology* that partitions it — what is mutually accessible
+    /// from what. The first produces what the second partitions.
+    Floor,
     /// A sub-volume within a Space (a ledge, an alcove, a shaft).
     Spatial,
 }
 
 impl NodeKind {
     /// Every kind, outermost first.
-    pub const ALL: [NodeKind; 5] = [
+    pub const ALL: [NodeKind; 6] = [
         NodeKind::World,
         NodeKind::Reach,
         NodeKind::Area,
         NodeKind::Space,
+        NodeKind::Floor,
         NodeKind::Spatial,
     ];
 
@@ -86,19 +97,21 @@ impl NodeKind {
             NodeKind::World => Some(NodeKind::Reach),
             NodeKind::Reach => Some(NodeKind::Area),
             NodeKind::Area => Some(NodeKind::Space),
-            NodeKind::Space => Some(NodeKind::Spatial),
+            NodeKind::Space => Some(NodeKind::Floor),
+            NodeKind::Floor => Some(NodeKind::Spatial),
             NodeKind::Spatial => None,
         }
     }
 
-    /// Depth from the root: `World` is 0, `Spatial` is 4.
+    /// Depth from the root: `World` is 0, `Spatial` is 5.
     pub fn depth(self) -> u8 {
         match self {
             NodeKind::World => 0,
             NodeKind::Reach => 1,
             NodeKind::Area => 2,
             NodeKind::Space => 3,
-            NodeKind::Spatial => 4,
+            NodeKind::Floor => 4,
+            NodeKind::Spatial => 5,
         }
     }
 
@@ -109,6 +122,7 @@ impl NodeKind {
             NodeKind::Reach => "Reach",
             NodeKind::Area => "Area",
             NodeKind::Space => "Space",
+            NodeKind::Floor => "Floor",
             NodeKind::Spatial => "Spatial",
         }
     }
@@ -879,7 +893,7 @@ mod tests {
     fn chain() -> (NodeGraph, Vec<Handle<Node>>) {
         let mut g = NodeGraph::new(1.0, 42);
         let mut hs = vec![g.root()];
-        for name in ["reach", "area", "space", "spatial"] {
+        for name in ["reach", "area", "space", "floor", "spatial"] {
             let parent = *hs.last().unwrap();
             hs.push(g.add_child(parent, name).unwrap());
         }
@@ -897,7 +911,7 @@ mod tests {
     #[test]
     fn a_spatial_cannot_contain_anything() {
         let (mut g, hs) = chain();
-        let spatial = hs[4];
+        let spatial = hs[5];
         assert_eq!(
             g.add_child(spatial, "nope"),
             Err(NodeError::NotAContainer {
@@ -1104,7 +1118,7 @@ mod tests {
         for h in &hs {
             g.set_envelope(*h, unit_box()).unwrap();
         }
-        g.advance_with_ancestors(hs[4], NodeState::Realized)
+        g.advance_with_ancestors(hs[5], NodeState::Realized)
             .unwrap();
         for h in &hs {
             assert_eq!(g.node(*h).unwrap().state(), NodeState::Realized);
@@ -1115,20 +1129,32 @@ mod tests {
     #[test]
     fn queries_answer_scope_questions() {
         let (g, hs) = chain();
-        let spatial = hs[4];
+        let spatial = hs[5];
         assert_eq!(g.scope_of(spatial, NodeKind::Space), Some(hs[3]));
+        assert_eq!(
+            g.scope_of(spatial, NodeKind::Floor),
+            Some(hs[4]),
+            "the Floor tier sits between Space and Spatial"
+        );
         assert_eq!(g.scope_of(spatial, NodeKind::World), Some(hs[0]));
         assert_eq!(
             g.scope_of(spatial, NodeKind::Spatial),
             Some(spatial),
             "a node is its own scope"
         );
-        assert_eq!(g.depth_of(spatial), 4);
-        assert_eq!(g.ancestors_of(spatial), vec![hs[3], hs[2], hs[1], hs[0]]);
-        assert_eq!(g.descendants_of(hs[0]), vec![hs[1], hs[2], hs[3], hs[4]]);
+        assert_eq!(g.depth_of(spatial), 5);
+        assert_eq!(
+            g.ancestors_of(spatial),
+            vec![hs[4], hs[3], hs[2], hs[1], hs[0]]
+        );
+        assert_eq!(
+            g.descendants_of(hs[0]),
+            vec![hs[1], hs[2], hs[3], hs[4], hs[5]]
+        );
         assert_eq!(g.walk(), hs);
         assert_eq!(g.of_kind(NodeKind::Space).count(), 1);
-        assert_eq!(g.find(|n| n.state() == NodeState::Projected).count(), 5);
+        assert_eq!(g.of_kind(NodeKind::Floor).count(), 1);
+        assert_eq!(g.find(|n| n.state() == NodeState::Projected).count(), 6);
     }
 
     #[test]

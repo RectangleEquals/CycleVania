@@ -108,10 +108,15 @@ fn realized_containers_still_accept_lazily_generated_children() {
     // could never be built while any region remained undiscovered.
     let (mut g, _, _, spaces) = build_world();
     let late = g
-        .add_child(spaces[0], "late_ledge")
-        .expect("a realized Space may gain a Spatial");
+        .add_child(spaces[0], "late_floor")
+        .expect("a realized Space may gain a Floor");
     assert_eq!(g.node(late).unwrap().state(), NodeState::Projected);
-    assert_eq!(g.node(late).unwrap().kind(), NodeKind::Spatial);
+    // ⚠ A Space contains Floors since M05a; a Spatial is one rung further in.
+    assert_eq!(g.node(late).unwrap().kind(), NodeKind::Floor);
+    let ledge = g
+        .add_child(late, "late_ledge")
+        .expect("a Floor may gain a Spatial");
+    assert_eq!(g.node(ledge).unwrap().kind(), NodeKind::Spatial);
 
     // And a whole new Reach can stream into the realized World.
     let streamed = g.add_child(g.root(), "reach_streamed").unwrap();

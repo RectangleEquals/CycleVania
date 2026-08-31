@@ -225,6 +225,19 @@ pub struct MissionEdge {
     pub is_shortcut: bool,
 }
 
+/// Whether an edge stays inside one Space or leaves it.
+///
+/// ⚠ **Drawn differently by the editor** — `───` within a Space, `═══` across — because the two read
+/// as different things to a designer: climbing a tower is not the same act as walking to the next room,
+/// even though the solver treats them with identical machinery.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum EdgeSpan {
+    /// Between two Floors of the same Space.
+    WithinSpace,
+    /// Between two different Spaces.
+    CrossesSpace,
+}
+
 impl MissionEdge {
     /// An open, reversible connection.
     pub fn open(from: Handle<Node>, to: Handle<Node>) -> Self {
@@ -769,6 +782,21 @@ impl MissionGraph {
     }
 
     /// How many edges are gated.
+    /// Does this edge stay inside one Space, or leave it?
+    ///
+    /// ⚠ Answered against the scope graph rather than stored on the edge: an edge's endpoints can be
+    /// re-parented while the edge itself is untouched, and a cached answer would then be wrong with
+    /// nothing to notice.
+    pub fn span_of(&self, graph: &NodeGraph, edge: &MissionEdge) -> Option<EdgeSpan> {
+        let a = graph.scope_of(edge.from, NodeKind::Space)?;
+        let b = graph.scope_of(edge.to, NodeKind::Space)?;
+        Some(if a == b {
+            EdgeSpan::WithinSpace
+        } else {
+            EdgeSpan::CrossesSpace
+        })
+    }
+
     pub fn gated_count(&self) -> usize {
         self.edges.iter().filter(|e| e.is_gated()).count()
     }
