@@ -8,6 +8,7 @@
 //! * [`object`] — [`ObjectId`] identity, [`ObjectHeader`], and the [`Object`] trait.
 //! * [`node`] — the `World → Reach → Area → Space → Spatial` scope graph and its
 //!   projected→reserved→realized lifecycle.
+//! * [`settings`] — project settings, and `world_scale`: the units every spatial quantity is in.
 //! * [`content`] — the L0 registry of everything a world may be built from.
 //! * [`fingerprint`] — recipe identity (deliberately excluding the seed) and reproduction bundles.
 //! * [`descriptor`] — the host-facing `WorldDescriptor`: what goes where and why, never geometry.
@@ -47,6 +48,7 @@ pub mod object;
 pub mod probe;
 pub mod schedule;
 pub mod serialize;
+pub mod settings;
 pub mod softlock;
 pub mod solver;
 pub mod spine;

@@ -43,7 +43,13 @@ impl ObjectId {
         ObjectId(raw)
     }
 
-    /// The underlying value.
+    /// The underlying value. **Internal only.**
+    ///
+    /// ⚠ This must never cross the host seam as a number. `derived` is a full-width FNV-1a hash, so
+    /// the value clears JavaScript's exact-integer ceiling of 2^53 roughly 2047 times in 2048 — a
+    /// host reading it as a `Number` would corrupt about 99.95% of content-derived ids, silently.
+    /// The form that crosses is [`Display`](std::fmt::Display): `#` plus 16 lowercase hex digits,
+    /// which cannot be coerced to a number by accident. Pinned by `tests/binding_contract.rs`.
     pub const fn to_raw(self) -> u64 {
         self.0
     }

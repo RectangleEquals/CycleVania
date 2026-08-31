@@ -443,6 +443,10 @@ impl CoarseGeometry {
     pub fn line_of_sight(&self, from: Vec3, to: Vec3) -> bool {
         let delta = to - from;
         let distance = delta.length();
+        // Exactly zero, not a tolerance: this asks "are these the same point", which is a degenerate
+        // case with no ray to trace, rather than "are these two lengths equal". The binding
+        // contract's no-float-equality rule is about the latter, and widening this to an epsilon
+        // would silently answer `true` for short-but-real sightlines.
         if distance == 0.0 {
             return true;
         }
