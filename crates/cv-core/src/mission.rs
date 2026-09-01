@@ -51,7 +51,7 @@ use std::fmt;
 ///
 /// The shape is chosen so M16's checker can validate a script's rule expressions structurally, and so
 /// the editor can render one as a tree.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub enum Rule {
     /// Always satisfied — an open passage. The default: connections are open until L2 gates them.
     #[default]
@@ -60,6 +60,19 @@ pub enum Rule {
     Never,
     /// The player holds this unlock.
     Has(ObjectId),
+    /// The occupant holds something **carrying** a matching component.
+    ///
+    /// ⚠ **A different question from [`Rule::Has`]**, and both survive: this asks about the *things
+    /// held*, that asks about the *lattice*. Branching on a component is sound where branching on an
+    /// unlock is not, because a component is a structural fact about an object rather than a
+    /// progression state that changes underneath the reasoning.
+    HasComponent(ObjectId),
+    /// Something matching is accessible **within range of this gate**.
+    ///
+    /// ⚠ **The contextual half of the grammar.** A gate may depend on the *world* rather than only on
+    /// the occupant — *"a Bomb Flower within carry range"* — and because the dependency walk sees it,
+    /// `requires()` can plant the source rather than hoping one exists.
+    Nearby { kind: ObjectId, within: f64 },
     /// Every sub-rule holds.
     All(Vec<Rule>),
     /// At least one sub-rule holds — genuine alternate routes.
@@ -100,6 +113,11 @@ impl Rule {
             Rule::Always => true,
             Rule::Never => false,
             Rule::Has(c) => held.contains(c),
+            // ⚠ Both of these are answered against *world* state the occupant set cannot carry, so a
+            // held-set test alone must not claim to settle them. `is_satisfied` is the cheap
+            // occupant-only pass; the contextual half is judged where the world is in scope.
+            Rule::HasComponent(c) => held.contains(c),
+            Rule::Nearby { .. } => true,
             Rule::All(rules) => rules.iter().all(|r| r.is_satisfied(held)),
             Rule::Any(rules) => rules.iter().any(|r| r.is_satisfied(held)),
             Rule::Not(r) => !r.is_satisfied(held),
@@ -124,9 +142,13 @@ impl Rule {
     fn collect_unlocks(&self, out: &mut BTreeSet<ObjectId>) {
         match self {
             Rule::Always | Rule::Never => {}
-            Rule::Has(c) => {
+            Rule::Has(c) | Rule::HasComponent(c) => {
                 out.insert(*c);
             }
+            // ⚠ A `Nearby` mentions a *content kind*, not an unlock. It still belongs to the
+            // dependency walk — see `referenced` — but putting it here would make the solver treat a
+            // Bomb Flower as something the player holds.
+            Rule::Nearby { .. } => {}
             Rule::All(rules) | Rule::Any(rules) => {
                 for r in rules {
                     r.collect_unlocks(out);
@@ -136,11 +158,70 @@ impl Rule {
         }
     }
 
+    /// **Everything this rule mentions**, unlocks and content kinds alike.
+    ///
+    /// ⚠ **The solver's dependency walk, and what lets `requires()` plant a source.** A `Nearby`
+    /// naming a Bomb Flower is a dependency on *the world containing one*, not on the occupant holding
+    /// one — and if the walk could not see it, the generator would gate a door on something it never
+    /// placed. `unlocks()` deliberately excludes those; this deliberately includes them.
+    pub fn referenced(&self) -> BTreeSet<ObjectId> {
+        let mut out = BTreeSet::new();
+        self.collect_referenced(&mut out);
+        out
+    }
+
+    fn collect_referenced(&self, out: &mut BTreeSet<ObjectId>) {
+        match self {
+            Rule::Always | Rule::Never => {}
+            Rule::Has(c) | Rule::HasComponent(c) => {
+                out.insert(*c);
+            }
+            Rule::Nearby { kind, .. } => {
+                out.insert(*kind);
+            }
+            Rule::All(rules) | Rule::Any(rules) => {
+                for r in rules {
+                    r.collect_referenced(out);
+                }
+            }
+            Rule::Not(r) => r.collect_referenced(out),
+        }
+    }
+
+    /// The rule in words, for a trace a developer reads rather than decodes.
+    ///
+    /// ⚠ Distinct from [`fmt::Display`], which is terse for logs. This one spells out the structure,
+    /// because *"why is this door sealed?"* is answered by shape as much as by contents.
+    pub fn explain(&self) -> String {
+        match self {
+            Rule::Always => "always passable".to_string(),
+            Rule::Never => "sealed — nothing satisfies this".to_string(),
+            Rule::Has(c) => format!("the occupant holds {c}"),
+            Rule::HasComponent(c) => format!("the occupant holds something carrying {c}"),
+            Rule::Nearby { kind, within } => {
+                format!("{kind} is accessible within {within}")
+            }
+            Rule::All(rules) => {
+                let parts: Vec<String> = rules.iter().map(Rule::explain).collect();
+                format!("all of: {}", parts.join("; "))
+            }
+            Rule::Any(rules) => {
+                let parts: Vec<String> = rules.iter().map(Rule::explain).collect();
+                format!("any of: {}", parts.join("; "))
+            }
+            Rule::Not(r) => format!("not ({})", r.explain()),
+        }
+    }
+
     /// How deeply nested this rule is — a cheap complexity measure for the trace and for bounding
     /// pathological script-authored rules.
     pub fn depth(&self) -> u32 {
         match self {
-            Rule::Always | Rule::Never | Rule::Has(_) => 1,
+            Rule::Always
+            | Rule::Never
+            | Rule::Has(_)
+            | Rule::HasComponent(_)
+            | Rule::Nearby { .. } => 1,
             Rule::All(rules) | Rule::Any(rules) => {
                 1 + rules.iter().map(Rule::depth).max().unwrap_or(0)
             }
@@ -155,6 +236,8 @@ impl fmt::Display for Rule {
             Rule::Always => write!(f, "open"),
             Rule::Never => write!(f, "sealed"),
             Rule::Has(c) => write!(f, "{c}"),
+            Rule::HasComponent(c) => write!(f, "holds something with {c}"),
+            Rule::Nearby { kind, within } => write!(f, "{kind} within {within}"),
             Rule::All(rules) => {
                 write!(f, "(")?;
                 for (i, r) in rules.iter().enumerate() {
@@ -827,6 +910,15 @@ impl Serialize for Rule {
                 w.u8(5);
                 w.write(r.as_ref());
             }
+            Rule::HasComponent(c) => {
+                w.u8(6);
+                w.write(c);
+            }
+            Rule::Nearby { kind, within } => {
+                w.u8(7);
+                w.write(kind);
+                w.f64(*within);
+            }
         }
     }
 }
@@ -840,6 +932,11 @@ impl Deserialize for Rule {
             3 => Rule::All(r.read()?),
             4 => Rule::Any(r.read()?),
             5 => Rule::Not(Box::new(r.read()?)),
+            6 => Rule::HasComponent(r.read()?),
+            7 => Rule::Nearby {
+                kind: r.read()?,
+                within: r.f64()?,
+            },
             _ => return Err(SerError::InvalidValue("unknown Rule tag")),
         })
     }
@@ -882,6 +979,68 @@ impl Deserialize for MissionEdge {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn kind(n: &str) -> ObjectId {
+        ObjectId::derived("actor", n)
+    }
+
+    #[test]
+    fn the_dependency_walk_sees_contextual_kinds_that_the_held_set_never_will() {
+        // ⚠ The whole reason `referenced` exists alongside `unlocks`. A gate on "a Bomb Flower within
+        // carry range" depends on **the world containing one**, not on the occupant holding one. If
+        // the walk could not see it, the generator would gate a door on something it never placed.
+        let dash = cap("dash");
+        let flower = kind("bomb_flower");
+        let r = Rule::All(vec![
+            Rule::has(dash),
+            Rule::Nearby {
+                kind: flower,
+                within: 8.0,
+            },
+        ]);
+
+        assert!(r.unlocks().contains(&dash));
+        assert!(
+            !r.unlocks().contains(&flower),
+            "a nearby content kind is not something the occupant holds"
+        );
+        assert!(
+            r.referenced().contains(&flower),
+            "but the dependency walk must still see it, or requires() cannot plant one"
+        );
+        assert!(r.referenced().contains(&dash));
+    }
+
+    #[test]
+    fn a_component_test_and_an_unlock_test_are_different_questions() {
+        let c = kind("light_source");
+        let r = Rule::HasComponent(c);
+        assert!(r.referenced().contains(&c));
+        assert!(!r.is_open());
+    }
+
+    #[test]
+    fn a_rule_explains_its_shape_and_not_just_its_contents() {
+        // "Why is this door sealed?" is answered by structure as much as by names.
+        let r = Rule::Any(vec![Rule::has(cap("dash")), Rule::Never]);
+        let text = r.explain();
+        assert!(text.starts_with("any of:"), "{text}");
+        assert!(text.contains("sealed"), "{text}");
+    }
+
+    #[test]
+    fn the_new_variants_round_trip_on_the_wire() {
+        use crate::serialize::{from_bytes, to_bytes};
+        for r in [
+            Rule::HasComponent(kind("hinge")),
+            Rule::Nearby {
+                kind: kind("bomb_flower"),
+                within: 8.0,
+            },
+        ] {
+            assert_eq!(from_bytes::<Rule>(&to_bytes(&r)).unwrap(), r);
+        }
+    }
     use crate::serialize::{from_bytes, to_bytes};
 
     fn cap(name: &str) -> ObjectId {

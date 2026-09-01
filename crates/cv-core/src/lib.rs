@@ -43,16 +43,21 @@ pub mod fingerprint;
 pub mod floor;
 pub mod geometry;
 pub mod intra;
+pub mod judge;
+pub mod lifecycle;
 pub mod mission;
 pub mod node;
 pub mod object;
+pub mod placement;
 pub mod probe;
+pub mod query;
 pub mod schedule;
 pub mod serialize;
 pub mod settings;
 pub mod softlock;
 pub mod solver;
 pub mod spine;
+pub mod surface;
 pub mod trivalent;
 pub mod unlock;
 
@@ -68,11 +73,17 @@ pub use fingerprint::{Fingerprint, FingerprintBuilder, ReproductionBundle, Repro
 pub use floor::{ConvexHull, FloorSurface, ScopeBounds};
 pub use geometry::{CoarseGeometry, Collider, ColliderId, Face, Hit, Sweep};
 pub use intra::{EdgeSource, FloorEdge, IntraSpace};
+pub use judge::{Budget, Obligation, Path, PathStep, Route, Verdict};
+pub use lifecycle::{Event, Quantity, Replenish};
 pub use mission::{
     Accessibility, EdgeSpan, Location, LocationId, MissionEdge, MissionGraph, Rule, Sphere,
 };
 pub use node::{Node, NodeError, NodeGraph, NodeKind, NodeResult, NodeState};
 pub use object::{IdAllocator, Object, ObjectHeader, ObjectId};
+pub use placement::{
+    Constraint, DirectionCone, Interaction, ItemClass, Preference, Role, RoleEvidence, ScheduleRule,
+};
+pub use query::{Consider, Detail, Query, Trace};
 pub use schedule::{
     AdaptiveRange, Candidate, ContentPool, CountRule, Curve, PlannedSlot, PoolEntry, Progression,
     Schedule, ScheduleBook, SchedulePlan, Scheduler, ScopeFilter, SeedPolicy, SlotRule, Span,
@@ -88,6 +99,7 @@ pub use spine::{
     SpineInstance, SpineInstantiator, SpineSegment, SpineSlot, SpineTemplate, SpineValidation,
     SpineWarning, Strictness, UnlockRef,
 };
+pub use surface::{Approach, AttemptKind, Harm, Occupant, Support, Surface};
 pub use trivalent::{within, Fidelity, Tolerances, Trivalent};
 pub use unlock::{GrantMap, TableError, Unlock, UnlockTable};
 

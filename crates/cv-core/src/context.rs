@@ -54,6 +54,7 @@ use crate::floor::{FloorLadder, ScopeBounds};
 use crate::geometry::{CoarseGeometry, ColliderId, Hit, Sweep};
 use crate::node::{Node, NodeGraph, NodeKind, NodeState};
 use crate::object::ObjectId;
+use crate::query::Query;
 use crate::trivalent::{self, Fidelity, Tolerances, Trivalent};
 use crate::Handle;
 use cv_determinism::{Aabb, Rng, Vec3};
@@ -160,6 +161,26 @@ impl<'a> Context<'a> {
     /// entire basis for *"a decision made outside the band at L2 cannot be overturned at L4"*.
     pub fn tolerance(&self) -> f64 {
         self.tolerances.at(self.fidelity)
+    }
+
+    /// Start a spatial query.
+    ///
+    /// Three independent axes — **what to trace** × **what to consider** × **what to report** — built
+    /// as data and then run, so the whole shape is available to the VM and the editor before anything
+    /// is traced. ⚠ The coherence guard `only_realized` is **on**; a hook that wants forecast content
+    /// says so by name.
+    pub fn query(&self) -> Query {
+        Query::new()
+    }
+
+    /// Run a query against this context's geometry, at this context's fidelity.
+    ///
+    /// ⚠ Empty when there is no geometry, which is the same answer as *nothing was hit* — the two are
+    /// separated by [`Context::geometry`] being `None`, not by a sentinel in the results.
+    pub fn run(&self, query: &Query) -> Vec<Hit> {
+        self.geometry()
+            .map(|g| query.all(g, self.fidelity))
+            .unwrap_or_default()
     }
 
     /// Is a measured distance within a limit, at this rung's confidence?
