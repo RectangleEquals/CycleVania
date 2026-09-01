@@ -35,13 +35,16 @@
 #![forbid(unsafe_code)]
 
 pub mod arena;
+pub mod axis;
 pub mod budget;
 pub mod class;
 pub mod collision;
 pub mod component;
 pub mod content;
 pub mod context;
+pub mod curve;
 pub mod descriptor;
+pub mod dial;
 pub mod events;
 pub mod fingerprint;
 pub mod floor;
@@ -69,6 +72,7 @@ pub mod trivalent;
 pub mod unlock;
 
 pub use arena::{Arena, Handle};
+pub use axis::{AxisBook, AxisError, AxisInput, ProgressionAxis};
 pub use budget::{Budget, BudgetBook, BudgetError, BudgetRef, Cost};
 pub use class::{
     ClassError, ClassRecord, ClassRegistry, CoreClass, FieldValue, Kind, PinType, Ref, ResourceRef,
@@ -77,10 +81,12 @@ pub use collision::{CollisionBody, CollisionData, CollisionLayer};
 pub use component::{Attached, CollisionMode, Component, Components, Direction};
 pub use content::{ContentEntry, ContentKind, ContentRegistry, RegistryError};
 pub use context::Context;
+pub use curve::{CurveBook, CurveError, CurveTable, Interpolation, Row};
 pub use descriptor::{
     DescriptorBuilder, InstanceRecord, MeshRecord, Placement, PlacementReason, Rationale,
     ScopeRecord, ScopeRef, Socket, SpineSlotTag, WorldDescriptor,
 };
+pub use dial::{DialBook, DialError, DialId, DialValue, Resolved, ResolvedDials};
 pub use events::{EventLog, GenEvent, Verbosity};
 pub use fingerprint::{Fingerprint, FingerprintBuilder, ReproductionBundle, ReproductionError};
 pub use floor::{ConvexHull, FloorSurface, ScopeBounds};

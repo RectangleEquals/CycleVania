@@ -173,6 +173,24 @@ impl FingerprintBuilder {
         self
     }
 
+    /// **Fold in every authored dial.**
+    ///
+    /// ⚠ **A dial is an input to the recipe, so changing one is a different recipe.** That is why
+    /// changing a dial regenerates the world in full: partial regeneration is not merely hard, it is
+    /// *wrong* — decisions made against the old value would survive, and no seed would explain the
+    /// result.
+    ///
+    /// ⚠ **The authored book, not the resolved table.** A resolved table also varies with the *world*
+    /// (a curve dial reads a different number in every Reach), so folding that in would make the
+    /// fingerprint depend on its own output. The book is the input the developer actually authored.
+    pub fn dials(mut self, book: &crate::dial::DialBook) -> Self {
+        for id in book.ids() {
+            self.config
+                .insert(format!("dial:{id}"), ConfigValue::Str(book.describe(id)));
+        }
+        self
+    }
+
     /// Compute the fingerprint.
     pub fn finish(&self) -> Fingerprint {
         let mut w = Writer::new();

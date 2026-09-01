@@ -27,6 +27,7 @@
 //! state, and key-to-lock distance is stateable"* — the door writes `MinDistanceFrom` itself, and a
 //! dial would be a second way to say the same thing.
 
+use crate::dial::{DialId, ResolvedDials};
 use crate::mission::{Accessibility, Location, LocationId, MissionEdge, MissionGraph, Rule};
 use crate::node::{Node, NodeGraph, NodeKind};
 use crate::object::ObjectId;
@@ -134,12 +135,14 @@ impl Solution {
 /// Places progression items so the result is solvable by construction.
 pub struct Solver<'a> {
     graph: &'a NodeGraph,
-    /// How often a shortcut closes a loop, 0..1.
-    ///
-    /// ▶ **M09 turns this into a user-authored dial read.** It is a plain field for now because
-    /// `cycle_density` is *"a dial for what only the generator can decide"* — no Actor can say
-    /// *"this world has many loops"* — and the dial machinery does not exist yet.
+    /// How often a shortcut closes a loop, 0..1 — **the fallback** when no dial is authored.
     cycle_density: f64,
+    /// The resolved dial table, and which dial in it supplies `cycle_density`.
+    ///
+    /// ⚠ **A dial that reaches nothing is not a dial.** `cycle_density` is the design's own example of
+    /// a legitimate one — *"no Actor can say 'this world has many loops'"* — so if an authored dial
+    /// could not reach the solver, the whole category would have no members.
+    dials: Option<(&'a ResolvedDials, DialId)>,
     /// Item content id → the unlocks obtaining it grants.
     grants: GrantMap,
     /// Unlocks the player starts with.
@@ -152,6 +155,7 @@ impl<'a> Solver<'a> {
         Solver {
             graph,
             cycle_density: 0.35,
+            dials: None,
             grants: BTreeMap::new(),
             initial: BTreeSet::new(),
         }
@@ -159,12 +163,53 @@ impl<'a> Solver<'a> {
 
     /// How often a shortcut closes a loop, 0..1.
     ///
-    /// ▶ **M09 makes this a dial read.** `cycle_density` is legitimately *"a dial for what only the
-    /// generator can decide"* — no Actor can say *"this world has many loops"* — so it stays, and
-    /// becomes a **user-authored** dial rather than a core default when the dial machinery lands.
+    /// ⚠ **The fallback for a project that authors no such dial**, not the only way to set it. The
+    /// core ships no dials, so a project with none still needs a number — but the moment one is
+    /// authored, [`Self::reading_dial`] takes over and this stops being consulted.
     pub fn with_cycle_density(mut self, density: f64) -> Self {
         self.cycle_density = density.clamp(0.0, 1.0);
         self
+    }
+
+    /// **Read `cycle_density` from an authored dial**, per scope.
+    ///
+    /// ⚠ **This is the read path a dial's whole existence rests on.** Without it `cycle_density` is a
+    /// constructor argument and the dial channel resolves values nothing consumes.
+    pub fn reading_dial(mut self, dials: &'a ResolvedDials, id: DialId) -> Self {
+        self.dials = Some((dials, id));
+        self
+    }
+
+    /// The density in force **where a shortcut between these two Spaces would sit**.
+    ///
+    /// ⚠ **At their common ancestor, not at either end.** A shortcut belongs to the scope that
+    /// contains both of them, so a dial set on one Area loops *that* Area — which is the whole reason
+    /// resolution walks the ladder. Reading it at one endpoint would make the answer depend on which
+    /// Space the enumeration happened to visit first.
+    fn density_between(&self, a: Handle<Node>, b: Handle<Node>) -> f64 {
+        let Some((dials, id)) = &self.dials else {
+            return self.cycle_density;
+        };
+        let scope = self.common_ancestor(a, b).unwrap_or(self.graph.root());
+        dials
+            .number(id, scope)
+            .map(|d| d.clamp(0.0, 1.0))
+            .unwrap_or(self.cycle_density)
+    }
+
+    /// The innermost scope containing both.
+    fn common_ancestor(&self, a: Handle<Node>, b: Handle<Node>) -> Option<Handle<Node>> {
+        let chain = |mut h: Handle<Node>| -> Vec<Handle<Node>> {
+            let mut out = vec![h];
+            while let Some(p) = self.graph.get(h).and_then(Node::parent) {
+                out.push(p);
+                h = p;
+            }
+            out
+        };
+        let up_a = chain(a);
+        let up_b = chain(b);
+        up_a.into_iter().find(|h| up_b.contains(h))
     }
 
     /// Declare that obtaining `item` grants `unlock`.
@@ -220,7 +265,7 @@ impl<'a> Solver<'a> {
                     continue;
                 }
                 // The dial in force where the shortcut would live.
-                let density = self.cycle_density;
+                let density = self.density_between(*a, *b);
                 if density <= 0.0 {
                     continue;
                 }

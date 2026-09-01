@@ -199,6 +199,37 @@ impl Budget {
         self.spent != 0.0
     }
 
+    /// The same budget with its limit **scaled**, for supply pressure.
+    ///
+    /// ⚠ **The consumer of a `consumption_pressure` dial.** *"How hard resources are squeezed against
+    /// supply"* is a scale on what counts as affordable: a factor **below 1 tightens** every budget it
+    /// touches, above 1 loosens. Applied to a *working copy*, never to the book's row — pressure is a
+    /// property of a generation pass, not of the project's tuning.
+    ///
+    /// ⚠ **The core reads no dial here.** It offers the scaling; a *developer's* graph supplies the
+    /// factor from whatever they named it. A core-shipped `consumption_pressure` would be exactly the
+    /// core dial the design says does not exist.
+    pub fn under_pressure(mut self, factor: f64) -> Self {
+        let f = if factor.is_finite() && factor > 0.0 {
+            factor
+        } else {
+            1.0
+        };
+        self.cost = match &self.cost {
+            Cost::Distance { limit } => Cost::Distance { limit: limit * f },
+            Cost::Time { limit, speed } => Cost::Time {
+                limit: limit * f,
+                speed: *speed,
+            },
+            Cost::Pool { pool, limit, rate } => Cost::Pool {
+                pool: pool.clone(),
+                limit: limit * f,
+                rate: *rate,
+            },
+        };
+        self
+    }
+
     /// Judge a distance against what is left, **naming this budget in the verdict**.
     ///
     /// The bridge from budgets to [`crate::Verdict`], and the reason a route rejection carries both a
@@ -667,6 +698,47 @@ mod tests {
             BudgetRef::pool("hearts", 3.0, 0.5),
         ] {
             assert_eq!(from_bytes::<BudgetRef>(&to_bytes(&r)).unwrap(), r);
+        }
+    }
+
+    #[test]
+    fn pressure_tightens_what_counts_as_affordable() {
+        // ⚠ The consumer a `consumption_pressure` dial reaches. A factor below 1 squeezes supply, so a
+        // route that fitted comfortably stops fitting — which is the point of the dial.
+        let (b, carry) = book();
+        let normal = b.open(carry).unwrap();
+        assert!(normal.judge(7.0).is_accepted());
+
+        let squeezed = b.open(carry).unwrap().under_pressure(0.5);
+        assert_eq!(squeezed.remaining(), 4.0);
+        assert!(!squeezed.judge(7.0).is_accepted());
+        assert_eq!(
+            squeezed.judge(7.0).budget(),
+            Some(carry),
+            "and it is still the same budget, so the trace still names it"
+        );
+    }
+
+    #[test]
+    fn pressure_applies_to_a_working_copy_and_never_to_the_book() {
+        // ⚠ Pressure is a property of a *generation pass*, not of the project's tuning. Writing it
+        // back would make a project's authored limits drift every time a pass ran.
+        let (b, carry) = book();
+        let _ = b.open(carry).unwrap().under_pressure(0.25);
+        assert_eq!(b.get(carry).unwrap().remaining(), 8.0);
+    }
+
+    #[test]
+    fn a_nonsense_pressure_factor_leaves_the_budget_alone() {
+        // Zero, negative and NaN would each poison every comparison downstream. Degrading to
+        // *"unchanged"* is the only safe reading of a factor that cannot mean anything.
+        let (b, carry) = book();
+        for bad in [0.0, -1.0, f64::NAN, f64::INFINITY] {
+            assert_eq!(
+                b.open(carry).unwrap().under_pressure(bad).remaining(),
+                8.0,
+                "factor {bad}"
+            );
         }
     }
 
