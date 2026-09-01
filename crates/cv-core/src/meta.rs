@@ -227,10 +227,7 @@ impl Metadata {
     /// ⚠ **Crate-internal.** This is the only path that may write `CV_`, and it is not public, so a
     /// project cannot reach it however it arrives — including through the bindings.
     ///
-    /// ▶ **No caller yet, and that is stated rather than faked.** The core's reserved keys arrive with
-    /// content hashing and asset provenance; inventing a caller now to silence the warning would put a
-    /// key in the namespace that nothing reads.
-    #[allow(dead_code)]
+    /// The one caller is [`crate::handoff`], which stamps the six facts the design promises a host.
     pub(crate) fn set_core(&mut self, key: &str, value: MetaValue) {
         self.write_unchecked(key, value);
     }

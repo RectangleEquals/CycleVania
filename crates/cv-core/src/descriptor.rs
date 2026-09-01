@@ -309,6 +309,12 @@ pub struct InstanceRecord {
     pub placement: Placement,
     /// Why the generator put it here.
     pub rationale: Rationale,
+    /// **Both halves of the metadata channel** — the developer's free-form keys, and the core's
+    /// `CV_*` facts stamped at handoff.
+    ///
+    /// ⚠ Carried per instance rather than only per scope, because *"which of these placed things did
+    /// the generator call a Gate?"* is an instance question.
+    pub meta: crate::meta::Metadata,
 }
 
 /// A named attachment point on a mesh — where a door hinges, where a corridor connects.
@@ -378,6 +384,9 @@ pub struct WorldDescriptor {
     pub instances: Vec<InstanceRecord>,
     /// Placed mesh metadata.
     pub meshes: Vec<MeshRecord>,
+    /// **Run-level `CV_*` facts**, for a host walking metadata uniformly rather than special-casing
+    /// the root.
+    pub meta: crate::meta::Metadata,
 }
 
 impl WorldDescriptor {
@@ -596,6 +605,7 @@ impl DescriptorBuilder {
                 scopes,
                 instances: Vec::new(),
                 meshes: Vec::new(),
+                meta: crate::meta::Metadata::new(),
             },
             refs,
         }
@@ -610,6 +620,20 @@ impl DescriptorBuilder {
     pub fn place(&mut self, record: InstanceRecord) -> &mut Self {
         self.descriptor.instances.push(record);
         self
+    }
+
+    /// Place content **and stamp what the core knows about it** for the host.
+    ///
+    /// ⚠ **The `CV_*` half of the metadata channel, at its only write site.** A host walking the
+    /// output filters the generator's facts from its designers' by prefix; without this the prefix
+    /// guards a namespace nothing ever writes, and the channel is half a feature.
+    pub fn place_with_facts(
+        &mut self,
+        mut record: InstanceRecord,
+        facts: &crate::handoff::CoreFacts,
+    ) -> &mut Self {
+        facts.stamp(&mut record.meta);
+        self.place(record)
     }
 
     /// Record placed mesh metadata.
@@ -635,6 +659,15 @@ impl DescriptorBuilder {
 
     /// Finish, yielding the descriptor.
     pub fn finish(self) -> WorldDescriptor {
+        self.descriptor
+    }
+
+    /// Finish, stamping run-level `CV_*` facts onto the descriptor root.
+    ///
+    /// ⚠ The seed is already a typed field; it is stamped here **as well** so a host walking metadata
+    /// uniformly does not need a special case for the root.
+    pub fn finish_with_ambient(mut self, ambient: &[String]) -> WorldDescriptor {
+        crate::handoff::stamp_run(&mut self.descriptor, ambient);
         self.descriptor
     }
 }
@@ -760,6 +793,7 @@ impl Serialize for InstanceRecord {
         w.write(&self.scope);
         w.write(&self.placement);
         w.write(&self.rationale);
+        w.write(&self.meta);
     }
 }
 
@@ -771,6 +805,7 @@ impl Deserialize for InstanceRecord {
             scope: r.read()?,
             placement: r.read()?,
             rationale: r.read()?,
+            meta: r.read()?,
         })
     }
 }
@@ -828,6 +863,7 @@ impl Serialize for WorldDescriptor {
         w.write(&self.scopes);
         w.write(&self.instances);
         w.write(&self.meshes);
+        w.write(&self.meta);
     }
 }
 
@@ -841,6 +877,7 @@ impl Deserialize for WorldDescriptor {
             scopes: r.read()?,
             instances: r.read()?,
             meshes: r.read()?,
+            meta: r.read()?,
         };
         // Validate at load, where the error is still explainable — a host walking a malformed
         // descriptor would fail somewhere far from the cause.
@@ -958,6 +995,7 @@ mod tests {
             scope: ScopeRef(3),
             placement: Placement::Trs(Transform::from_translation(Vec3::new(1.0, 2.0, 3.0))),
             rationale: Rationale::detailed(PlacementReason::SolverRequired, "gate on edge a→b"),
+            meta: Default::default(),
         });
         b.place_mesh(MeshRecord {
             id: ObjectId::derived("meshinst", "door_1_mesh"),
@@ -997,6 +1035,7 @@ mod tests {
             scope: ScopeRef(999), // out of range
             placement: Placement::IDENTITY,
             rationale: Rationale::new(PlacementReason::Dressing),
+            meta: Default::default(),
         });
         assert!(d.check().is_some());
         assert!(from_bytes::<WorldDescriptor>(&to_bytes(&d)).is_err());
@@ -1017,6 +1056,7 @@ mod tests {
                 scope: ScopeRef(3),
                 placement: Placement::IDENTITY,
                 rationale: Rationale::new(PlacementReason::Scheduled),
+                meta: Default::default(),
             });
             b.place(InstanceRecord {
                 id: ObjectId::derived("instance", &format!("ghost_{i}")),
@@ -1024,6 +1064,7 @@ mod tests {
                 scope: ScopeRef(3),
                 placement: Placement::IDENTITY,
                 rationale: Rationale::new(PlacementReason::Scheduled),
+                meta: Default::default(),
             });
         }
         let missing = b.finish().unresolved_content(&registry);

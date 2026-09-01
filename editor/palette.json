@@ -6513,6 +6513,102 @@
       "pins": [{ "name": "value", "type": "Cost", "dir": "out" }]
     },
     {
+      "op": "/Core/CollisionData.shape#get",
+      "label": "get shape",
+      "category": "CollisionData",
+      "shape": "pure",
+      "doc": "What it is, parametrically.",
+      "pins": [
+        { "name": "self", "type": "Ref<CollisionData>", "dir": "in" },
+        { "name": "value", "type": "Shape", "dir": "out" }
+      ]
+    },
+    {
+      "op": "/Core/CollisionData.shape#set",
+      "label": "set shape",
+      "category": "CollisionData",
+      "shape": "call",
+      "doc": "What it is, parametrically.",
+      "pins": [
+        { "name": "in", "type": "exec", "dir": "in" },
+        { "name": "self", "type": "Ref<CollisionData>", "dir": "in" },
+        { "name": "value", "type": "Shape", "dir": "in" },
+        { "name": "out", "type": "exec", "dir": "out" }
+      ]
+    },
+    {
+      "op": "/Core/CollisionData.layer#get",
+      "label": "get layer",
+      "category": "CollisionData",
+      "shape": "pure",
+      "doc": "Which broad phase it participates in. Hull is separate from Static so a conservative answer is never reported as a firm one.",
+      "pins": [
+        { "name": "self", "type": "Ref<CollisionData>", "dir": "in" },
+        { "name": "value", "type": "CollisionLayer", "dir": "out" }
+      ]
+    },
+    {
+      "op": "/Core/CollisionData.layer#set",
+      "label": "set layer",
+      "category": "CollisionData",
+      "shape": "call",
+      "doc": "Which broad phase it participates in. Hull is separate from Static so a conservative answer is never reported as a firm one.",
+      "pins": [
+        { "name": "in", "type": "exec", "dir": "in" },
+        { "name": "self", "type": "Ref<CollisionData>", "dir": "in" },
+        { "name": "value", "type": "CollisionLayer", "dir": "in" },
+        { "name": "out", "type": "exec", "dir": "out" }
+      ]
+    },
+    {
+      "op": "/Core/CollisionData.surface#get",
+      "label": "get surface",
+      "category": "CollisionData",
+      "shape": "pure",
+      "doc": "What it MEANS to a mechanic — the resolved per-island answer queries hit.",
+      "pins": [
+        { "name": "self", "type": "Ref<CollisionData>", "dir": "in" },
+        { "name": "value", "type": "Kind<Surface>", "dir": "out" }
+      ]
+    },
+    {
+      "op": "/Core/CollisionData.surface#set",
+      "label": "set surface",
+      "category": "CollisionData",
+      "shape": "call",
+      "doc": "What it MEANS to a mechanic — the resolved per-island answer queries hit.",
+      "pins": [
+        { "name": "in", "type": "exec", "dir": "in" },
+        { "name": "self", "type": "Ref<CollisionData>", "dir": "in" },
+        { "name": "value", "type": "Kind<Surface>", "dir": "in" },
+        { "name": "out", "type": "exec", "dir": "out" }
+      ]
+    },
+    {
+      "op": "/Core/CollisionData.transform#get",
+      "label": "get transform",
+      "category": "CollisionData",
+      "shape": "pure",
+      "doc": "Where it sits.",
+      "pins": [
+        { "name": "self", "type": "Ref<CollisionData>", "dir": "in" },
+        { "name": "value", "type": "Transform", "dir": "out" }
+      ]
+    },
+    {
+      "op": "/Core/CollisionData.transform#set",
+      "label": "set transform",
+      "category": "CollisionData",
+      "shape": "call",
+      "doc": "Where it sits.",
+      "pins": [
+        { "name": "in", "type": "exec", "dir": "in" },
+        { "name": "self", "type": "Ref<CollisionData>", "dir": "in" },
+        { "name": "value", "type": "Transform", "dir": "in" },
+        { "name": "out", "type": "exec", "dir": "out" }
+      ]
+    },
+    {
       "op": "/Core/MetaValue",
       "label": "MetaValue",
       "category": "Variant",

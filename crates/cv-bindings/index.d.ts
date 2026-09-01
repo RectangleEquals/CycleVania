@@ -2460,6 +2460,31 @@ export type CostForm =
   | (PoolCost & { form: "PoolCost" });
 
 /**
+ * One collision island: a shape, placed, on a layer, meaning something. Collision is computed from
+ * the shape's PARAMETERS, never from tessellation — otherwise a visual LOD change silently
+ * alters generation.
+ */
+export interface CollisionData {
+  /**
+   * What it is, parametrically.
+   */
+  shape: Shape;
+  /**
+   * Which broad phase it participates in. Hull is separate from Static so a conservative answer
+   * is never reported as a firm one.
+   */
+  layer: CollisionLayer;
+  /**
+   * What it MEANS to a mechanic — the resolved per-island answer queries hit.
+   */
+  surface: ClassPath<Surface>;
+  /**
+   * Where it sits.
+   */
+  transform: Transform;
+}
+
+/**
  * What a metadata value may hold. A CLOSED set, deliberately: an open Any would let content stash
  * a handle the fingerprint cannot see, and the first symptom would be a world that fails to
  * reproduce with no visible cause.

@@ -62,12 +62,16 @@ fn declaration_counts() {
     // validator's whitelist of undeclared shells. It is a value with nine forms, which is exactly
     // what `variant` is for, so it and its forms are declared and the whitelist entry is gone.
     // Variants 28 + 10 = 38; members unchanged, because a metadata form carries no members of its own.
+    //
+    // Then the coverage audit found `CollisionData` in the same shape `MetaValue` had been: an
+    // `api class` in 06-api, used as a type here three times, and never *declared* — so it sat in the
+    // validator's whitelist of undeclared shells. Structs 28 + 1 = 29; members 344 + 4 = 348.
     assert_eq!(objects, 68, "object declarations");
-    assert_eq!(structs, 28, "struct declarations");
+    assert_eq!(structs, 29, "struct declarations");
     assert_eq!(variants, 38, "variant declarations");
     assert_eq!(enums, 16, "enum declarations");
-    assert_eq!(m.classes.len(), 150, "total declarations");
-    assert_eq!(m.member_count(), 344, "fields + methods");
+    assert_eq!(m.classes.len(), 151, "total declarations");
+    assert_eq!(m.member_count(), 348, "fields + methods");
 }
 
 /// Spot-checks against `.notes/Design/v0.2b/06-api/reference.md`. Not exhaustive — the exhaustive

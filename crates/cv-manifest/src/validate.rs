@@ -138,7 +138,6 @@ fn references_resolve(m: &Manifest, out: &mut Vec<Violation>) {
             "Resource",
             "Query",
             "SpineSlot",
-            "CollisionData",
             "PathStep",
             "T",
         ])

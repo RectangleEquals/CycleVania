@@ -3897,6 +3897,44 @@ status = "stable"
 doc = "A kind and a limit, with NO accounting — Distance(m), Time(s) or Pool(pool, rate). What a Budget is a named instance of, and what an interaction spends."
 
 [[class]]
+path = "/Core/CollisionData"
+kind = "struct"
+status = "stable"
+doc = "One collision island: a shape, placed, on a layer, meaning something. Collision is computed from the shape's PARAMETERS, never from tessellation — otherwise a visual LOD change silently alters generation."
+  [[class.field]]
+  name = "shape"
+  type = "Shape"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "What it is, parametrically."
+  [[class.field]]
+  name = "layer"
+  type = "CollisionLayer"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Which broad phase it participates in. Hull is separate from Static so a conservative answer is never reported as a firm one."
+  [[class.field]]
+  name = "surface"
+  type = "Kind<Surface>"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "What it MEANS to a mechanic — the resolved per-island answer queries hit."
+  [[class.field]]
+  name = "transform"
+  type = "Transform"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Where it sits."
+
+[[class]]
 path = "/Core/MetaValue"
 kind = "variant"
 sealed = true

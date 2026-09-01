@@ -514,6 +514,7 @@ fn build_descriptor(scopes: &NodeGraph, fingerprint: Fingerprint, seed: u64) -> 
             Vec3::new(2.0, 0.5, 1.25),
         )),
         rationale: Rationale::detailed(PlacementReason::SolverRequired, "gate on edge 0→1"),
+        meta: Default::default(),
     });
     b.place(InstanceRecord {
         id: ObjectId::derived("instance", "key_1"),
@@ -522,6 +523,7 @@ fn build_descriptor(scopes: &NodeGraph, fingerprint: Fingerprint, seed: u64) -> 
         // A mirrored placement: negative scale, still TRS.
         placement: Placement::Trs(Transform::from_scale(Vec3::new(-1.0, 1.0, 1.0))),
         rationale: Rationale::new(PlacementReason::Scheduled),
+        meta: Default::default(),
     });
 
     b.place_mesh(MeshRecord {

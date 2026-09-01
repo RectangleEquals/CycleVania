@@ -8,7 +8,7 @@
 //!
 //! # The tier-1 surface, as data
 //!
-//! 150 declarations and 344 members. Every other surface in the toolchain — the VM's dispatch
+//! 151 declarations and 348 members. Every other surface in the toolchain — the VM's dispatch
 //! table, the inspector, the node palette, the reference — reads this rather than restating it.
 
 /// Which family a declaration belongs to.
@@ -6110,6 +6110,65 @@ pub const CLASSES: &[ClassDesc] = &[
         ],
     },
     ClassDesc {
+        path: "/Core/CollisionData",
+        extends: None,
+        kind: DeclKind::Struct,
+        sealed: false,
+        is_abstract: false,
+        status: Status::Stable,
+        doc: "One collision island: a shape, placed, on a layer, meaning something. Collision is computed from the shape's PARAMETERS, never from tessellation — otherwise a visual LOD change silently alters generation.",
+        fields: &[
+            FieldDesc {
+                name: "shape",
+                ty: "Shape",
+                api: true,
+                is_final: false,
+                exposed: true,
+                mutable: true,
+                status: Status::Stable,
+                doc: "What it is, parametrically.",
+                default: None,
+            },
+            FieldDesc {
+                name: "layer",
+                ty: "CollisionLayer",
+                api: true,
+                is_final: false,
+                exposed: true,
+                mutable: true,
+                status: Status::Stable,
+                doc: "Which broad phase it participates in. Hull is separate from Static so a conservative answer is never reported as a firm one.",
+                default: None,
+            },
+            FieldDesc {
+                name: "surface",
+                ty: "Kind<Surface>",
+                api: true,
+                is_final: false,
+                exposed: true,
+                mutable: true,
+                status: Status::Stable,
+                doc: "What it MEANS to a mechanic — the resolved per-island answer queries hit.",
+                default: None,
+            },
+            FieldDesc {
+                name: "transform",
+                ty: "Transform",
+                api: true,
+                is_final: false,
+                exposed: true,
+                mutable: true,
+                status: Status::Stable,
+                doc: "Where it sits.",
+                default: None,
+            },
+        ],
+        methods: &[
+        ],
+        values: &[
+        ],
+    },
+    ClassDesc {
         path: "/Core/MetaValue",
         extends: None,
         kind: DeclKind::Variant,
@@ -6626,6 +6685,6 @@ pub const CLASSES: &[ClassDesc] = &[
 
 /// Declaration counts, asserted by the manifest's own tests.
 pub const OBJECT_COUNT: usize = 68;
-pub const STRUCT_COUNT: usize = 28;
+pub const STRUCT_COUNT: usize = 29;
 pub const ENUM_COUNT: usize = 16;
-pub const MEMBER_COUNT: usize = 344;
+pub const MEMBER_COUNT: usize = 348;

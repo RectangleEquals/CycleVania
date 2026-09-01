@@ -10,7 +10,7 @@
 
 # API reference
 
-The tier-1 surface: **150 declarations** and **344 members**, generated from the manifest.
+The tier-1 surface: **151 declarations** and **348 members**, generated from the manifest.
 
 Notation: a **field** is a plain read and appears in a graph as a pure *get* node. A **method** takes an argument, computes, or mutates, and appears as a *call* node with execution pins — so the shape of a node tells you whether it costs anything. A **hook** is a question the core asks; hooks are what a schematic's `OVERRIDES` list is built from.
 
@@ -1097,6 +1097,19 @@ A dotted hierarchical label, picked rather than typed.
 A tag match with an exact/inherited toggle. Why an eligible-surface list survives every future surface being added.
 
 `/Core/TagQuery`
+
+### `CollisionData`
+
+One collision island: a shape, placed, on a layer, meaning something. Collision is computed from the shape's PARAMETERS, never from tessellation — otherwise a visual LOD change silently alters generation.
+
+`/Core/CollisionData`
+
+| Field | Type | | |
+|---|---|---|---|
+| `shape` | `Shape` | mutable · exposed | What it is, parametrically. |
+| `layer` | `CollisionLayer` | mutable · exposed | Which broad phase it participates in. Hull is separate from Static so a conservative answer is never reported as a firm one. |
+| `surface` | `Kind<Surface>` | mutable · exposed | What it MEANS to a mechanic — the resolved per-island answer queries hit. |
+| `transform` | `Transform` | mutable · exposed | Where it sits. |
 
 ### `Quota`
 

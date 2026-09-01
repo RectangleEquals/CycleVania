@@ -93,6 +93,7 @@ fn generate(reg: &ContentRegistry, seed: u64, log: &mut EventLog) -> WorldDescri
             PlacementReason::SolverRequired,
             "gate on edge space_0→space_1",
         ),
+        meta: Default::default(),
     });
     log.emit(GenEvent::Placed {
         instance: ObjectId::derived("instance", "door_1"),
@@ -106,6 +107,7 @@ fn generate(reg: &ContentRegistry, seed: u64, log: &mut EventLog) -> WorldDescri
         scope: s1,
         placement: Placement::Trs(Transform::from_translation(Vec3::new(-1.0, 1.0, 0.5))),
         rationale: Rationale::detailed(PlacementReason::SolverRequired, "opens door_1"),
+        meta: Default::default(),
     });
     log.emit(GenEvent::Placed {
         instance: ObjectId::derived("instance", "key_1"),
