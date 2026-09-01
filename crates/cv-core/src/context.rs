@@ -54,6 +54,7 @@ use crate::floor::{FloorLadder, ScopeBounds};
 use crate::geometry::{CoarseGeometry, ColliderId, Hit, Sweep};
 use crate::node::{Node, NodeGraph, NodeKind, NodeState};
 use crate::object::ObjectId;
+use crate::trivalent::{self, Fidelity, Tolerances, Trivalent};
 use crate::Handle;
 use cv_determinism::{Aabb, Rng, Vec3};
 
@@ -67,6 +68,10 @@ pub struct Context<'a> {
     scope: Option<Handle<Node>>,
     /// The stream this call may draw from, forked to the call site.
     rng: Rng,
+    /// How real the geometry is for this call.
+    fidelity: Fidelity,
+    /// The bounded error at each rung, and the project floor beneath them.
+    tolerances: Tolerances,
 }
 
 /// The read-only view of the world a context exposes.
@@ -103,6 +108,8 @@ impl<'a> Context<'a> {
             }),
             scope: None,
             rng: rng.fork(label),
+            fidelity: Fidelity::Envelope,
+            tolerances: Tolerances::default(),
         }
     }
 
@@ -116,6 +123,8 @@ impl<'a> Context<'a> {
             world: None,
             scope: None,
             rng: Rng::new(0),
+            fidelity: Fidelity::Envelope,
+            tolerances: Tolerances::default(),
         }
     }
 
@@ -123,6 +132,47 @@ impl<'a> Context<'a> {
     pub fn at_scope(mut self, scope: Handle<Node>) -> Self {
         self.scope = Some(scope);
         self
+    }
+
+    /// Set which rung of the fidelity ladder this call is running at.
+    pub fn at_fidelity(mut self, fidelity: Fidelity) -> Self {
+        self.fidelity = fidelity;
+        self
+    }
+
+    /// Use a project's tolerances rather than the metre-scale defaults.
+    pub fn with_tolerances(mut self, tolerances: Tolerances) -> Self {
+        self.tolerances = tolerances;
+        self
+    }
+
+    /// How real the geometry currently is.
+    ///
+    /// ⚠ **Fidelity is what *exists*; detail is what a query *asks for*.** A callback that confuses
+    /// them ends up believing it received an answer the world could not yet supply.
+    pub fn fidelity(&self) -> Fidelity {
+        self.fidelity
+    }
+
+    /// The bounded error of this rung.
+    ///
+    /// The ladder is monotone, so this only ever **shrinks** as generation proceeds — which is the
+    /// entire basis for *"a decision made outside the band at L2 cannot be overturned at L4"*.
+    pub fn tolerance(&self) -> f64 {
+        self.tolerances.at(self.fidelity)
+    }
+
+    /// Is a measured distance within a limit, at this rung's confidence?
+    ///
+    /// ⚠ **Trivalent for METRIC questions.** Dual bounds answer set membership — *is this point in
+    /// that region* — and this answers *is this ledge within 30 metres*, which is what every `Span`
+    /// and budget comparison is really asking.
+    ///
+    /// An `AMBIGUOUS` result re-asks at the next rung. There is deliberately no marker for that: a
+    /// marker would have to be stored, propagated and cleared, and each of those is a chance to leave
+    /// one behind.
+    pub fn within(&self, measured: f64, limit: f64) -> Trivalent {
+        trivalent::within(measured, limit, self.tolerance())
     }
 
     /// Give this context the coarse geometry the spatial primitives run against.
@@ -275,20 +325,27 @@ impl<'a> Context<'a> {
             .and_then(|l| l.bounds(scope))
     }
 
-    /// Could an occupant be standing here? Definitely-yes only.
+    /// Could an occupant be standing here?
     ///
-    /// ⚠ A `false` from this is **not** a definite no — that is [`Context::possibly_standable`]'s
-    /// job, and keeping them apart is what stops an optimistic bound reading as a fact.
-    pub fn definitely_standable(&self, scope: Handle<Node>, p: Vec3) -> bool {
-        self.bounds(scope).is_some_and(|b| b.inner_contains(p))
-    }
-
-    /// Could an occupant *possibly* be standing here?
+    /// ⚠ **This is the question M05a could not answer honestly**, and the reason it now returns three
+    /// values. Two bounds produce three cases, and a bool had to collapse two of them together:
     ///
-    /// `false` **is** a definite no: outside the outer bound nothing later can put geometry there,
-    /// because the ladder only ever tightens.
-    pub fn possibly_standable(&self, scope: Handle<Node>, p: Vec3) -> bool {
-        self.bounds(scope).is_some_and(|b| b.outer_contains(p))
+    /// | | Answer |
+    /// |---|---|
+    /// | inside the inner bound | `YES` — committed floor is there |
+    /// | outside the outer bound | `NO` — and no later rung can put geometry there |
+    /// | between them | `AMBIGUOUS` — the hull spans it, the floor does not |
+    /// | the ladder has not run | `AMBIGUOUS` — **not** `NO`; nothing is known yet |
+    ///
+    /// That last row is the one a bool got wrong: *"not computed"* and *"nothing there"* are
+    /// different facts, and answering `false` to both is how an optimistic bound becomes a lie.
+    pub fn standable(&self, scope: Handle<Node>, p: Vec3) -> Trivalent {
+        match self.bounds(scope) {
+            None => Trivalent::Ambiguous,
+            Some(b) if b.inner_contains(p) => Trivalent::Yes,
+            Some(b) if !b.outer_contains(p) => Trivalent::No,
+            Some(_) => Trivalent::Ambiguous,
+        }
     }
 
     /// The first thing in the way.
@@ -312,8 +369,23 @@ impl<'a> Context<'a> {
     ///
     /// Returns `true` with no geometry: "nothing is in the way" is the honest answer to an empty world,
     /// and it keeps a mechanic's logic identical whether or not geometry has been built yet.
-    pub fn line_of_sight(&self, from: Vec3, to: Vec3) -> bool {
-        self.geometry().is_none_or(|g| g.line_of_sight(from, to))
+    pub fn line_of_sight(&self, from: Vec3, to: Vec3) -> Trivalent {
+        let Some(g) = self.geometry() else {
+            // ⚠ No geometry is not "clear" — it is "not known yet".
+            return Trivalent::Ambiguous;
+        };
+        if g.line_of_sight(from, to) {
+            // ⚠ **Clear is definite, and it relies on one invariant**: a collider *bounds* its content
+            // and is never bounded by it. Real geometry lives inside the box, so a ray that misses the
+            // box misses everything the box will ever contain.
+            Trivalent::Yes
+        } else if self.fidelity == Fidelity::Geometry {
+            Trivalent::No
+        } else {
+            // Blocked by a coarse box says the *box* is in the way. What ends up inside it may be
+            // narrower, so the sightline may open at a later rung — re-ask there.
+            Trivalent::Ambiguous
+        }
     }
 
     /// Move a box until it touches something.
@@ -479,8 +551,16 @@ mod tests {
             ctx.has_tag_at(&hit, portalable),
             "tags read back through the context"
         );
-        assert!(!ctx.line_of_sight(Vec3::new(0.0, 1.0, 1.0), Vec3::new(5.0, 1.0, 1.0)));
-        assert!(ctx.line_of_sight(Vec3::new(0.0, 5.0, 1.0), Vec3::new(5.0, 5.0, 1.0)));
+        // ⚠ Blocked by a coarse box is not yet a definite "no": what ends up inside the box may be
+        // narrower. Clear *is* definite, because a collider bounds its content.
+        assert_eq!(
+            ctx.line_of_sight(Vec3::new(0.0, 1.0, 1.0), Vec3::new(5.0, 1.0, 1.0)),
+            Trivalent::Ambiguous
+        );
+        assert_eq!(
+            ctx.line_of_sight(Vec3::new(0.0, 5.0, 1.0), Vec3::new(5.0, 5.0, 1.0)),
+            Trivalent::Yes
+        );
         assert_eq!(
             ctx.raycast_all(Vec3::new(0.0, 1.0, 1.0), Vec3::X, 10.0)
                 .len(),
@@ -533,9 +613,10 @@ mod tests {
         assert!(ctx.geometry().is_none());
         assert!(ctx.raycast(Vec3::ZERO, Vec3::X, 10.0).is_none());
         assert!(ctx.raycast_all(Vec3::ZERO, Vec3::X, 10.0).is_empty());
-        assert!(
+        assert_eq!(
             ctx.line_of_sight(Vec3::ZERO, Vec3::splat(9.0)),
-            "nothing in the way is the honest answer to an empty world"
+            Trivalent::Ambiguous,
+            "with no geometry at all the honest answer is 'not known yet', never 'clear'"
         );
         let mover = Aabb::from_center_extents(Vec3::ZERO, Vec3::splat(0.5));
         let sweep = ctx.sweep(mover, Vec3::X, 4.0);

@@ -50,6 +50,7 @@ use crate::serialize::{to_bytes, Deserialize, Reader, SerResult, Serialize, Writ
 use crate::spine::{
     Coverage, SlotRole, SpineSegment, SpineSlot, SpineTemplate, Strictness, UnlockRef,
 };
+use crate::trivalent::{self, Fidelity, Tolerances, Trivalent};
 use cv_determinism::{Aabb, Mat4, Quat, Rng, Transform, Vec3};
 
 /// A probe node: carries every primitive the format supports, plus handles that form cycles.
@@ -110,6 +111,7 @@ struct ProbeWorld {
     unlock_refs: Vec<UnlockRef>,
     spine_math: Vec<u8>,
     faces: Vec<Face>,
+    verdicts: Vec<Trivalent>,
     hits: Vec<Hit>,
     geometry_math: Vec<u8>,
 }
@@ -134,6 +136,7 @@ impl Serialize for ProbeWorld {
         w.bytes(&self.spine_math);
         w.write(&self.faces);
         w.write(&self.hits);
+        w.write(&self.verdicts);
         w.bytes(&self.geometry_math);
     }
 }
@@ -294,6 +297,7 @@ fn build() -> ProbeWorld {
     let (rules, mission_edges) = build_mission_values();
     let (strictness, unlock_refs, spine_math) = build_spine_values();
     let (faces, hits, geometry_math) = build_geometry_values();
+    let verdicts = build_verdicts();
     ProbeWorld {
         ids,
         nodes,
@@ -313,6 +317,7 @@ fn build() -> ProbeWorld {
         spine_math,
         faces,
         hits,
+        verdicts,
         geometry_math,
     }
 }
@@ -562,6 +567,41 @@ fn build_descriptor(scopes: &NodeGraph, fingerprint: Fingerprint, seed: u64) -> 
         },
     );
     b.finish()
+}
+
+/// Every branch of the trivalent ladder, and the tolerances that produce them.
+///
+/// ⚠ **In the probe because a three-valued answer is worthless if the two targets disagree about
+/// which value it is.** The band is the whole mechanism: if `within` lands one seed on `YES` natively
+/// and `AMBIGUOUS` under WASM, every downstream decision diverges, and it would show up as an
+/// unreproducible world rather than as a comparison bug.
+fn build_verdicts() -> Vec<Trivalent> {
+    let mut out = Vec::new();
+    for scale in [1.0f64, 100.0] {
+        let t = Tolerances::for_scale(scale);
+        for rung in Fidelity::ALL {
+            let eps = t.at(rung);
+            // Straddle the limit deliberately: comfortably inside, on the boundary, comfortably out.
+            for measured in [
+                0.0,
+                5.0 * scale,
+                10.0 * scale,
+                10.0 * scale + eps,
+                20.0 * scale,
+            ] {
+                out.push(trivalent::within(measured, 10.0 * scale, eps));
+            }
+        }
+    }
+    // The combinators, whose truth tables must also agree across targets.
+    for a in [Trivalent::Yes, Trivalent::No, Trivalent::Ambiguous] {
+        for b in [Trivalent::Yes, Trivalent::No, Trivalent::Ambiguous] {
+            out.push(a.and(b));
+            out.push(a.or(b));
+        }
+        out.push(a.negate());
+    }
+    out
 }
 
 /// Scheduling config plus the **computed** results of the AdaptiveRange formula.

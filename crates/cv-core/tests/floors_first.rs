@@ -9,7 +9,9 @@
 //! nothing but a `Context` gets a real answer — before any hull, mesh or volume exists.
 
 use cv_core::floor::FloorLadder;
-use cv_core::{CoarseGeometry, Collider, ContentRegistry, Context, NodeGraph, NodeState, ObjectId};
+use cv_core::{
+    CoarseGeometry, Collider, ContentRegistry, Context, NodeGraph, NodeState, ObjectId, Trivalent,
+};
 use cv_determinism::{Aabb, Rng, Vec3};
 
 fn oid(n: &str) -> ObjectId {
@@ -57,12 +59,14 @@ fn a_hook_gets_a_real_spatial_answer_before_anything_expensive_exists() {
         .with_floors(&ladder);
 
     let on_the_ledge = Vec3::new(2.0, 1.5, 2.0);
-    assert!(
-        ctx.definitely_standable(rooms[0], on_the_ledge),
+    assert_eq!(
+        ctx.standable(rooms[0], on_the_ledge),
+        Trivalent::Yes,
         "a hook can ask where an occupant could be, with only floor built"
     );
-    assert!(
-        !ctx.possibly_standable(rooms[0], Vec3::new(40.0, 1.5, 2.0)),
+    assert_eq!(
+        ctx.standable(rooms[0], Vec3::new(40.0, 1.5, 2.0)),
+        Trivalent::No,
         "and outside the outer bound is a definite no"
     );
 }
@@ -77,8 +81,10 @@ fn before_the_ladder_runs_a_hook_gets_no_answer_rather_than_a_wrong_one() {
     let ctx = Context::new(&g, &reg, &placed, &Rng::new(1), "early");
 
     assert!(ctx.bounds(rooms[0]).is_none(), "no ladder, no answer");
-    assert!(!ctx.definitely_standable(rooms[0], Vec3::ZERO));
-    assert!(!ctx.possibly_standable(rooms[0], Vec3::ZERO));
+    // ⚠ **The gap M05a left, now closed.** Before `Trivalent` both of these answered `false`, which
+    // reads as "nothing there" — a confident wrong answer. `AMBIGUOUS` says what is true: nothing is
+    // known yet, so re-ask at the next rung.
+    assert_eq!(ctx.standable(rooms[0], Vec3::ZERO), Trivalent::Ambiguous);
 }
 
 #[test]
@@ -96,7 +102,7 @@ fn the_answer_sharpens_as_floor_is_committed_and_never_reverses() {
     );
     let first = FloorLadder::build(&geo, 50.0, 1.9);
     let ctx = Context::new(&g, &reg, &placed, &Rng::new(1), "a").with_floors(&first);
-    assert!(ctx.definitely_standable(rooms[0], probe));
+    assert_eq!(ctx.standable(rooms[0], probe), Trivalent::Yes);
 
     // Commit more floor in the same scope.
     geo.add(
@@ -108,8 +114,9 @@ fn the_answer_sharpens_as_floor_is_committed_and_never_reverses() {
     );
     let second = FloorLadder::build(&geo, 50.0, 1.9);
     let ctx = Context::new(&g, &reg, &placed, &Rng::new(1), "b").with_floors(&second);
-    assert!(
-        ctx.definitely_standable(rooms[0], probe),
+    assert_eq!(
+        ctx.standable(rooms[0], probe),
+        Trivalent::Yes,
         "committing more floor must never retract a definite answer"
     );
 }
@@ -127,8 +134,9 @@ fn a_scope_with_no_floor_is_answerable_not_absent() {
     let placed: Vec<(cv_core::Handle<cv_core::Node>, ObjectId)> = Vec::new();
     let ctx = Context::new(&g, &reg, &placed, &Rng::new(1), "t").with_floors(&ladder);
 
-    // Room 1 got no floor. That is a fact about the world, not a missing computation — but the two
-    // are indistinguishable through `bounds` alone, which is why M06 needs three values and not two.
+    // ⚠ Room 1 got no floor. That is a fact about the world; "the ladder has not run" is a fact about
+    // the computation. Both answer `AMBIGUOUS`, and that is **correct** — neither is a definite
+    // "nothing is there", and the honest response to both is to ask again at the next rung.
     assert!(ctx.bounds(rooms[1]).is_none());
-    assert!(!ctx.possibly_standable(rooms[1], Vec3::ZERO));
+    assert_eq!(ctx.standable(rooms[1], Vec3::ZERO), Trivalent::Ambiguous);
 }

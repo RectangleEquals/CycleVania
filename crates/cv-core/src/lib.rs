@@ -53,6 +53,7 @@ pub mod settings;
 pub mod softlock;
 pub mod solver;
 pub mod spine;
+pub mod trivalent;
 pub mod unlock;
 
 pub use arena::{Arena, Handle};
@@ -87,6 +88,7 @@ pub use spine::{
     SpineInstance, SpineInstantiator, SpineSegment, SpineSlot, SpineTemplate, SpineValidation,
     SpineWarning, Strictness, UnlockRef,
 };
+pub use trivalent::{within, Fidelity, Tolerances, Trivalent};
 pub use unlock::{GrantMap, TableError, Unlock, UnlockTable};
 
 /// This crate's version.
