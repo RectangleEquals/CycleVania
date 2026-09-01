@@ -99,7 +99,12 @@ impl Progression {
     }
 }
 
-/// The stretch of progression over which content is eligible.
+/// A numeric interval — `[min, max]`, inclusive at both ends.
+///
+/// ⚠ **General, not progression-only.** A `Span` over `0..1` is a progression window; a `Span` over
+/// world units is a grapple's `0..30` reach and a traversal's `run` and `rise`. Saturating it to `0..1`
+/// (as an earlier version did) would have made *"this jump covers 2 to 4 metres"* inexpressible, and
+/// [`crate::Settings`] already documents the distance reading.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Span {
     start: f64,
@@ -107,44 +112,95 @@ pub struct Span {
 }
 
 impl Span {
-    /// Eligible everywhere.
+    /// The whole of progression — `0..1`.
+    ///
+    /// ⚠ Named for the progression reading because that is what a *schedule* means by it; a distance
+    /// span wants [`Span::UNBOUNDED`].
     pub const ALWAYS: Span = Span {
         start: 0.0,
         end: 1.0,
     };
 
-    /// Eligible over `[start, end]`. Reversed inputs are sorted rather than rejected.
+    /// Every value. What a range means before anyone constrains it.
+    pub const UNBOUNDED: Span = Span {
+        start: f64::NEG_INFINITY,
+        end: f64::INFINITY,
+    };
+
+    /// Over `[start, end]`. Reversed inputs are sorted rather than rejected.
     pub fn new(start: f64, end: f64) -> Self {
-        let (a, b) = (math::saturate(start), math::saturate(end));
         Span {
-            start: math::min(a, b),
-            end: math::max(a, b),
+            start: math::min(start, end),
+            end: math::max(start, end),
         }
     }
 
-    /// Eligible from `start` onwards.
+    /// A single value — a range with no width.
+    pub fn exactly(v: f64) -> Self {
+        Span { start: v, end: v }
+    }
+
+    /// From `start` onwards, to the end of progression.
     pub fn from(start: f64) -> Self {
         Span::new(start, 1.0)
     }
 
-    /// Eligible until `end`.
+    /// From the beginning of progression until `end`.
     pub fn until(end: f64) -> Self {
         Span::new(0.0, end)
     }
 
-    /// Where it begins.
+    /// The lower bound.
+    pub fn min(self) -> f64 {
+        self.start
+    }
+
+    /// The upper bound.
+    pub fn max(self) -> f64 {
+        self.end
+    }
+
+    /// Where it begins — the progression-facing name for [`Self::min`].
     pub fn start(self) -> f64 {
         self.start
     }
 
-    /// Where it ends.
+    /// Where it ends — the progression-facing name for [`Self::max`].
     pub fn end(self) -> f64 {
         self.end
     }
 
-    /// Is this progression inside the span? Inclusive at both ends.
-    pub fn contains(self, p: Progression) -> bool {
-        p.0 >= self.start && p.0 <= self.end
+    /// How wide it is. Infinite for [`Span::UNBOUNDED`].
+    pub fn length(self) -> f64 {
+        self.end - self.start
+    }
+
+    /// Are both ends finite?
+    ///
+    /// ⚠ The predicate a budget check needs before it trusts [`Self::length`] — an unbounded span has
+    /// no width to compare against anything.
+    pub fn is_bounded(self) -> bool {
+        self.start.is_finite() && self.end.is_finite()
+    }
+
+    /// Is this value inside? Inclusive at both ends.
+    pub fn contains(self, v: f64) -> bool {
+        v >= self.start && v <= self.end
+    }
+
+    /// The nearest value inside.
+    pub fn clamp(self, v: f64) -> f64 {
+        math::min(math::max(v, self.start), self.end)
+    }
+
+    /// Do the two overlap anywhere? Touching at a single endpoint counts.
+    pub fn overlaps(self, other: Span) -> bool {
+        self.start <= other.end && other.start <= self.end
+    }
+
+    /// Interpolate across the span — `0` gives `min`, `1` gives `max`.
+    pub fn lerp(self, t: f64) -> f64 {
+        math::lerp(self.start, self.end, t)
     }
 }
 
@@ -707,7 +763,7 @@ impl Schedule {
 
     /// Weight here, or `0.0` outside the span.
     pub fn weight_at(&self, p: Progression) -> f64 {
-        if self.span.contains(p) {
+        if self.span.contains(p.value()) {
             math::max(0.0, self.weight.eval(p))
         } else {
             0.0
@@ -716,7 +772,7 @@ impl Schedule {
 
     /// Probability of being offered here, clamped to `[0, 1]`.
     pub fn chance_at(&self, p: Progression) -> f64 {
-        if self.span.contains(p) {
+        if self.span.contains(p.value()) {
             math::saturate(self.chance.eval(p))
         } else {
             0.0
@@ -1379,15 +1435,51 @@ mod tests {
     #[test]
     fn spans_gate_eligibility() {
         let late = Span::from(0.6);
-        assert!(!late.contains(Progression::new(0.5)));
+        assert!(!late.contains(Progression::new(0.5).value()));
         assert!(
-            late.contains(Progression::new(0.6)),
+            late.contains(Progression::new(0.6).value()),
             "inclusive at the start"
         );
-        assert!(late.contains(Progression::END));
+        assert!(late.contains(Progression::END.value()));
         // Reversed inputs are sorted rather than producing an empty span.
         assert_eq!(Span::new(0.8, 0.2), Span::new(0.2, 0.8));
-        assert!(Span::ALWAYS.contains(Progression::START));
+        assert!(Span::ALWAYS.contains(Progression::START.value()));
+    }
+
+    #[test]
+    fn a_span_is_a_general_interval_and_not_only_a_progression_window() {
+        // ⚠ **The saturation that used to live in `Span::new` made this inexpressible.** A grapple's
+        // reach and a jump's run are spans over world units, and `Settings` already documented them
+        // that way — the type just did not agree.
+        let reach = Span::new(0.0, 30.0);
+        assert_eq!(reach.max(), 30.0);
+        assert!(reach.contains(22.0));
+        assert!(!reach.contains(31.0));
+        assert_eq!(reach.length(), 30.0);
+        assert_eq!(reach.clamp(45.0), 30.0);
+    }
+
+    #[test]
+    fn an_unbounded_span_has_no_width_to_compare_against_anything() {
+        assert!(!Span::UNBOUNDED.is_bounded());
+        assert!(Span::UNBOUNDED.contains(-1e9));
+        assert!(Span::new(0.0, 1.0).is_bounded());
+    }
+
+    #[test]
+    fn spans_that_touch_at_an_endpoint_overlap() {
+        // Inclusive at both ends, so a schedule ending exactly where another begins shares that point
+        // rather than leaving a gap nothing is eligible in.
+        assert!(Span::new(0.0, 0.5).overlaps(Span::new(0.5, 1.0)));
+        assert!(!Span::new(0.0, 0.4).overlaps(Span::new(0.5, 1.0)));
+    }
+
+    #[test]
+    fn lerp_walks_the_span_rather_than_progression() {
+        let s = Span::new(10.0, 20.0);
+        assert_eq!(s.lerp(0.0), 10.0);
+        assert_eq!(s.lerp(1.0), 20.0);
+        assert_eq!(s.lerp(0.5), 15.0);
     }
 
     #[test]

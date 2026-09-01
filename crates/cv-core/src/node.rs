@@ -80,6 +80,60 @@ pub enum NodeKind {
     Spatial,
 }
 
+/// The scope an **instance query** may be asked at.
+///
+/// ⚠ **There is deliberately no `Floor`.** A floor-scoped instance query would be a query that stopped
+/// at a boundary the geometry does not stop at — it would answer *"what is physically present"* with
+/// *"what is reachable"*, and lie about both. [`NodeKind::Floor`] answers *"can the occupant get from
+/// here to there"*; instance queries answer *"what is physically present"*, and keeping the two apart
+/// is what stops the Floor scope leaking into the query surface.
+///
+/// ⚠ There is no `Spatial` either, for the plainer reason that a sub-volume is not a container of
+/// instances — content sits *in* a Space, and a Spatial names a region of one.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum InstanceScope {
+    /// The whole generated world.
+    World,
+    /// A major progression region.
+    Reach,
+    /// A themed sub-region.
+    Area,
+    /// One room — the tightest an instance query goes.
+    #[default]
+    Space,
+}
+
+impl InstanceScope {
+    /// Every scope, outermost first.
+    pub const ALL: [InstanceScope; 4] = [
+        InstanceScope::World,
+        InstanceScope::Reach,
+        InstanceScope::Area,
+        InstanceScope::Space,
+    ];
+
+    /// The node kind this scope corresponds to.
+    pub fn node_kind(self) -> NodeKind {
+        match self {
+            InstanceScope::World => NodeKind::World,
+            InstanceScope::Reach => NodeKind::Reach,
+            InstanceScope::Area => NodeKind::Area,
+            InstanceScope::Space => NodeKind::Space,
+        }
+    }
+
+    /// The scope for a node kind, or `None` for the two that deliberately have none.
+    pub fn for_kind(kind: NodeKind) -> Option<InstanceScope> {
+        match kind {
+            NodeKind::World => Some(InstanceScope::World),
+            NodeKind::Reach => Some(InstanceScope::Reach),
+            NodeKind::Area => Some(InstanceScope::Area),
+            NodeKind::Space => Some(InstanceScope::Space),
+            NodeKind::Floor | NodeKind::Spatial => None,
+        }
+    }
+}
+
 impl NodeKind {
     /// Every kind, outermost first.
     pub const ALL: [NodeKind; 6] = [

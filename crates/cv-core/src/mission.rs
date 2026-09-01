@@ -30,7 +30,7 @@
 //! Computing them is a fixed point: sweep for what is accessible, collect what is there, sweep again,
 //! until nothing new appears.
 
-use crate::node::{Node, NodeGraph, NodeKind};
+use crate::node::{InstanceScope, Node, NodeGraph, NodeKind};
 use crate::object::ObjectId;
 use crate::serialize::{Deserialize, Reader, SerError, SerResult, Serialize, Writer};
 use crate::unlock::GrantMap;
@@ -72,7 +72,20 @@ pub enum Rule {
     /// ⚠ **The contextual half of the grammar.** A gate may depend on the *world* rather than only on
     /// the occupant — *"a Bomb Flower within carry range"* — and because the dependency walk sees it,
     /// `requires()` can plant the source rather than hoping one exists.
-    Nearby { kind: ObjectId, within: f64 },
+    ///
+    /// ⚠ **`scope` is not decoration.** *"A Bomb Flower within carry range"* asked at `Space` and
+    /// asked at `World` are different questions with different answers, and a rule that could not say
+    /// which would be silently answering the wrong one. There is deliberately no `Floor` scope — see
+    /// [`InstanceScope`].
+    ///
+    /// ▶ `within` is a distance in world units. The design types it `Ref<Budget>`; that retype waits
+    /// on `Ref<T>`, because an owned `Budget` would embed a *spent* counter in a **declaration**, which
+    /// is the one thing a declaration must not carry.
+    Nearby {
+        kind: ObjectId,
+        within: f64,
+        scope: InstanceScope,
+    },
     /// Every sub-rule holds.
     All(Vec<Rule>),
     /// At least one sub-rule holds — genuine alternate routes.
@@ -198,8 +211,12 @@ impl Rule {
             Rule::Never => "sealed — nothing satisfies this".to_string(),
             Rule::Has(c) => format!("the occupant holds {c}"),
             Rule::HasComponent(c) => format!("the occupant holds something carrying {c}"),
-            Rule::Nearby { kind, within } => {
-                format!("{kind} is accessible within {within}")
+            Rule::Nearby {
+                kind,
+                within,
+                scope,
+            } => {
+                format!("{kind} is accessible within {within} of this gate, searched at {scope:?}")
             }
             Rule::All(rules) => {
                 let parts: Vec<String> = rules.iter().map(Rule::explain).collect();
@@ -237,7 +254,11 @@ impl fmt::Display for Rule {
             Rule::Never => write!(f, "sealed"),
             Rule::Has(c) => write!(f, "{c}"),
             Rule::HasComponent(c) => write!(f, "holds something with {c}"),
-            Rule::Nearby { kind, within } => write!(f, "{kind} within {within}"),
+            Rule::Nearby {
+                kind,
+                within,
+                scope,
+            } => write!(f, "{kind} within {within} @{scope:?}"),
             Rule::All(rules) => {
                 write!(f, "(")?;
                 for (i, r) in rules.iter().enumerate() {
@@ -914,10 +935,15 @@ impl Serialize for Rule {
                 w.u8(6);
                 w.write(c);
             }
-            Rule::Nearby { kind, within } => {
+            Rule::Nearby {
+                kind,
+                within,
+                scope,
+            } => {
                 w.u8(7);
                 w.write(kind);
                 w.f64(*within);
+                w.u8(*scope as u8);
             }
         }
     }
@@ -936,6 +962,13 @@ impl Deserialize for Rule {
             7 => Rule::Nearby {
                 kind: r.read()?,
                 within: r.f64()?,
+                scope: match r.u8()? {
+                    0 => InstanceScope::World,
+                    1 => InstanceScope::Reach,
+                    2 => InstanceScope::Area,
+                    3 => InstanceScope::Space,
+                    _ => return Err(SerError::InvalidValue("unknown InstanceScope tag")),
+                },
             },
             _ => return Err(SerError::InvalidValue("unknown Rule tag")),
         })
@@ -996,6 +1029,7 @@ mod tests {
             Rule::Nearby {
                 kind: flower,
                 within: 8.0,
+                scope: InstanceScope::Space,
             },
         ]);
 
@@ -1036,6 +1070,7 @@ mod tests {
             Rule::Nearby {
                 kind: kind("bomb_flower"),
                 within: 8.0,
+                scope: InstanceScope::Area,
             },
         ] {
             assert_eq!(from_bytes::<Rule>(&to_bytes(&r)).unwrap(), r);

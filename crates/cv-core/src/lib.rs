@@ -35,6 +35,8 @@
 #![forbid(unsafe_code)]
 
 pub mod arena;
+pub mod collision;
+pub mod component;
 pub mod content;
 pub mod context;
 pub mod descriptor;
@@ -54,14 +56,18 @@ pub mod query;
 pub mod schedule;
 pub mod serialize;
 pub mod settings;
+pub mod shape;
 pub mod softlock;
 pub mod solver;
 pub mod spine;
 pub mod surface;
+pub mod tag;
 pub mod trivalent;
 pub mod unlock;
 
 pub use arena::{Arena, Handle};
+pub use collision::{CollisionBody, CollisionData, CollisionLayer};
+pub use component::{Attached, CollisionMode, Component, Components, Direction};
 pub use content::{ContentEntry, ContentKind, ContentRegistry, RegistryError};
 pub use context::Context;
 pub use descriptor::{
@@ -78,7 +84,7 @@ pub use lifecycle::{Event, Quantity, Replenish};
 pub use mission::{
     Accessibility, EdgeSpan, Location, LocationId, MissionEdge, MissionGraph, Rule, Sphere,
 };
-pub use node::{Node, NodeError, NodeGraph, NodeKind, NodeResult, NodeState};
+pub use node::{InstanceScope, Node, NodeError, NodeGraph, NodeKind, NodeResult, NodeState};
 pub use object::{IdAllocator, Object, ObjectHeader, ObjectId};
 pub use placement::{
     Constraint, DirectionCone, Interaction, ItemClass, Preference, Role, RoleEvidence, ScheduleRule,
@@ -90,6 +96,7 @@ pub use schedule::{
     TargetOutcome, TargetReasoning, WorldLimit,
 };
 pub use serialize::{Deserialize, Reader, SerError, SerResult, Serialize, Writer};
+pub use shape::{Shape, ShapeFamily};
 pub use softlock::{
     AnalysisLimit, Repair, Softlock, SoftlockAnalysis, SoftlockAnalyzer, SoftlockKind,
 };
@@ -100,6 +107,7 @@ pub use spine::{
     SpineWarning, Strictness, UnlockRef,
 };
 pub use surface::{Approach, AttemptKind, Harm, Occupant, Support, Surface};
+pub use tag::{Tag, TagQuery};
 pub use trivalent::{within, Fidelity, Tolerances, Trivalent};
 pub use unlock::{GrantMap, TableError, Unlock, UnlockTable};
 
