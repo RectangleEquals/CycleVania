@@ -38,6 +38,7 @@ pub fn emit(m: &Manifest) -> String {
     for (heading, kind) in [
         ("Objects", Kind::Object),
         ("Structs", Kind::Struct),
+        ("Variants", Kind::Variant),
         ("Enums", Kind::Enum),
     ] {
         let _ = writeln!(s, "---\n\n## {heading}\n");

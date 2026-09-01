@@ -24,10 +24,52 @@ pub fn emit(m: &Manifest) -> String {
         }
         match c.kind() {
             Kind::Enum => emit_enum(&mut s, c),
+            Kind::Variant => emit_variant(&mut s, c, m),
             _ => emit_interface(&mut s, c),
         }
     }
     s
+}
+
+/// A value with alternative forms, as a **discriminated union**.
+///
+/// ⚠ **The `form` literal is the whole point.** Without a discriminant TypeScript cannot narrow, so a
+/// developer holding a `Shape` could read `.radius` off a cube and be told nothing. With it, `switch
+/// (s.form)` narrows in each arm and an unhandled form is a compile error at the `never` check.
+///
+/// A form's own fields are emitted by [`emit_interface`] when its turn comes, so this writes only the
+/// union — except for the base's shared members, which every form carries.
+fn emit_variant(s: &mut String, c: &Class, m: &Manifest) {
+    let forms: Vec<&Class> = m
+        .classes
+        .iter()
+        .filter(|f| f.extends.as_deref() == Some(c.path.as_str()) && f.status != Status::Deprecated)
+        .collect();
+
+    // The base carries the shared members. A form extends it, so each arm inherits them.
+    emit_interface(s, c);
+
+    if forms.is_empty() {
+        return;
+    }
+    let _ = writeln!(s, "/**");
+    let _ = writeln!(
+        s,
+        " * The forms of {}. Switch on `form` — TypeScript narrows each arm.",
+        c.short_name()
+    );
+    let _ = writeln!(s, " */");
+    let _ = writeln!(s, "export type {}Form =", c.short_name());
+    for (i, f) in forms.iter().enumerate() {
+        let sep = if i + 1 == forms.len() { ";" } else { "" };
+        let _ = writeln!(
+            s,
+            "  | ({} & {{ form: {:?} }}){sep}",
+            f.short_name(),
+            f.short_name()
+        );
+    }
+    let _ = writeln!(s);
 }
 
 fn emit_enum(s: &mut String, c: &Class) {

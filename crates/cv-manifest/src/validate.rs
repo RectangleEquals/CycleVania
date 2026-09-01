@@ -45,6 +45,7 @@ pub fn validate(m: &Manifest) -> Vec<Violation> {
     no_overloads(m, &mut v);
     documented(m, &mut v);
     kind_consistency(m, &mut v);
+    values_are_never_referenced(m, &mut v);
     lattice_is_not_bounded_at_the_root(m, &mut v);
     v.sort();
     v
@@ -162,6 +163,56 @@ fn references_resolve(m: &Manifest, out: &mut Vec<Violation>) {
                         where_: format!("{}::{member}", c.path),
                         detail: format!("`{part}` is not declared"),
                     });
+                }
+            }
+        };
+        for f in &c.fields {
+            check(&f.ty, &f.name);
+        }
+        for me in &c.methods {
+            check(&me.returns, &me.name);
+            for p in &me.params {
+                check(&p.ty, &me.name);
+            }
+        }
+    }
+}
+
+/// **A value is copied, never pointed at.**
+///
+/// ⚠ **This is the rule with teeth, and it is what stops the miscategorisation recurring.** Without it,
+/// `Ref<Shape>` type-checks — and it *was* in the manifest, on a field the design types as a bare
+/// `Shape`. A `Ref<T>` to something with no identity is a pointer to a copy: two of them compare
+/// unequal while meaning the same thing, and nothing about the declaration says so.
+fn values_are_never_referenced(m: &Manifest, out: &mut Vec<Violation>) {
+    let valued: BTreeSet<&str> = m
+        .classes
+        .iter()
+        .filter(|c| matches!(c.kind(), Kind::Struct | Kind::Variant | Kind::Enum))
+        .map(|c| c.short_name())
+        .collect();
+
+    for c in &m.classes {
+        let mut check = |ty: &str, member: &str| {
+            // Only the immediate argument of a `Ref<…>` or `Kind<…>` is a reference; `Array<Cost>`
+            // is a list of values and is fine.
+            for wrapper in ["Ref<", "Kind<"] {
+                let mut rest = ty;
+                while let Some(at) = rest.find(wrapper) {
+                    rest = &rest[at + wrapper.len()..];
+                    let inner: String = rest
+                        .chars()
+                        .take_while(|ch| ch.is_alphanumeric() || *ch == '_')
+                        .collect();
+                    if valued.contains(inner.as_str()) {
+                        out.push(Violation {
+                            rule: "value",
+                            where_: format!("{}::{member}", c.path),
+                            detail: format!(
+                                "`{wrapper}{inner}>` — {inner} is a value; values are copied, never referenced. Use a bare `{inner}`."
+                            ),
+                        });
+                    }
                 }
             }
         };
@@ -352,6 +403,30 @@ fn kind_consistency(m: &Manifest, out: &mut Vec<Violation>) {
                         where_: c.path.clone(),
                         detail: "an object may not carry enum values".into(),
                     });
+                }
+            }
+            Kind::Variant => {
+                if !c.values.is_empty() {
+                    out.push(Violation {
+                        rule: "kind",
+                        where_: c.path.clone(),
+                        detail: "a variant may not carry enum values — its forms are declarations                                  that extend it"
+                            .into(),
+                    });
+                }
+                // ⚠ A form must extend a *variant*. Letting one extend an object would give the
+                // whole union identity by the back door, which is the confusion this kind exists to
+                // end.
+                if let Some(base) = &c.extends {
+                    if m.get(base).map(|b| b.kind()) != Some(Kind::Variant) {
+                        out.push(Violation {
+                            rule: "kind",
+                            where_: c.path.clone(),
+                            detail: format!(
+                                "a variant may only extend another variant, and {base} is not one"
+                            ),
+                        });
+                    }
                 }
             }
         }

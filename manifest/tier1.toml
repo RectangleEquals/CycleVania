@@ -850,7 +850,7 @@ doc = "A parametric shape. Collision is computed analytically from its parameter
 
   [[class.field]]
   name = "shape"
-  type = "Ref<Shape>"
+  type = "Shape"
   api = true
   mutable = true
   exposed = true
@@ -1651,8 +1651,7 @@ doc = "NOTHING relocates — it acts at range. Sightlines, beams and ballistics 
 
 [[class]]
 path = "/Core/Shape"
-extends = "/Core/Object"
-kind = "object"
+kind = "variant"
 sealed = false
 status = "stable"
 doc = "A parametric primitive. Collision is computed from parameters, never from tessellation — otherwise a visual LOD change silently alters generation."
@@ -1705,7 +1704,7 @@ doc = "A parametric primitive. Collision is computed from parameters, never from
   [[class.method]]
   name = "decompose"
   args = []
-  returns = "Array<Ref<Shape>>"
+  returns = "Array<Shape>"
   api = true
   final = true
   status = "stable"
@@ -1723,7 +1722,7 @@ doc = "A parametric primitive. Collision is computed from parameters, never from
 [[class]]
 path = "/Core/SolidShape"
 extends = "/Core/Shape"
-kind = "object"
+kind = "variant"
 status = "stable"
 doc = "A shape with an inside. Supports booleans and a signed distance field."
 
@@ -1739,14 +1738,14 @@ doc = "A shape with an inside. Supports booleans and a signed distance field."
 [[class]]
 path = "/Core/SurfaceShape"
 extends = "/Core/Shape"
-kind = "object"
+kind = "variant"
 status = "stable"
 doc = "Zero thickness — no inside, so no sdf and no booleans."
 
 [[class]]
 path = "/Core/CubeShape"
 extends = "/Core/SolidShape"
-kind = "object"
+kind = "variant"
 status = "stable"
 doc = "A box."
   [[class.field]]
@@ -1778,7 +1777,7 @@ doc = "A box."
 [[class]]
 path = "/Core/SphereShape"
 extends = "/Core/SolidShape"
-kind = "object"
+kind = "variant"
 status = "stable"
 doc = "A sphere."
   [[class.field]]
@@ -1801,7 +1800,7 @@ doc = "A sphere."
 [[class]]
 path = "/Core/HemisphereShape"
 extends = "/Core/SolidShape"
-kind = "object"
+kind = "variant"
 status = "stable"
 doc = "Half a sphere."
   [[class.field]]
@@ -1833,7 +1832,7 @@ doc = "Half a sphere."
 [[class]]
 path = "/Core/ConeShape"
 extends = "/Core/SolidShape"
-kind = "object"
+kind = "variant"
 status = "stable"
 doc = "A cone."
   [[class.field]]
@@ -1873,7 +1872,7 @@ doc = "A cone."
 [[class]]
 path = "/Core/CapsuleShape"
 extends = "/Core/SolidShape"
-kind = "object"
+kind = "variant"
 status = "stable"
 doc = "A capsule — the usual occupant proxy."
   [[class.field]]
@@ -1904,7 +1903,7 @@ doc = "A capsule — the usual occupant proxy."
 [[class]]
 path = "/Core/CylinderShape"
 extends = "/Core/SolidShape"
-kind = "object"
+kind = "variant"
 status = "stable"
 doc = "A cylinder, or a truncated cone when the radii differ."
   [[class.field]]
@@ -1952,7 +1951,7 @@ doc = "A cylinder, or a truncated cone when the radii differ."
 [[class]]
 path = "/Core/PrismShape"
 extends = "/Core/SolidShape"
-kind = "object"
+kind = "variant"
 status = "stable"
 doc = "An n-sided prism."
   [[class.field]]
@@ -1992,7 +1991,7 @@ doc = "An n-sided prism."
 [[class]]
 path = "/Core/TorusShape"
 extends = "/Core/SolidShape"
-kind = "object"
+kind = "variant"
 status = "stable"
 doc = "A torus, optionally a partial arc."
   [[class.field]]
@@ -2031,7 +2030,7 @@ doc = "A torus, optionally a partial arc."
 [[class]]
 path = "/Core/PipeShape"
 extends = "/Core/SolidShape"
-kind = "object"
+kind = "variant"
 status = "stable"
 doc = "A hollow cylinder."
   [[class.field]]
@@ -2070,7 +2069,7 @@ doc = "A hollow cylinder."
 [[class]]
 path = "/Core/ArchShape"
 extends = "/Core/SolidShape"
-kind = "object"
+kind = "variant"
 status = "stable"
 doc = "An arched opening — a doorway primitive."
   [[class.field]]
@@ -2117,7 +2116,7 @@ doc = "An arched opening — a doorway primitive."
 [[class]]
 path = "/Core/RampShape"
 extends = "/Core/SolidShape"
-kind = "object"
+kind = "variant"
 status = "stable"
 doc = "An inclined plane with thickness. A traversal primitive as much as a visual one."
   [[class.field]]
@@ -2165,7 +2164,7 @@ doc = "An inclined plane with thickness. A traversal primitive as much as a visu
 [[class]]
 path = "/Core/StairsShape"
 extends = "/Core/SolidShape"
-kind = "object"
+kind = "variant"
 status = "stable"
 doc = "A straight flight. The canonical intra-Space traversal edge."
   [[class.field]]
@@ -2231,7 +2230,7 @@ doc = "A straight flight. The canonical intra-Space traversal edge."
 [[class]]
 path = "/Core/SpiralStairsShape"
 extends = "/Core/SolidShape"
-kind = "object"
+kind = "variant"
 status = "stable"
 doc = "A helical flight. The primitive that proves the library: it is the canonical multi-floor traversal AND the canonical is-this-a-ramp-or-steps collision question."
   [[class.field]]
@@ -2296,7 +2295,7 @@ doc = "A helical flight. The primitive that proves the library: it is the canoni
 [[class]]
 path = "/Core/CompositeShape"
 extends = "/Core/SolidShape"
-kind = "object"
+kind = "variant"
 status = "stable"
 doc = "A boolean combination of solid shapes."
   [[class.field]]
@@ -2311,7 +2310,7 @@ doc = "A boolean combination of solid shapes."
 [[class]]
 path = "/Core/QuadShape"
 extends = "/Core/SurfaceShape"
-kind = "object"
+kind = "variant"
 status = "stable"
 doc = "A flat rectangle."
   [[class.field]]
@@ -2334,7 +2333,7 @@ doc = "A flat rectangle."
 [[class]]
 path = "/Core/TriangleShape"
 extends = "/Core/SurfaceShape"
-kind = "object"
+kind = "variant"
 status = "stable"
 doc = "A single triangle."
   [[class.field]]
@@ -2365,7 +2364,7 @@ doc = "A single triangle."
 [[class]]
 path = "/Core/DiscShape"
 extends = "/Core/SurfaceShape"
-kind = "object"
+kind = "variant"
 status = "stable"
 doc = "A flat disc, optionally a sector."
   [[class.field]]
@@ -2405,7 +2404,7 @@ doc = "A flat disc, optionally a sector."
 [[class]]
 path = "/Core/EllipseShape"
 extends = "/Core/SurfaceShape"
-kind = "object"
+kind = "variant"
 status = "stable"
 doc = "A flat ellipse."
   [[class.field]]
@@ -2850,10 +2849,104 @@ doc = "The project's named budgets — the one place 'carry range' is a number. 
   status = "stable"
   doc = "A working copy to spend against. Null for a reference the book does not hold — a dangling budget is a load-time diagnostic, never a default limit quietly standing in."
 
-# NOTE: Cost's three forms — Distance(m), Time(s), Pool(pool, rate) — are VARIANTS OF A VALUE, not
-# subclasses. A struct is copied, not referenced, so it cannot be subclassed here (and should not be:
-# giving a cost identity is exactly the confusion Budget exists to resolve). The forms are recorded on
-# /Core/Cost's own doc and in 06-api's ▸ notation.
+[[class]]
+path = "/Core/DistanceCost"
+extends = "/Core/Cost"
+kind = "variant"
+status = "stable"
+doc = "Metres."
+  [[class.field]]
+  name = "limit"
+  type = "float"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "World units."
+
+[[class]]
+path = "/Core/TimeCost"
+extends = "/Core/Cost"
+kind = "variant"
+status = "stable"
+doc = "Seconds. Every TimeCost is a distance divided by player_profile.speed, which is why that setting is not optional."
+  [[class.field]]
+  name = "limit"
+  type = "float"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Seconds."
+  [[class.field]]
+  name = "speed"
+  type = "float"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "World units per second. Without it there is no way to turn seconds into a reachable distance."
+
+[[class]]
+path = "/Core/PoolCost"
+extends = "/Core/Cost"
+kind = "variant"
+status = "stable"
+doc = "Draw against a named resource pool at a rate. How a soft gate is a magnitude rather than a rule — the solver can trade it off instead of treating it as impassable."
+  [[class.field]]
+  name = "pool"
+  type = "String"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Which declared resource."
+  [[class.field]]
+  name = "limit"
+  type = "float"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "How much of the pool may be drawn."
+  [[class.field]]
+  name = "rate"
+  type = "float"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Draw per world unit travelled."
+
+[[class]]
+path = "/Core/NamedBudget"
+extends = "/Core/BudgetRef"
+kind = "variant"
+status = "stable"
+doc = "A row of the project's BudgetBook — retune it in one place and every site naming it moves."
+  [[class.field]]
+  name = "budget"
+  type = "Ref<Budget>"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Which named budget."
+
+[[class]]
+path = "/Core/InlineBudget"
+extends = "/Core/BudgetRef"
+kind = "variant"
+status = "stable"
+doc = "A cost authored at this site. Right for a one-off; a magic number if it repeats — and because inline and named are told apart, a tool can notice when it has."
+  [[class.field]]
+  name = "cost"
+  type = "Cost"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "What it costs, here."
 
 [[class]]
 path = "/Core/Path"
@@ -3798,14 +3891,14 @@ doc = "A tag match with an exact/inherited toggle. Why an eligible-surface list 
 
 [[class]]
 path = "/Core/Cost"
-kind = "struct"
+kind = "variant"
 sealed = true
 status = "stable"
 doc = "A kind and a limit, with NO accounting — Distance(m), Time(s) or Pool(pool, rate). What a Budget is a named instance of, and what an interaction spends."
 
 [[class]]
 path = "/Core/BudgetRef"
-kind = "struct"
+kind = "variant"
 sealed = true
 status = "stable"
 doc = "'This budget' — Named(Ref<Budget>) into the project's book, or Inline(Cost) authored at the site. BOTH forms stay and stay DISTINGUISHABLE: forcing a one-off through the book is ceremony for a number used once, and because the two are told apart a tool can notice the same inline number in twelve places and offer to extract it."

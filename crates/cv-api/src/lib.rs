@@ -8,7 +8,7 @@
 //!
 //! # The tier-1 surface, as data
 //!
-//! 135 declarations and 336 members. Every other surface in the toolchain — the VM's dispatch
+//! 140 declarations and 344 members. Every other surface in the toolchain — the VM's dispatch
 //! table, the inspector, the node palette, the reference — reads this rather than restating it.
 
 /// Which family a declaration belongs to.
@@ -20,6 +20,13 @@ pub enum DeclKind {
     Struct,
     /// A closed value set. Becomes a dropdown in the palette.
     Enum,
+    /// **A value with alternative forms** — copied like a struct, formed like an object.
+    ///
+    /// Identity and variance are orthogonal. A `Shape` and a `Cost` have forms and no identity, so
+    /// neither is an object; and a struct cannot carry forms, which left them as empty declarations.
+    /// A variant becomes a **discriminated union**, so a developer can switch on the form and have
+    /// the compiler check the arms.
+    Variant,
 }
 
 /// Release state. Generated palettes ship only `Stable`.
@@ -1235,7 +1242,7 @@ pub const CLASSES: &[ClassDesc] = &[
         fields: &[
             FieldDesc {
                 name: "shape",
-                ty: "Ref<Shape>",
+                ty: "Shape",
                 api: true,
                 is_final: false,
                 exposed: true,
@@ -2357,8 +2364,8 @@ pub const CLASSES: &[ClassDesc] = &[
     },
     ClassDesc {
         path: "/Core/Shape",
-        extends: Some("/Core/Object"),
-        kind: DeclKind::Object,
+        extends: None,
+        kind: DeclKind::Variant,
         sealed: false,
         is_abstract: false,
         status: Status::Stable,
@@ -2437,7 +2444,7 @@ pub const CLASSES: &[ClassDesc] = &[
                 name: "decompose",
                 params: &[
                 ],
-                returns: "Array<Ref<Shape>>",
+                returns: "Array<Shape>",
                 api: true,
                 is_final: true,
                 is_abstract: false,
@@ -2467,7 +2474,7 @@ pub const CLASSES: &[ClassDesc] = &[
     ClassDesc {
         path: "/Core/SolidShape",
         extends: Some("/Core/Shape"),
-        kind: DeclKind::Object,
+        kind: DeclKind::Variant,
         sealed: false,
         is_abstract: false,
         status: Status::Stable,
@@ -2496,7 +2503,7 @@ pub const CLASSES: &[ClassDesc] = &[
     ClassDesc {
         path: "/Core/SurfaceShape",
         extends: Some("/Core/Shape"),
-        kind: DeclKind::Object,
+        kind: DeclKind::Variant,
         sealed: false,
         is_abstract: false,
         status: Status::Stable,
@@ -2511,7 +2518,7 @@ pub const CLASSES: &[ClassDesc] = &[
     ClassDesc {
         path: "/Core/CubeShape",
         extends: Some("/Core/SolidShape"),
-        kind: DeclKind::Object,
+        kind: DeclKind::Variant,
         sealed: false,
         is_abstract: false,
         status: Status::Stable,
@@ -2559,7 +2566,7 @@ pub const CLASSES: &[ClassDesc] = &[
     ClassDesc {
         path: "/Core/SphereShape",
         extends: Some("/Core/SolidShape"),
-        kind: DeclKind::Object,
+        kind: DeclKind::Variant,
         sealed: false,
         is_abstract: false,
         status: Status::Stable,
@@ -2596,7 +2603,7 @@ pub const CLASSES: &[ClassDesc] = &[
     ClassDesc {
         path: "/Core/HemisphereShape",
         extends: Some("/Core/SolidShape"),
-        kind: DeclKind::Object,
+        kind: DeclKind::Variant,
         sealed: false,
         is_abstract: false,
         status: Status::Stable,
@@ -2644,7 +2651,7 @@ pub const CLASSES: &[ClassDesc] = &[
     ClassDesc {
         path: "/Core/ConeShape",
         extends: Some("/Core/SolidShape"),
-        kind: DeclKind::Object,
+        kind: DeclKind::Variant,
         sealed: false,
         is_abstract: false,
         status: Status::Stable,
@@ -2703,7 +2710,7 @@ pub const CLASSES: &[ClassDesc] = &[
     ClassDesc {
         path: "/Core/CapsuleShape",
         extends: Some("/Core/SolidShape"),
-        kind: DeclKind::Object,
+        kind: DeclKind::Variant,
         sealed: false,
         is_abstract: false,
         status: Status::Stable,
@@ -2751,7 +2758,7 @@ pub const CLASSES: &[ClassDesc] = &[
     ClassDesc {
         path: "/Core/CylinderShape",
         extends: Some("/Core/SolidShape"),
-        kind: DeclKind::Object,
+        kind: DeclKind::Variant,
         sealed: false,
         is_abstract: false,
         status: Status::Stable,
@@ -2821,7 +2828,7 @@ pub const CLASSES: &[ClassDesc] = &[
     ClassDesc {
         path: "/Core/PrismShape",
         extends: Some("/Core/SolidShape"),
-        kind: DeclKind::Object,
+        kind: DeclKind::Variant,
         sealed: false,
         is_abstract: false,
         status: Status::Stable,
@@ -2880,7 +2887,7 @@ pub const CLASSES: &[ClassDesc] = &[
     ClassDesc {
         path: "/Core/TorusShape",
         extends: Some("/Core/SolidShape"),
-        kind: DeclKind::Object,
+        kind: DeclKind::Variant,
         sealed: false,
         is_abstract: false,
         status: Status::Stable,
@@ -2939,7 +2946,7 @@ pub const CLASSES: &[ClassDesc] = &[
     ClassDesc {
         path: "/Core/PipeShape",
         extends: Some("/Core/SolidShape"),
-        kind: DeclKind::Object,
+        kind: DeclKind::Variant,
         sealed: false,
         is_abstract: false,
         status: Status::Stable,
@@ -2998,7 +3005,7 @@ pub const CLASSES: &[ClassDesc] = &[
     ClassDesc {
         path: "/Core/ArchShape",
         extends: Some("/Core/SolidShape"),
-        kind: DeclKind::Object,
+        kind: DeclKind::Variant,
         sealed: false,
         is_abstract: false,
         status: Status::Stable,
@@ -3068,7 +3075,7 @@ pub const CLASSES: &[ClassDesc] = &[
     ClassDesc {
         path: "/Core/RampShape",
         extends: Some("/Core/SolidShape"),
-        kind: DeclKind::Object,
+        kind: DeclKind::Variant,
         sealed: false,
         is_abstract: false,
         status: Status::Stable,
@@ -3138,7 +3145,7 @@ pub const CLASSES: &[ClassDesc] = &[
     ClassDesc {
         path: "/Core/StairsShape",
         extends: Some("/Core/SolidShape"),
-        kind: DeclKind::Object,
+        kind: DeclKind::Variant,
         sealed: false,
         is_abstract: false,
         status: Status::Stable,
@@ -3230,7 +3237,7 @@ pub const CLASSES: &[ClassDesc] = &[
     ClassDesc {
         path: "/Core/SpiralStairsShape",
         extends: Some("/Core/SolidShape"),
-        kind: DeclKind::Object,
+        kind: DeclKind::Variant,
         sealed: false,
         is_abstract: false,
         status: Status::Stable,
@@ -3322,7 +3329,7 @@ pub const CLASSES: &[ClassDesc] = &[
     ClassDesc {
         path: "/Core/CompositeShape",
         extends: Some("/Core/SolidShape"),
-        kind: DeclKind::Object,
+        kind: DeclKind::Variant,
         sealed: false,
         is_abstract: false,
         status: Status::Stable,
@@ -3348,7 +3355,7 @@ pub const CLASSES: &[ClassDesc] = &[
     ClassDesc {
         path: "/Core/QuadShape",
         extends: Some("/Core/SurfaceShape"),
-        kind: DeclKind::Object,
+        kind: DeclKind::Variant,
         sealed: false,
         is_abstract: false,
         status: Status::Stable,
@@ -3385,7 +3392,7 @@ pub const CLASSES: &[ClassDesc] = &[
     ClassDesc {
         path: "/Core/TriangleShape",
         extends: Some("/Core/SurfaceShape"),
-        kind: DeclKind::Object,
+        kind: DeclKind::Variant,
         sealed: false,
         is_abstract: false,
         status: Status::Stable,
@@ -3433,7 +3440,7 @@ pub const CLASSES: &[ClassDesc] = &[
     ClassDesc {
         path: "/Core/DiscShape",
         extends: Some("/Core/SurfaceShape"),
-        kind: DeclKind::Object,
+        kind: DeclKind::Variant,
         sealed: false,
         is_abstract: false,
         status: Status::Stable,
@@ -3492,7 +3499,7 @@ pub const CLASSES: &[ClassDesc] = &[
     ClassDesc {
         path: "/Core/EllipseShape",
         extends: Some("/Core/SurfaceShape"),
-        kind: DeclKind::Object,
+        kind: DeclKind::Variant,
         sealed: false,
         is_abstract: false,
         status: Status::Stable,
@@ -4237,6 +4244,169 @@ pub const CLASSES: &[ClassDesc] = &[
                 doc: "A working copy to spend against. Null for a reference the book does not hold — a dangling budget is a load-time diagnostic, never a default limit quietly standing in.",
                 default: None,
             },
+        ],
+        values: &[
+        ],
+    },
+    ClassDesc {
+        path: "/Core/DistanceCost",
+        extends: Some("/Core/Cost"),
+        kind: DeclKind::Variant,
+        sealed: false,
+        is_abstract: false,
+        status: Status::Stable,
+        doc: "Metres.",
+        fields: &[
+            FieldDesc {
+                name: "limit",
+                ty: "float",
+                api: true,
+                is_final: false,
+                exposed: true,
+                mutable: true,
+                status: Status::Stable,
+                doc: "World units.",
+                default: None,
+            },
+        ],
+        methods: &[
+        ],
+        values: &[
+        ],
+    },
+    ClassDesc {
+        path: "/Core/TimeCost",
+        extends: Some("/Core/Cost"),
+        kind: DeclKind::Variant,
+        sealed: false,
+        is_abstract: false,
+        status: Status::Stable,
+        doc: "Seconds. Every TimeCost is a distance divided by player_profile.speed, which is why that setting is not optional.",
+        fields: &[
+            FieldDesc {
+                name: "limit",
+                ty: "float",
+                api: true,
+                is_final: false,
+                exposed: true,
+                mutable: true,
+                status: Status::Stable,
+                doc: "Seconds.",
+                default: None,
+            },
+            FieldDesc {
+                name: "speed",
+                ty: "float",
+                api: true,
+                is_final: false,
+                exposed: true,
+                mutable: true,
+                status: Status::Stable,
+                doc: "World units per second. Without it there is no way to turn seconds into a reachable distance.",
+                default: None,
+            },
+        ],
+        methods: &[
+        ],
+        values: &[
+        ],
+    },
+    ClassDesc {
+        path: "/Core/PoolCost",
+        extends: Some("/Core/Cost"),
+        kind: DeclKind::Variant,
+        sealed: false,
+        is_abstract: false,
+        status: Status::Stable,
+        doc: "Draw against a named resource pool at a rate. How a soft gate is a magnitude rather than a rule — the solver can trade it off instead of treating it as impassable.",
+        fields: &[
+            FieldDesc {
+                name: "pool",
+                ty: "String",
+                api: true,
+                is_final: false,
+                exposed: true,
+                mutable: true,
+                status: Status::Stable,
+                doc: "Which declared resource.",
+                default: None,
+            },
+            FieldDesc {
+                name: "limit",
+                ty: "float",
+                api: true,
+                is_final: false,
+                exposed: true,
+                mutable: true,
+                status: Status::Stable,
+                doc: "How much of the pool may be drawn.",
+                default: None,
+            },
+            FieldDesc {
+                name: "rate",
+                ty: "float",
+                api: true,
+                is_final: false,
+                exposed: true,
+                mutable: true,
+                status: Status::Stable,
+                doc: "Draw per world unit travelled.",
+                default: None,
+            },
+        ],
+        methods: &[
+        ],
+        values: &[
+        ],
+    },
+    ClassDesc {
+        path: "/Core/NamedBudget",
+        extends: Some("/Core/BudgetRef"),
+        kind: DeclKind::Variant,
+        sealed: false,
+        is_abstract: false,
+        status: Status::Stable,
+        doc: "A row of the project's BudgetBook — retune it in one place and every site naming it moves.",
+        fields: &[
+            FieldDesc {
+                name: "budget",
+                ty: "Ref<Budget>",
+                api: true,
+                is_final: false,
+                exposed: true,
+                mutable: true,
+                status: Status::Stable,
+                doc: "Which named budget.",
+                default: None,
+            },
+        ],
+        methods: &[
+        ],
+        values: &[
+        ],
+    },
+    ClassDesc {
+        path: "/Core/InlineBudget",
+        extends: Some("/Core/BudgetRef"),
+        kind: DeclKind::Variant,
+        sealed: false,
+        is_abstract: false,
+        status: Status::Stable,
+        doc: "A cost authored at this site. Right for a one-off; a magic number if it repeats — and because inline and named are told apart, a tool can notice when it has.",
+        fields: &[
+            FieldDesc {
+                name: "cost",
+                ty: "Cost",
+                api: true,
+                is_final: false,
+                exposed: true,
+                mutable: true,
+                status: Status::Stable,
+                doc: "What it costs, here.",
+                default: None,
+            },
+        ],
+        methods: &[
         ],
         values: &[
         ],
@@ -5927,7 +6097,7 @@ pub const CLASSES: &[ClassDesc] = &[
     ClassDesc {
         path: "/Core/Cost",
         extends: None,
-        kind: DeclKind::Struct,
+        kind: DeclKind::Variant,
         sealed: true,
         is_abstract: false,
         status: Status::Stable,
@@ -5942,7 +6112,7 @@ pub const CLASSES: &[ClassDesc] = &[
     ClassDesc {
         path: "/Core/BudgetRef",
         extends: None,
-        kind: DeclKind::Struct,
+        kind: DeclKind::Variant,
         sealed: true,
         is_abstract: false,
         status: Status::Stable,
@@ -6305,7 +6475,7 @@ pub const CLASSES: &[ClassDesc] = &[
 ];
 
 /// Declaration counts, asserted by the manifest's own tests.
-pub const OBJECT_COUNT: usize = 89;
-pub const STRUCT_COUNT: usize = 30;
+pub const OBJECT_COUNT: usize = 68;
+pub const STRUCT_COUNT: usize = 28;
 pub const ENUM_COUNT: usize = 16;
-pub const MEMBER_COUNT: usize = 336;
+pub const MEMBER_COUNT: usize = 344;

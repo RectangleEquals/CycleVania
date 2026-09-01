@@ -157,6 +157,7 @@ fn kind_variant(k: Kind) -> &'static str {
         Kind::Object => "Object",
         Kind::Struct => "Struct",
         Kind::Enum => "Enum",
+        Kind::Variant => "Variant",
     }
 }
 
@@ -182,6 +183,13 @@ pub enum DeclKind {
     Struct,
     /// A closed value set. Becomes a dropdown in the palette.
     Enum,
+    /// **A value with alternative forms** — copied like a struct, formed like an object.
+    ///
+    /// Identity and variance are orthogonal. A `Shape` and a `Cost` have forms and no identity, so
+    /// neither is an object; and a struct cannot carry forms, which left them as empty declarations.
+    /// A variant becomes a **discriminated union**, so a developer can switch on the form and have
+    /// the compiler check the arms.
+    Variant,
 }
 
 /// Release state. Generated palettes ship only `Stable`.

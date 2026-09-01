@@ -44,6 +44,10 @@ pub fn emit(m: &Manifest) -> String {
             rows.push(enum_node(c));
             continue;
         }
+        if c.kind() == Kind::Variant {
+            rows.push(variant_node(c, m));
+            // A variant still gets get/set nodes for the members its base declares.
+        }
         for f in c
             .fields
             .iter()
@@ -125,6 +129,35 @@ fn enum_node(c: &Class) -> String {
     let _ = writeln!(s, "      \"shape\": \"literal\",");
     let _ = writeln!(s, "      \"doc\": {:?},", c.doc);
     let _ = writeln!(s, "      \"values\": [{}],", values.join(", "));
+    let _ = writeln!(
+        s,
+        "      \"pins\": [{{ \"name\": \"value\", \"type\": {:?}, \"dir\": \"out\" }}]",
+        c.short_name()
+    );
+    let _ = write!(s, "    }}");
+    s
+}
+
+/// A **form picker**: a dropdown of the variant's forms, and the chosen form's own fields.
+///
+/// ⚠ Emitted so the editor can render *one* widget for a value with alternatives. Without it a
+/// developer would build a `Cost` by picking a class and constructing it — which is the
+/// *"construct one to mean a kind"* shape the whole reference design exists to prevent.
+fn variant_node(c: &Class, m: &Manifest) -> String {
+    let forms: Vec<String> = m
+        .classes
+        .iter()
+        .filter(|f| f.extends.as_deref() == Some(c.path.as_str()) && f.status == Status::Stable)
+        .map(|f| format!("{:?}", f.short_name()))
+        .collect();
+    let mut s = String::new();
+    let _ = writeln!(s, "    {{");
+    let _ = writeln!(s, "      \"op\": {:?},", c.path);
+    let _ = writeln!(s, "      \"label\": {:?},", c.short_name());
+    let _ = writeln!(s, "      \"category\": \"Variant\",");
+    let _ = writeln!(s, "      \"shape\": \"form\",");
+    let _ = writeln!(s, "      \"doc\": {:?},", c.doc);
+    let _ = writeln!(s, "      \"forms\": [{}],", forms.join(", "));
     let _ = writeln!(
         s,
         "      \"pins\": [{{ \"name\": \"value\", \"type\": {:?}, \"dir\": \"out\" }}]",

@@ -1131,7 +1131,7 @@
       "doc": "The parametric primitive.",
       "pins": [
         { "name": "self", "type": "Ref<ShapeComponent>", "dir": "in" },
-        { "name": "value", "type": "Ref<Shape>", "dir": "out" }
+        { "name": "value", "type": "Shape", "dir": "out" }
       ]
     },
     {
@@ -1143,7 +1143,7 @@
       "pins": [
         { "name": "in", "type": "exec", "dir": "in" },
         { "name": "self", "type": "Ref<ShapeComponent>", "dir": "in" },
-        { "name": "value", "type": "Ref<Shape>", "dir": "in" },
+        { "name": "value", "type": "Shape", "dir": "in" },
         { "name": "out", "type": "exec", "dir": "out" }
       ]
     },
@@ -2397,6 +2397,15 @@
       ]
     },
     {
+      "op": "/Core/Shape",
+      "label": "Shape",
+      "category": "Variant",
+      "shape": "form",
+      "doc": "A parametric primitive. Collision is computed from parameters, never from tessellation — otherwise a visual LOD change silently alters generation.",
+      "forms": ["SolidShape", "SurfaceShape"],
+      "pins": [{ "name": "value", "type": "Shape", "dir": "out" }]
+    },
+    {
       "op": "/Core/Shape.bounds",
       "label": "bounds",
       "category": "Shape",
@@ -2473,7 +2482,7 @@
         { "name": "in", "type": "exec", "dir": "in" },
         { "name": "self", "type": "Ref<Shape>", "dir": "in" },
         { "name": "out", "type": "exec", "dir": "out" },
-        { "name": "return", "type": "Array<Ref<Shape>>", "dir": "out" }
+        { "name": "return", "type": "Array<Shape>", "dir": "out" }
       ]
     },
     {
@@ -2491,6 +2500,15 @@
       ]
     },
     {
+      "op": "/Core/SolidShape",
+      "label": "SolidShape",
+      "category": "Variant",
+      "shape": "form",
+      "doc": "A shape with an inside. Supports booleans and a signed distance field.",
+      "forms": ["CubeShape", "SphereShape", "HemisphereShape", "ConeShape", "CapsuleShape", "CylinderShape", "PrismShape", "TorusShape", "PipeShape", "ArchShape", "RampShape", "StairsShape", "SpiralStairsShape", "CompositeShape"],
+      "pins": [{ "name": "value", "type": "SolidShape", "dir": "out" }]
+    },
+    {
       "op": "/Core/SolidShape.sdf",
       "label": "sdf",
       "category": "SolidShape",
@@ -2503,6 +2521,24 @@
         { "name": "out", "type": "exec", "dir": "out" },
         { "name": "return", "type": "float", "dir": "out" }
       ]
+    },
+    {
+      "op": "/Core/SurfaceShape",
+      "label": "SurfaceShape",
+      "category": "Variant",
+      "shape": "form",
+      "doc": "Zero thickness — no inside, so no sdf and no booleans.",
+      "forms": ["QuadShape", "TriangleShape", "DiscShape", "EllipseShape"],
+      "pins": [{ "name": "value", "type": "SurfaceShape", "dir": "out" }]
+    },
+    {
+      "op": "/Core/CubeShape",
+      "label": "CubeShape",
+      "category": "Variant",
+      "shape": "form",
+      "doc": "A box.",
+      "forms": [],
+      "pins": [{ "name": "value", "type": "CubeShape", "dir": "out" }]
     },
     {
       "op": "/Core/CubeShape.extents#get",
@@ -2577,6 +2613,15 @@
       ]
     },
     {
+      "op": "/Core/SphereShape",
+      "label": "SphereShape",
+      "category": "Variant",
+      "shape": "form",
+      "doc": "A sphere.",
+      "forms": [],
+      "pins": [{ "name": "value", "type": "SphereShape", "dir": "out" }]
+    },
+    {
       "op": "/Core/SphereShape.radius#get",
       "label": "get radius",
       "category": "SphereShape",
@@ -2623,6 +2668,15 @@
         { "name": "value", "type": "Vec2", "dir": "in" },
         { "name": "out", "type": "exec", "dir": "out" }
       ]
+    },
+    {
+      "op": "/Core/HemisphereShape",
+      "label": "HemisphereShape",
+      "category": "Variant",
+      "shape": "form",
+      "doc": "Half a sphere.",
+      "forms": [],
+      "pins": [{ "name": "value", "type": "HemisphereShape", "dir": "out" }]
     },
     {
       "op": "/Core/HemisphereShape.radius#get",
@@ -2695,6 +2749,15 @@
         { "name": "value", "type": "bool", "dir": "in" },
         { "name": "out", "type": "exec", "dir": "out" }
       ]
+    },
+    {
+      "op": "/Core/ConeShape",
+      "label": "ConeShape",
+      "category": "Variant",
+      "shape": "form",
+      "doc": "A cone.",
+      "forms": [],
+      "pins": [{ "name": "value", "type": "ConeShape", "dir": "out" }]
     },
     {
       "op": "/Core/ConeShape.radius#get",
@@ -2793,6 +2856,15 @@
       ]
     },
     {
+      "op": "/Core/CapsuleShape",
+      "label": "CapsuleShape",
+      "category": "Variant",
+      "shape": "form",
+      "doc": "A capsule — the usual occupant proxy.",
+      "forms": [],
+      "pins": [{ "name": "value", "type": "CapsuleShape", "dir": "out" }]
+    },
+    {
       "op": "/Core/CapsuleShape.radius#get",
       "label": "get radius",
       "category": "CapsuleShape",
@@ -2863,6 +2935,15 @@
         { "name": "value", "type": "Vec2", "dir": "in" },
         { "name": "out", "type": "exec", "dir": "out" }
       ]
+    },
+    {
+      "op": "/Core/CylinderShape",
+      "label": "CylinderShape",
+      "category": "Variant",
+      "shape": "form",
+      "doc": "A cylinder, or a truncated cone when the radii differ.",
+      "forms": [],
+      "pins": [{ "name": "value", "type": "CylinderShape", "dir": "out" }]
     },
     {
       "op": "/Core/CylinderShape.radius_top#get",
@@ -2985,6 +3066,15 @@
       ]
     },
     {
+      "op": "/Core/PrismShape",
+      "label": "PrismShape",
+      "category": "Variant",
+      "shape": "form",
+      "doc": "An n-sided prism.",
+      "forms": [],
+      "pins": [{ "name": "value", "type": "PrismShape", "dir": "out" }]
+    },
+    {
       "op": "/Core/PrismShape.sides#get",
       "label": "get sides",
       "category": "PrismShape",
@@ -3079,6 +3169,15 @@
         { "name": "value", "type": "float", "dir": "in" },
         { "name": "out", "type": "exec", "dir": "out" }
       ]
+    },
+    {
+      "op": "/Core/TorusShape",
+      "label": "TorusShape",
+      "category": "Variant",
+      "shape": "form",
+      "doc": "A torus, optionally a partial arc.",
+      "forms": [],
+      "pins": [{ "name": "value", "type": "TorusShape", "dir": "out" }]
     },
     {
       "op": "/Core/TorusShape.major_radius#get",
@@ -3177,6 +3276,15 @@
       ]
     },
     {
+      "op": "/Core/PipeShape",
+      "label": "PipeShape",
+      "category": "Variant",
+      "shape": "form",
+      "doc": "A hollow cylinder.",
+      "forms": [],
+      "pins": [{ "name": "value", "type": "PipeShape", "dir": "out" }]
+    },
+    {
       "op": "/Core/PipeShape.inner_radius#get",
       "label": "get inner_radius",
       "category": "PipeShape",
@@ -3271,6 +3379,15 @@
         { "name": "value", "type": "int", "dir": "in" },
         { "name": "out", "type": "exec", "dir": "out" }
       ]
+    },
+    {
+      "op": "/Core/ArchShape",
+      "label": "ArchShape",
+      "category": "Variant",
+      "shape": "form",
+      "doc": "An arched opening — a doorway primitive.",
+      "forms": [],
+      "pins": [{ "name": "value", "type": "ArchShape", "dir": "out" }]
     },
     {
       "op": "/Core/ArchShape.width#get",
@@ -3393,6 +3510,15 @@
       ]
     },
     {
+      "op": "/Core/RampShape",
+      "label": "RampShape",
+      "category": "Variant",
+      "shape": "form",
+      "doc": "An inclined plane with thickness. A traversal primitive as much as a visual one.",
+      "forms": [],
+      "pins": [{ "name": "value", "type": "RampShape", "dir": "out" }]
+    },
+    {
       "op": "/Core/RampShape.width#get",
       "label": "get width",
       "category": "RampShape",
@@ -3511,6 +3637,15 @@
         { "name": "value", "type": "bool", "dir": "in" },
         { "name": "out", "type": "exec", "dir": "out" }
       ]
+    },
+    {
+      "op": "/Core/StairsShape",
+      "label": "StairsShape",
+      "category": "Variant",
+      "shape": "form",
+      "doc": "A straight flight. The canonical intra-Space traversal edge.",
+      "forms": [],
+      "pins": [{ "name": "value", "type": "StairsShape", "dir": "out" }]
     },
     {
       "op": "/Core/StairsShape.width#get",
@@ -3681,6 +3816,15 @@
       ]
     },
     {
+      "op": "/Core/SpiralStairsShape",
+      "label": "SpiralStairsShape",
+      "category": "Variant",
+      "shape": "form",
+      "doc": "A helical flight. The primitive that proves the library: it is the canonical multi-floor traversal AND the canonical is-this-a-ramp-or-steps collision question.",
+      "forms": [],
+      "pins": [{ "name": "value", "type": "SpiralStairsShape", "dir": "out" }]
+    },
+    {
       "op": "/Core/SpiralStairsShape.inner_radius#get",
       "label": "get inner_radius",
       "category": "SpiralStairsShape",
@@ -3849,6 +3993,15 @@
       ]
     },
     {
+      "op": "/Core/CompositeShape",
+      "label": "CompositeShape",
+      "category": "Variant",
+      "shape": "form",
+      "doc": "A boolean combination of solid shapes.",
+      "forms": [],
+      "pins": [{ "name": "value", "type": "CompositeShape", "dir": "out" }]
+    },
+    {
       "op": "/Core/CompositeShape.operations#get",
       "label": "get operations",
       "category": "CompositeShape",
@@ -3871,6 +4024,15 @@
         { "name": "value", "type": "Array<BooleanOp>", "dir": "in" },
         { "name": "out", "type": "exec", "dir": "out" }
       ]
+    },
+    {
+      "op": "/Core/QuadShape",
+      "label": "QuadShape",
+      "category": "Variant",
+      "shape": "form",
+      "doc": "A flat rectangle.",
+      "forms": [],
+      "pins": [{ "name": "value", "type": "QuadShape", "dir": "out" }]
     },
     {
       "op": "/Core/QuadShape.extents#get",
@@ -3919,6 +4081,15 @@
         { "name": "value", "type": "Vec2", "dir": "in" },
         { "name": "out", "type": "exec", "dir": "out" }
       ]
+    },
+    {
+      "op": "/Core/TriangleShape",
+      "label": "TriangleShape",
+      "category": "Variant",
+      "shape": "form",
+      "doc": "A single triangle.",
+      "forms": [],
+      "pins": [{ "name": "value", "type": "TriangleShape", "dir": "out" }]
     },
     {
       "op": "/Core/TriangleShape.a#get",
@@ -3991,6 +4162,15 @@
         { "name": "value", "type": "Vec3", "dir": "in" },
         { "name": "out", "type": "exec", "dir": "out" }
       ]
+    },
+    {
+      "op": "/Core/DiscShape",
+      "label": "DiscShape",
+      "category": "Variant",
+      "shape": "form",
+      "doc": "A flat disc, optionally a sector.",
+      "forms": [],
+      "pins": [{ "name": "value", "type": "DiscShape", "dir": "out" }]
     },
     {
       "op": "/Core/DiscShape.radius#get",
@@ -4087,6 +4267,15 @@
         { "name": "value", "type": "float", "dir": "in" },
         { "name": "out", "type": "exec", "dir": "out" }
       ]
+    },
+    {
+      "op": "/Core/EllipseShape",
+      "label": "EllipseShape",
+      "category": "Variant",
+      "shape": "form",
+      "doc": "A flat ellipse.",
+      "forms": [],
+      "pins": [{ "name": "value", "type": "EllipseShape", "dir": "out" }]
     },
     {
       "op": "/Core/EllipseShape.radius#get",
@@ -4766,6 +4955,243 @@
         { "name": "budget", "type": "Ref<Budget>", "dir": "in" },
         { "name": "out", "type": "exec", "dir": "out" },
         { "name": "return", "type": "Ref<Budget>", "dir": "out" }
+      ]
+    },
+    {
+      "op": "/Core/DistanceCost",
+      "label": "DistanceCost",
+      "category": "Variant",
+      "shape": "form",
+      "doc": "Metres.",
+      "forms": [],
+      "pins": [{ "name": "value", "type": "DistanceCost", "dir": "out" }]
+    },
+    {
+      "op": "/Core/DistanceCost.limit#get",
+      "label": "get limit",
+      "category": "DistanceCost",
+      "shape": "pure",
+      "doc": "World units.",
+      "pins": [
+        { "name": "self", "type": "Ref<DistanceCost>", "dir": "in" },
+        { "name": "value", "type": "float", "dir": "out" }
+      ]
+    },
+    {
+      "op": "/Core/DistanceCost.limit#set",
+      "label": "set limit",
+      "category": "DistanceCost",
+      "shape": "call",
+      "doc": "World units.",
+      "pins": [
+        { "name": "in", "type": "exec", "dir": "in" },
+        { "name": "self", "type": "Ref<DistanceCost>", "dir": "in" },
+        { "name": "value", "type": "float", "dir": "in" },
+        { "name": "out", "type": "exec", "dir": "out" }
+      ]
+    },
+    {
+      "op": "/Core/TimeCost",
+      "label": "TimeCost",
+      "category": "Variant",
+      "shape": "form",
+      "doc": "Seconds. Every TimeCost is a distance divided by player_profile.speed, which is why that setting is not optional.",
+      "forms": [],
+      "pins": [{ "name": "value", "type": "TimeCost", "dir": "out" }]
+    },
+    {
+      "op": "/Core/TimeCost.limit#get",
+      "label": "get limit",
+      "category": "TimeCost",
+      "shape": "pure",
+      "doc": "Seconds.",
+      "pins": [
+        { "name": "self", "type": "Ref<TimeCost>", "dir": "in" },
+        { "name": "value", "type": "float", "dir": "out" }
+      ]
+    },
+    {
+      "op": "/Core/TimeCost.limit#set",
+      "label": "set limit",
+      "category": "TimeCost",
+      "shape": "call",
+      "doc": "Seconds.",
+      "pins": [
+        { "name": "in", "type": "exec", "dir": "in" },
+        { "name": "self", "type": "Ref<TimeCost>", "dir": "in" },
+        { "name": "value", "type": "float", "dir": "in" },
+        { "name": "out", "type": "exec", "dir": "out" }
+      ]
+    },
+    {
+      "op": "/Core/TimeCost.speed#get",
+      "label": "get speed",
+      "category": "TimeCost",
+      "shape": "pure",
+      "doc": "World units per second. Without it there is no way to turn seconds into a reachable distance.",
+      "pins": [
+        { "name": "self", "type": "Ref<TimeCost>", "dir": "in" },
+        { "name": "value", "type": "float", "dir": "out" }
+      ]
+    },
+    {
+      "op": "/Core/TimeCost.speed#set",
+      "label": "set speed",
+      "category": "TimeCost",
+      "shape": "call",
+      "doc": "World units per second. Without it there is no way to turn seconds into a reachable distance.",
+      "pins": [
+        { "name": "in", "type": "exec", "dir": "in" },
+        { "name": "self", "type": "Ref<TimeCost>", "dir": "in" },
+        { "name": "value", "type": "float", "dir": "in" },
+        { "name": "out", "type": "exec", "dir": "out" }
+      ]
+    },
+    {
+      "op": "/Core/PoolCost",
+      "label": "PoolCost",
+      "category": "Variant",
+      "shape": "form",
+      "doc": "Draw against a named resource pool at a rate. How a soft gate is a magnitude rather than a rule — the solver can trade it off instead of treating it as impassable.",
+      "forms": [],
+      "pins": [{ "name": "value", "type": "PoolCost", "dir": "out" }]
+    },
+    {
+      "op": "/Core/PoolCost.pool#get",
+      "label": "get pool",
+      "category": "PoolCost",
+      "shape": "pure",
+      "doc": "Which declared resource.",
+      "pins": [
+        { "name": "self", "type": "Ref<PoolCost>", "dir": "in" },
+        { "name": "value", "type": "String", "dir": "out" }
+      ]
+    },
+    {
+      "op": "/Core/PoolCost.pool#set",
+      "label": "set pool",
+      "category": "PoolCost",
+      "shape": "call",
+      "doc": "Which declared resource.",
+      "pins": [
+        { "name": "in", "type": "exec", "dir": "in" },
+        { "name": "self", "type": "Ref<PoolCost>", "dir": "in" },
+        { "name": "value", "type": "String", "dir": "in" },
+        { "name": "out", "type": "exec", "dir": "out" }
+      ]
+    },
+    {
+      "op": "/Core/PoolCost.limit#get",
+      "label": "get limit",
+      "category": "PoolCost",
+      "shape": "pure",
+      "doc": "How much of the pool may be drawn.",
+      "pins": [
+        { "name": "self", "type": "Ref<PoolCost>", "dir": "in" },
+        { "name": "value", "type": "float", "dir": "out" }
+      ]
+    },
+    {
+      "op": "/Core/PoolCost.limit#set",
+      "label": "set limit",
+      "category": "PoolCost",
+      "shape": "call",
+      "doc": "How much of the pool may be drawn.",
+      "pins": [
+        { "name": "in", "type": "exec", "dir": "in" },
+        { "name": "self", "type": "Ref<PoolCost>", "dir": "in" },
+        { "name": "value", "type": "float", "dir": "in" },
+        { "name": "out", "type": "exec", "dir": "out" }
+      ]
+    },
+    {
+      "op": "/Core/PoolCost.rate#get",
+      "label": "get rate",
+      "category": "PoolCost",
+      "shape": "pure",
+      "doc": "Draw per world unit travelled.",
+      "pins": [
+        { "name": "self", "type": "Ref<PoolCost>", "dir": "in" },
+        { "name": "value", "type": "float", "dir": "out" }
+      ]
+    },
+    {
+      "op": "/Core/PoolCost.rate#set",
+      "label": "set rate",
+      "category": "PoolCost",
+      "shape": "call",
+      "doc": "Draw per world unit travelled.",
+      "pins": [
+        { "name": "in", "type": "exec", "dir": "in" },
+        { "name": "self", "type": "Ref<PoolCost>", "dir": "in" },
+        { "name": "value", "type": "float", "dir": "in" },
+        { "name": "out", "type": "exec", "dir": "out" }
+      ]
+    },
+    {
+      "op": "/Core/NamedBudget",
+      "label": "NamedBudget",
+      "category": "Variant",
+      "shape": "form",
+      "doc": "A row of the project's BudgetBook — retune it in one place and every site naming it moves.",
+      "forms": [],
+      "pins": [{ "name": "value", "type": "NamedBudget", "dir": "out" }]
+    },
+    {
+      "op": "/Core/NamedBudget.budget#get",
+      "label": "get budget",
+      "category": "NamedBudget",
+      "shape": "pure",
+      "doc": "Which named budget.",
+      "pins": [
+        { "name": "self", "type": "Ref<NamedBudget>", "dir": "in" },
+        { "name": "value", "type": "Ref<Budget>", "dir": "out" }
+      ]
+    },
+    {
+      "op": "/Core/NamedBudget.budget#set",
+      "label": "set budget",
+      "category": "NamedBudget",
+      "shape": "call",
+      "doc": "Which named budget.",
+      "pins": [
+        { "name": "in", "type": "exec", "dir": "in" },
+        { "name": "self", "type": "Ref<NamedBudget>", "dir": "in" },
+        { "name": "value", "type": "Ref<Budget>", "dir": "in" },
+        { "name": "out", "type": "exec", "dir": "out" }
+      ]
+    },
+    {
+      "op": "/Core/InlineBudget",
+      "label": "InlineBudget",
+      "category": "Variant",
+      "shape": "form",
+      "doc": "A cost authored at this site. Right for a one-off; a magic number if it repeats — and because inline and named are told apart, a tool can notice when it has.",
+      "forms": [],
+      "pins": [{ "name": "value", "type": "InlineBudget", "dir": "out" }]
+    },
+    {
+      "op": "/Core/InlineBudget.cost#get",
+      "label": "get cost",
+      "category": "InlineBudget",
+      "shape": "pure",
+      "doc": "What it costs, here.",
+      "pins": [
+        { "name": "self", "type": "Ref<InlineBudget>", "dir": "in" },
+        { "name": "value", "type": "Cost", "dir": "out" }
+      ]
+    },
+    {
+      "op": "/Core/InlineBudget.cost#set",
+      "label": "set cost",
+      "category": "InlineBudget",
+      "shape": "call",
+      "doc": "What it costs, here.",
+      "pins": [
+        { "name": "in", "type": "exec", "dir": "in" },
+        { "name": "self", "type": "Ref<InlineBudget>", "dir": "in" },
+        { "name": "value", "type": "Cost", "dir": "in" },
+        { "name": "out", "type": "exec", "dir": "out" }
       ]
     },
     {
@@ -6076,6 +6502,24 @@
         { "name": "out", "type": "exec", "dir": "out" },
         { "name": "return", "type": "float", "dir": "out" }
       ]
+    },
+    {
+      "op": "/Core/Cost",
+      "label": "Cost",
+      "category": "Variant",
+      "shape": "form",
+      "doc": "A kind and a limit, with NO accounting — Distance(m), Time(s) or Pool(pool, rate). What a Budget is a named instance of, and what an interaction spends.",
+      "forms": ["DistanceCost", "TimeCost", "PoolCost"],
+      "pins": [{ "name": "value", "type": "Cost", "dir": "out" }]
+    },
+    {
+      "op": "/Core/BudgetRef",
+      "label": "BudgetRef",
+      "category": "Variant",
+      "shape": "form",
+      "doc": "'This budget' — Named(Ref<Budget>) into the project's book, or Inline(Cost) authored at the site. BOTH forms stay and stay DISTINGUISHABLE: forcing a one-off through the book is ceremony for a number used once, and because the two are told apart a tool can notice the same inline number in twelve places and offer to extract it.",
+      "forms": ["NamedBudget", "InlineBudget"],
+      "pins": [{ "name": "value", "type": "BudgetRef", "dir": "out" }]
     },
     {
       "op": "/Core/Face",

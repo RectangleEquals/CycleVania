@@ -477,7 +477,7 @@ export interface ShapeComponent extends Component {
   /**
    * The parametric primitive.
    */
-  shape: InstanceRef<Shape>;
+  shape: Shape;
   /**
    * The Surface class this shape presents.
    */
@@ -964,7 +964,7 @@ export interface RemoteUse extends Interaction {
  * A parametric primitive. Collision is computed from parameters, never from tessellation —
  * otherwise a visual LOD change silently alters generation.
  */
-export interface Shape extends Object {
+export interface Shape {
   /**
    * Axis-aligned extent.
    */
@@ -988,12 +988,19 @@ export interface Shape extends Object {
   /**
    * Convex decomposition.
    */
-  decompose(): InstanceRef<Shape>[];
+  decompose(): Shape[];
   /**
    * Render geometry. Deliberately NOT the source of collision.
    */
   tessellate(lod: number): InstanceRef<MeshResource>;
 }
+
+/**
+ * The forms of Shape. Switch on `form` — TypeScript narrows each arm.
+ */
+export type ShapeForm =
+  | (SolidShape & { form: "SolidShape" })
+  | (SurfaceShape & { form: "SurfaceShape" });
 
 /**
  * A shape with an inside. Supports booleans and a signed distance field.
@@ -1006,10 +1013,38 @@ export interface SolidShape extends Shape {
 }
 
 /**
+ * The forms of SolidShape. Switch on `form` — TypeScript narrows each arm.
+ */
+export type SolidShapeForm =
+  | (CubeShape & { form: "CubeShape" })
+  | (SphereShape & { form: "SphereShape" })
+  | (HemisphereShape & { form: "HemisphereShape" })
+  | (ConeShape & { form: "ConeShape" })
+  | (CapsuleShape & { form: "CapsuleShape" })
+  | (CylinderShape & { form: "CylinderShape" })
+  | (PrismShape & { form: "PrismShape" })
+  | (TorusShape & { form: "TorusShape" })
+  | (PipeShape & { form: "PipeShape" })
+  | (ArchShape & { form: "ArchShape" })
+  | (RampShape & { form: "RampShape" })
+  | (StairsShape & { form: "StairsShape" })
+  | (SpiralStairsShape & { form: "SpiralStairsShape" })
+  | (CompositeShape & { form: "CompositeShape" });
+
+/**
  * Zero thickness — no inside, so no sdf and no booleans.
  */
 export interface SurfaceShape extends Shape {
 }
+
+/**
+ * The forms of SurfaceShape. Switch on `form` — TypeScript narrows each arm.
+ */
+export type SurfaceShapeForm =
+  | (QuadShape & { form: "QuadShape" })
+  | (TriangleShape & { form: "TriangleShape" })
+  | (DiscShape & { form: "DiscShape" })
+  | (EllipseShape & { form: "EllipseShape" });
 
 /**
  * A box.
@@ -1676,6 +1711,72 @@ export interface BudgetBook extends Object {
    * budget is a load-time diagnostic, never a default limit quietly standing in.
    */
   open(budget: InstanceRef<Budget>): InstanceRef<Budget>;
+}
+
+/**
+ * Metres.
+ */
+export interface DistanceCost extends Cost {
+  /**
+   * World units.
+   */
+  limit: number;
+}
+
+/**
+ * Seconds. Every TimeCost is a distance divided by player_profile.speed, which is why that setting
+ * is not optional.
+ */
+export interface TimeCost extends Cost {
+  /**
+   * Seconds.
+   */
+  limit: number;
+  /**
+   * World units per second. Without it there is no way to turn seconds into a reachable
+   * distance.
+   */
+  speed: number;
+}
+
+/**
+ * Draw against a named resource pool at a rate. How a soft gate is a magnitude rather than a rule
+ * — the solver can trade it off instead of treating it as impassable.
+ */
+export interface PoolCost extends Cost {
+  /**
+   * Which declared resource.
+   */
+  pool: string;
+  /**
+   * How much of the pool may be drawn.
+   */
+  limit: number;
+  /**
+   * Draw per world unit travelled.
+   */
+  rate: number;
+}
+
+/**
+ * A row of the project's BudgetBook — retune it in one place and every site naming it moves.
+ */
+export interface NamedBudget extends BudgetRef {
+  /**
+   * Which named budget.
+   */
+  budget: InstanceRef<Budget>;
+}
+
+/**
+ * A cost authored at this site. Right for a one-off; a magic number if it repeats — and because
+ * inline and named are told apart, a tool can notice when it has.
+ */
+export interface InlineBudget extends BudgetRef {
+  /**
+   * What it costs, here.
+   */
+  cost: Cost;
 }
 
 /**
@@ -2351,6 +2452,14 @@ export interface Cost {
 }
 
 /**
+ * The forms of Cost. Switch on `form` — TypeScript narrows each arm.
+ */
+export type CostForm =
+  | (DistanceCost & { form: "DistanceCost" })
+  | (TimeCost & { form: "TimeCost" })
+  | (PoolCost & { form: "PoolCost" });
+
+/**
  * 'This budget' — Named(Ref<Budget>) into the project's book, or Inline(Cost) authored at the
  * site. BOTH forms stay and stay DISTINGUISHABLE: forcing a one-off through the book is ceremony
  * for a number used once, and because the two are told apart a tool can notice the same inline
@@ -2360,6 +2469,13 @@ export interface Cost {
  */
 export interface BudgetRef {
 }
+
+/**
+ * The forms of BudgetRef. Switch on `form` — TypeScript narrows each arm.
+ */
+export type BudgetRefForm =
+  | (NamedBudget & { form: "NamedBudget" })
+  | (InlineBudget & { form: "InlineBudget" });
 
 /**
  * How many of something may exist, per scope.

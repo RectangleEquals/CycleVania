@@ -7,14 +7,27 @@ use std::collections::BTreeMap;
 
 /// Which family a declaration belongs to.
 ///
-/// The three are not interchangeable and the generator emits different things for each: an `Object`
+/// The four are not interchangeable and the generator emits something different for each: an `Object`
 /// has identity and may be subclassed, a `Struct` is copied and may not, an `Enum` is a closed value
-/// set that becomes a dropdown in the palette.
+/// set that becomes a dropdown, and a `Variant` is **a value with alternative forms**.
+///
+/// # Why `Variant` exists
+///
+/// ⚠ **Identity and variance are orthogonal, and conflating them cost us twice.** Subclassing is how a
+/// class model expresses alternatives, so anything with alternatives drifted into `Object` — which
+/// handed identity to things that are *copied*. A `Shape` is not referenced; a `Cost` is not
+/// referenced. Declaring them objects made 20 records that can never be pointed at, and the ones that
+/// were honestly declared structs (`Cost`, `BudgetRef`) generated as **empty interfaces**, because a
+/// struct may not extend and there was nowhere for the forms to go.
+///
+/// A `Variant` is copied like a struct and has forms like an object. It emits as a **discriminated
+/// union**, which is what lets a developer `switch` on the form and have the compiler check the arms.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Kind {
     Object,
     Struct,
     Enum,
+    Variant,
 }
 
 impl Kind {
@@ -22,6 +35,7 @@ impl Kind {
         match s {
             "object" => Some(Kind::Object),
             "struct" => Some(Kind::Struct),
+            "variant" => Some(Kind::Variant),
             "enum" => Some(Kind::Enum),
             _ => None,
         }
@@ -31,6 +45,7 @@ impl Kind {
         match self {
             Kind::Object => "object",
             Kind::Struct => "struct",
+            Kind::Variant => "variant",
             Kind::Enum => "enum",
         }
     }

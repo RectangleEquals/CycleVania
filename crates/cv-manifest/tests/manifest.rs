@@ -41,22 +41,28 @@ fn declaration_counts() {
     let m = manifest();
     let objects = m.count_of(Kind::Object);
     let structs = m.count_of(Kind::Struct);
+    let variants = m.count_of(Kind::Variant);
     let enums = m.count_of(Kind::Enum);
 
     // M03a: +/Core/UnlockTableResource (object, 3 members) and +/Core/Unlock (struct, doc-only as
     // every struct here is); -Object::satisfied_by. So 328 - 1 + 3 = 330.
     //
-    // Budgets became named rows: -DistanceBudget/-TimeBudget/-PoolBudget (their three forms are
-    // variants of `Cost`, which is a *value* and so cannot be subclassed), +BudgetBook. Objects
-    // 91 - 3 + 1 = 89. +BudgetRef makes structs 30.
+    // Budgets became named rows: -DistanceBudget/-TimeBudget/-PoolBudget, +BudgetBook. Objects
+    // 91 - 3 + 1 = 89. +BudgetRef makes structs 30. Members 330 + 8 - 2 = 336.
     //
-    // Members: +Budget::{name, cost, judge}, +BudgetBook::{declare, retune, by_name, open},
-    // +OverBudgetVerdict::against, -PoolBudget::{pool, rate}. So 330 + 8 - 2 = 336.
-    assert_eq!(objects, 89, "object declarations");
-    assert_eq!(structs, 30, "struct declarations");
+    // Then `variant` arrived — a VALUE WITH ALTERNATIVE FORMS. 21 Shape records moved out of
+    // `object` (they are copied, never referenced — the new rule caught two `Ref<Shape>` fields the
+    // design types as bare `Shape`), and `Cost`/`BudgetRef` moved out of `struct` (a struct cannot
+    // carry forms, so both had been generating as EMPTY interfaces). Their five forms are new:
+    // Distance/Time/PoolCost and Named/InlineBudget, carrying 8 members between them.
+    //
+    // Objects 89 - 21 = 68. Structs 30 - 2 = 28. Variants 21 + 2 + 5 = 28. Members 336 + 8 = 344.
+    assert_eq!(objects, 68, "object declarations");
+    assert_eq!(structs, 28, "struct declarations");
+    assert_eq!(variants, 28, "variant declarations");
     assert_eq!(enums, 16, "enum declarations");
-    assert_eq!(m.classes.len(), 135, "total declarations");
-    assert_eq!(m.member_count(), 336, "fields + methods");
+    assert_eq!(m.classes.len(), 140, "total declarations");
+    assert_eq!(m.member_count(), 344, "fields + methods");
 }
 
 /// Spot-checks against `.notes/Design/v0.2b/06-api/reference.md`. Not exhaustive — the exhaustive
@@ -184,6 +190,118 @@ fn rule_and_verdict_are_sealed() {
             .unwrap_or_else(|| panic!("{sub}"));
         assert_eq!(c.extends.as_deref(), Some("/Core/Rule"));
         assert!(c.sealed, "{sub} must be sealed");
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Values are copied; objects are pointed at. Keeping the two apart is what `variant` is for.
+// ---------------------------------------------------------------------------------------------
+
+/// ⚠ **The rule with teeth.** `Ref<Shape>` type-checked for as long as `Shape` was declared an object,
+/// and it *was in the manifest* — on a field [`06-api`] types as a bare `Shape`, and on a `decompose()`
+/// that returns convex **pieces**. A `Ref<T>` to something with no identity is a pointer to a copy: two
+/// of them compare unequal while meaning the same thing, and nothing in the declaration says so.
+#[test]
+fn a_value_is_never_referenced() {
+    let m = manifest();
+    let valued: std::collections::BTreeSet<&str> = m
+        .classes
+        .iter()
+        .filter(|c| matches!(c.kind(), Kind::Struct | Kind::Variant | Kind::Enum))
+        .map(|c| c.short_name())
+        .collect();
+
+    let mut offenders = Vec::new();
+    for c in &m.classes {
+        let mut check = |ty: &str, member: &str| {
+            for wrapper in ["Ref<", "Kind<"] {
+                let mut rest = ty;
+                while let Some(at) = rest.find(wrapper) {
+                    rest = &rest[at + wrapper.len()..];
+                    let inner: String = rest
+                        .chars()
+                        .take_while(|ch| ch.is_alphanumeric() || *ch == '_')
+                        .collect();
+                    if valued.contains(inner.as_str()) {
+                        offenders.push(format!("{}::{member} is {wrapper}{inner}>", c.path));
+                    }
+                }
+            }
+        };
+        for f in &c.fields {
+            check(&f.ty, &f.name);
+        }
+        for me in &c.methods {
+            check(&me.returns, &me.name);
+            for p in &me.params {
+                check(&p.ty, &me.name);
+            }
+        }
+    }
+    assert!(offenders.is_empty(), "values referenced: {offenders:#?}");
+}
+
+/// A variant's forms must extend a **variant**, or the union acquires identity by the back door.
+#[test]
+fn a_variant_form_extends_a_variant() {
+    let m = manifest();
+    for c in m.classes.iter().filter(|c| c.kind() == Kind::Variant) {
+        if let Some(base) = &c.extends {
+            let parent = m.get(base).unwrap_or_else(|| panic!("{base}"));
+            assert_eq!(
+                parent.kind(),
+                Kind::Variant,
+                "{} extends {base}, which is a {:?}",
+                c.path,
+                parent.kind()
+            );
+        }
+    }
+}
+
+/// The families that genuinely are values, spot-checked so a future edit has to argue with a name.
+#[test]
+fn shapes_costs_and_budget_refs_are_values() {
+    let m = manifest();
+    for path in [
+        "/Core/Shape",
+        "/Core/CubeShape",
+        "/Core/SpiralStairsShape",
+        "/Core/Cost",
+        "/Core/BudgetRef",
+    ] {
+        assert_eq!(
+            m.get(path).unwrap_or_else(|| panic!("{path}")).kind(),
+            Kind::Variant,
+            "{path} is copied, not referenced"
+        );
+    }
+
+    // ⚠ And the ones that stay objects, because they genuinely are pointed at: a `Rule` is composed
+    // and walked, a `Verdict` is returned and handed to `on_rejected`.
+    for path in ["/Core/Rule", "/Core/Verdict", "/Core/Interaction"] {
+        assert_eq!(
+            m.get(path).unwrap_or_else(|| panic!("{path}")).kind(),
+            Kind::Object
+        );
+    }
+}
+
+/// Every variant with forms must have at least two, or it is a struct wearing a union's clothes.
+#[test]
+fn a_variant_with_one_form_is_a_struct() {
+    let m = manifest();
+    for c in m.classes.iter().filter(|c| c.kind() == Kind::Variant) {
+        let forms = m
+            .classes
+            .iter()
+            .filter(|f| f.extends.as_deref() == Some(c.path.as_str()))
+            .count();
+        assert!(
+            forms != 1,
+            "{} has exactly one form — that is a struct, not a choice",
+            c.path
+        );
     }
 }
 
