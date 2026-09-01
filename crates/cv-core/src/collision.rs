@@ -20,7 +20,7 @@
 //! ⚠ **This type replaced `Volume`.** `Volume` was a single box that tried to be all four questions at
 //! once; `PlacementNeed` took its intent and `CollisionBody` took its geometry.
 
-use crate::object::ObjectId;
+use crate::path::ClassPath;
 use crate::shape::Shape;
 use cv_determinism::{math, Aabb, Transform, Vec3};
 
@@ -50,8 +50,8 @@ pub struct CollisionData {
     pub shape: Shape,
     /// Which broad phase it participates in.
     pub layer: CollisionLayer,
-    /// What it *means* to a mechanic — `None` until a surface is assigned.
-    pub surface: Option<ObjectId>,
+    /// What it *means* to a mechanic — the `Surface` **class**, `None` until one is assigned.
+    pub surface: Option<ClassPath>,
     /// Where it sits.
     pub transform: Transform,
 }
@@ -80,7 +80,7 @@ impl CollisionData {
     }
 
     /// Give it meaning.
-    pub fn meaning(mut self, surface: ObjectId) -> Self {
+    pub fn meaning(mut self, surface: ClassPath) -> Self {
         self.surface = Some(surface);
         self
     }
@@ -267,12 +267,12 @@ impl CollisionBody {
     }
 
     /// Every surface named by an island, in island order, deduplicated.
-    pub fn surfaces(&self) -> Vec<ObjectId> {
-        let mut out: Vec<ObjectId> = Vec::new();
+    pub fn surfaces(&self) -> Vec<ClassPath> {
+        let mut out: Vec<ClassPath> = Vec::new();
         for island in &self.islands {
-            if let Some(s) = island.surface {
-                if !out.contains(&s) {
-                    out.push(s);
+            if let Some(s) = &island.surface {
+                if !out.contains(s) {
+                    out.push(s.clone());
                 }
             }
         }
@@ -426,12 +426,12 @@ mod tests {
 
     #[test]
     fn islands_keep_insertion_order_so_the_editor_list_matches_the_body() {
-        let a = ObjectId::derived("surface", "stone");
-        let b = ObjectId::derived("surface", "ice");
+        let a = ClassPath::new("/Content/Surfaces/Stone").unwrap();
+        let b = ClassPath::new("/Content/Surfaces/Ice").unwrap();
         let body = CollisionBody::empty()
-            .with(CollisionData::new(cube(1.0)).meaning(b))
-            .with(CollisionData::new(cube(1.0)).meaning(a))
-            .with(CollisionData::new(cube(1.0)).meaning(b));
+            .with(CollisionData::new(cube(1.0)).meaning(b.clone()))
+            .with(CollisionData::new(cube(1.0)).meaning(a.clone()))
+            .with(CollisionData::new(cube(1.0)).meaning(b.clone()));
         assert_eq!(body.surfaces(), vec![b, a], "insertion order, deduplicated");
     }
 

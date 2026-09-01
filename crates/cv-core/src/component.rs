@@ -25,11 +25,12 @@
 //! makes every difficulty judgement in the project silently wrong — not slightly off, wrong, because
 //! the budget it was measured against no longer describes the world.
 
+use crate::class::ResourceRef;
 use crate::collision::{CollisionBody, CollisionData};
 use crate::judge::{Budget, Route};
 use crate::mission::Rule;
 use crate::node::InstanceScope;
-use crate::object::ObjectId;
+use crate::path::ClassPath;
 use crate::placement::DirectionCone;
 use crate::schedule::Span;
 use crate::shape::Shape;
@@ -98,17 +99,19 @@ pub enum Component {
     /// ⚠ **The one place tessellation is legitimate.** Every other collision shape is parametric; an
     /// imported mesh is a `MeshResource`, and its content hash is what keeps it deterministic.
     Mesh {
-        asset: ObjectId,
-        /// Submesh name → the `Surface` it means. A `BTreeMap` because iteration order reaches
-        /// generation, and a hash map's would not be stable across runs.
-        surfaces: BTreeMap<String, ObjectId>,
+        /// **Two facts in two places** — the resource class, and the file. The core loads the path
+        /// with *that class's* loader rather than guessing a format from the extension.
+        asset: ResourceRef,
+        /// Submesh name → the `Surface` **class** it means. A `BTreeMap` because iteration order
+        /// reaches generation, and a hash map's would not be stable across runs.
+        surfaces: BTreeMap<String, ClassPath>,
         collision_mode: CollisionMode,
         visible: bool,
     },
     /// A parametric primitive.
     Shape {
         shape: Shape,
-        surface: Option<ObjectId>,
+        surface: Option<ClassPath>,
         collision_mode: CollisionMode,
         visible: bool,
     },
@@ -154,7 +157,7 @@ pub enum Component {
     /// ⚠ **P15's second satisfaction route.** Permissive rather than restrictive: it is what lets the
     /// solver take an attractive one-way transition *and* guarantee the reset.
     Checkpoint {
-        restores: Vec<ObjectId>,
+        restores: Vec<ClassPath>,
         restores_occupant: bool,
         scope: InstanceScope,
     },
@@ -176,14 +179,14 @@ pub enum Component {
     StateSetter {
         variable: String,
         to_value: String,
-        while_occupied_by: Option<ObjectId>,
+        while_occupied_by: Option<ClassPath>,
     },
     /// *"Place me **on** an edge of this kind, and close it."*
     ///
     /// ⚠ Without this a barrier can only be authored as geometry, which violates P2 by construction:
     /// deleting a region rather than gating it.
     BlocksTraversal {
-        matching: ObjectId,
+        matching: ClassPath,
         route: Option<Route>,
     },
 }
@@ -388,7 +391,7 @@ impl Components {
                 ..
             } if collision_mode.collides() => {
                 let mut island = CollisionData::new(shape.clone()).at(attached.offset);
-                island.surface = *surface;
+                island.surface = surface.clone();
                 CollisionBody::empty().with(island)
             }
             _ => CollisionBody::empty(),
@@ -455,16 +458,21 @@ mod tests {
     use super::*;
     use crate::geometry::Face;
 
-    fn oid(n: &str) -> ObjectId {
-        ObjectId::derived("actor", n)
+    use crate::object::ObjectId;
+    use crate::path::AssetPath;
+
+    /// A content class — what the design types `Kind<T>`.
+    fn class(n: &str) -> ClassPath {
+        ClassPath::new(n).unwrap()
     }
+    /// An unlock row id — a different id space from a class path.
     fn unlock(n: &str) -> ObjectId {
         ObjectId::derived("unlock", n)
     }
 
     fn checkpoint() -> Component {
         Component::Checkpoint {
-            restores: vec![oid("enemies")],
+            restores: vec![class("/Content/Enemies")],
             restores_occupant: true,
             scope: InstanceScope::Area,
         }
@@ -674,7 +682,7 @@ mod tests {
         else {
             panic!("expected a checkpoint");
         };
-        assert_eq!(restores, vec![oid("enemies")]);
+        assert_eq!(restores, vec![class("/Content/Enemies")]);
         assert!(restores_occupant);
     }
 
@@ -685,7 +693,7 @@ mod tests {
         let plate = Component::StateSetter {
             variable: "gate".into(),
             to_value: "open".into(),
-            while_occupied_by: Some(oid("WeightComponent")),
+            while_occupied_by: Some(class("/Content/Components/WeightComponent")),
         };
         let Component::StateSetter {
             while_occupied_by, ..
@@ -693,7 +701,10 @@ mod tests {
         else {
             panic!("expected a state setter");
         };
-        assert_eq!(while_occupied_by, Some(oid("WeightComponent")));
+        assert_eq!(
+            while_occupied_by,
+            Some(class("/Content/Components/WeightComponent"))
+        );
     }
 
     #[test]
@@ -701,7 +712,7 @@ mod tests {
         // ⚠ P2 — gate a region, never delete it. Without this component a barrier could only be
         // authored as geometry, which removes the region instead of closing it.
         let gate = Component::BlocksTraversal {
-            matching: oid("TetherComponent"),
+            matching: class("/Content/Components/TetherComponent"),
             route: None,
         };
         assert_eq!(gate.name(), "BlocksTraversalComponent");
@@ -711,7 +722,10 @@ mod tests {
     fn all_eight_are_present_and_name_themselves() {
         let names: Vec<&str> = vec![
             Component::Mesh {
-                asset: oid("m"),
+                asset: ResourceRef::new(
+                    ClassPath::core("/Core/MeshResource"),
+                    AssetPath::new("/Content/Meshes/m.glb").unwrap(),
+                ),
                 surfaces: BTreeMap::new(),
                 collision_mode: CollisionMode::Exact,
                 visible: true,
@@ -742,7 +756,7 @@ mod tests {
                 while_occupied_by: None,
             },
             Component::BlocksTraversal {
-                matching: oid("T"),
+                matching: class("/Content/Components/T"),
                 route: None,
             },
         ]

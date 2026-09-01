@@ -20,20 +20,21 @@ use cv_core::schedule::Span;
 use cv_core::shape::Shape;
 use cv_core::surface::Occupant;
 use cv_core::tag::TagQuery;
-use cv_core::{InstanceScope, ObjectId};
+use cv_core::{ClassPath, InstanceScope};
 use cv_determinism::Vec3;
 
-fn oid(name: &str) -> ObjectId {
-    ObjectId::derived("actor", name)
+/// A content class path — what the design types `Kind<T>`.
+fn class(name: &str) -> ClassPath {
+    ClassPath::new(name).unwrap()
 }
-fn unlock(name: &str) -> ObjectId {
-    ObjectId::derived("unlock", name)
+fn unlock(name: &str) -> cv_core::ObjectId {
+    cv_core::ObjectId::derived("unlock", name)
 }
 
 /// The behaviour, not the noun: *the world can be restored from here*.
 fn checkpoint(scope: InstanceScope) -> Component {
     Component::Checkpoint {
-        restores: vec![oid("enemies"), oid("breakables")],
+        restores: vec![class("/Content/Enemies"), class("/Content/Breakables")],
         restores_occupant: true,
         scope,
     }
@@ -57,7 +58,7 @@ fn body(height: f64) -> Component {
             height,
             capped: true,
         },
-        surface: Some(oid("stone")),
+        surface: Some(class("/Content/Surfaces/Stone")),
         collision_mode: CollisionMode::Exact,
         visible: true,
     }
@@ -258,12 +259,12 @@ fn a_gate_that_names_a_nearby_kind_must_say_at_what_scope() {
     // ⚠ *"A Bomb Flower within carry range"* asked at `Space` and at `World` are different questions
     // with different answers. A rule that could not say which would silently answer the wrong one.
     let near = Rule::Nearby {
-        kind: oid("bomb_flower"),
+        kind: class("/Content/Props/BombFlower"),
         within: 8.0,
         scope: InstanceScope::Space,
     };
     let far = Rule::Nearby {
-        kind: oid("bomb_flower"),
+        kind: class("/Content/Props/BombFlower"),
         within: 8.0,
         scope: InstanceScope::World,
     };
@@ -302,7 +303,7 @@ fn a_traversal_is_directed_and_a_barrier_closes_it_rather_than_deleting_it() {
     assert!(door.admits(Direction::Forward, &Occupant::player([key])));
 
     let bar = Component::BlocksTraversal {
-        matching: oid("VaultDoor"),
+        matching: class("/Content/Traversals/VaultDoor"),
         route: None,
     };
     assert_eq!(bar.name(), "BlocksTraversalComponent");

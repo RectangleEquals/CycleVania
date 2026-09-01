@@ -32,6 +32,7 @@
 
 use crate::node::{InstanceScope, Node, NodeGraph, NodeKind};
 use crate::object::ObjectId;
+use crate::path::ClassPath;
 use crate::serialize::{Deserialize, Reader, SerError, SerResult, Serialize, Writer};
 use crate::unlock::GrantMap;
 use crate::Handle;
@@ -66,7 +67,7 @@ pub enum Rule {
     /// held*, that asks about the *lattice*. Branching on a component is sound where branching on an
     /// unlock is not, because a component is a structural fact about an object rather than a
     /// progression state that changes underneath the reasoning.
-    HasComponent(ObjectId),
+    HasComponent(ClassPath),
     /// Something matching is accessible **within range of this gate**.
     ///
     /// ⚠ **The contextual half of the grammar.** A gate may depend on the *world* rather than only on
@@ -82,7 +83,7 @@ pub enum Rule {
     /// on `Ref<T>`, because an owned `Budget` would embed a *spent* counter in a **declaration**, which
     /// is the one thing a declaration must not carry.
     Nearby {
-        kind: ObjectId,
+        kind: ClassPath,
         within: f64,
         scope: InstanceScope,
     },
@@ -126,11 +127,14 @@ impl Rule {
             Rule::Always => true,
             Rule::Never => false,
             Rule::Has(c) => held.contains(c),
-            // ⚠ Both of these are answered against *world* state the occupant set cannot carry, so a
+            // ⚠ **Both are answered against *world* state the occupant set cannot carry**, so a
             // held-set test alone must not claim to settle them. `is_satisfied` is the cheap
             // occupant-only pass; the contextual half is judged where the world is in scope.
-            Rule::HasComponent(c) => held.contains(c),
-            Rule::Nearby { .. } => true,
+            //
+            // ⚠ `HasComponent` names a **component class**, not a lattice atom. Comparing it against
+            // the held-*unlock* set compared two different id spaces, and so was always false —
+            // deferring is the honest answer here.
+            Rule::HasComponent(_) | Rule::Nearby { .. } => true,
             Rule::All(rules) => rules.iter().all(|r| r.is_satisfied(held)),
             Rule::Any(rules) => rules.iter().any(|r| r.is_satisfied(held)),
             Rule::Not(r) => !r.is_satisfied(held),
@@ -155,13 +159,13 @@ impl Rule {
     fn collect_unlocks(&self, out: &mut BTreeSet<ObjectId>) {
         match self {
             Rule::Always | Rule::Never => {}
-            Rule::Has(c) | Rule::HasComponent(c) => {
+            Rule::Has(c) => {
                 out.insert(*c);
             }
-            // ⚠ A `Nearby` mentions a *content kind*, not an unlock. It still belongs to the
-            // dependency walk — see `referenced` — but putting it here would make the solver treat a
-            // Bomb Flower as something the player holds.
-            Rule::Nearby { .. } => {}
+            // ⚠ Both of these name a **content class**, not an unlock. They belong to the dependency
+            // walk — see [`Rule::classes`] — but putting them here would make the solver treat a Bomb
+            // Flower, or a component class, as something the player holds.
+            Rule::HasComponent(_) | Rule::Nearby { .. } => {}
             Rule::All(rules) | Rule::Any(rules) => {
                 for r in rules {
                     r.collect_unlocks(out);
@@ -171,33 +175,38 @@ impl Rule {
         }
     }
 
-    /// **Everything this rule mentions**, unlocks and content kinds alike.
+    /// **Every content class this rule names.**
     ///
     /// ⚠ **The solver's dependency walk, and what lets `requires()` plant a source.** A `Nearby`
     /// naming a Bomb Flower is a dependency on *the world containing one*, not on the occupant holding
     /// one — and if the walk could not see it, the generator would gate a door on something it never
-    /// placed. `unlocks()` deliberately excludes those; this deliberately includes them.
-    pub fn referenced(&self) -> BTreeSet<ObjectId> {
+    /// placed.
+    ///
+    /// ⚠ Separate from [`Rule::unlocks`] because the two live in **different id spaces**: a lattice
+    /// atom is a table row, a content class is a mount-pointed path. An earlier `referenced()` returned
+    /// both as one `ObjectId` set, which is what let `HasComponent` be answered against the
+    /// held-unlock set and silently always fail.
+    pub fn classes(&self) -> BTreeSet<ClassPath> {
         let mut out = BTreeSet::new();
-        self.collect_referenced(&mut out);
+        self.collect_classes(&mut out);
         out
     }
 
-    fn collect_referenced(&self, out: &mut BTreeSet<ObjectId>) {
+    fn collect_classes(&self, out: &mut BTreeSet<ClassPath>) {
         match self {
-            Rule::Always | Rule::Never => {}
-            Rule::Has(c) | Rule::HasComponent(c) => {
-                out.insert(*c);
+            Rule::Always | Rule::Never | Rule::Has(_) => {}
+            Rule::HasComponent(c) => {
+                out.insert(c.clone());
             }
             Rule::Nearby { kind, .. } => {
-                out.insert(*kind);
+                out.insert(kind.clone());
             }
             Rule::All(rules) | Rule::Any(rules) => {
                 for r in rules {
-                    r.collect_referenced(out);
+                    r.collect_classes(out);
                 }
             }
-            Rule::Not(r) => r.collect_referenced(out),
+            Rule::Not(r) => r.collect_classes(out),
         }
     }
 
@@ -1013,21 +1022,22 @@ impl Deserialize for MissionEdge {
 mod tests {
     use super::*;
 
-    fn kind(n: &str) -> ObjectId {
-        ObjectId::derived("actor", n)
+    /// A content class — what the design types `Kind<T>`, and a different id space from an unlock.
+    fn kind(n: &str) -> ClassPath {
+        ClassPath::new(n).unwrap()
     }
 
     #[test]
     fn the_dependency_walk_sees_contextual_kinds_that_the_held_set_never_will() {
-        // ⚠ The whole reason `referenced` exists alongside `unlocks`. A gate on "a Bomb Flower within
+        // ⚠ The whole reason `classes` exists alongside `unlocks`. A gate on "a Bomb Flower within
         // carry range" depends on **the world containing one**, not on the occupant holding one. If
         // the walk could not see it, the generator would gate a door on something it never placed.
         let dash = cap("dash");
-        let flower = kind("bomb_flower");
+        let flower = kind("/Content/Props/BombFlower");
         let r = Rule::All(vec![
             Rule::has(dash),
             Rule::Nearby {
-                kind: flower,
+                kind: flower.clone(),
                 within: 8.0,
                 scope: InstanceScope::Space,
             },
@@ -1035,21 +1045,34 @@ mod tests {
 
         assert!(r.unlocks().contains(&dash));
         assert!(
-            !r.unlocks().contains(&flower),
-            "a nearby content kind is not something the occupant holds"
+            r.classes().contains(&flower),
+            "the dependency walk must see it, or requires() cannot plant one"
         );
         assert!(
-            r.referenced().contains(&flower),
-            "but the dependency walk must still see it, or requires() cannot plant one"
+            r.classes().len() == 1,
+            "and an unlock is not a class — the two sets do not overlap"
         );
-        assert!(r.referenced().contains(&dash));
+    }
+
+    #[test]
+    fn an_unlock_and_a_content_class_are_two_id_spaces_and_never_one_set() {
+        // ⚠ **The bug the retype found.** While both were `ObjectId`, `HasComponent` was answered by
+        // `held.contains(c)` against the held-*unlock* set — comparing a component class to a lattice
+        // atom, which is always false. Nothing caught it because the types agreed.
+        let held: std::collections::BTreeSet<ObjectId> = [cap("dash")].into_iter().collect();
+        let r = Rule::HasComponent(kind("/Content/Components/LightSource"));
+        assert!(
+            r.is_satisfied(&held),
+            "the occupant-only pass defers rather than answering a world question wrongly"
+        );
+        assert!(r.unlocks().is_empty(), "a component class is not an unlock");
     }
 
     #[test]
     fn a_component_test_and_an_unlock_test_are_different_questions() {
-        let c = kind("light_source");
-        let r = Rule::HasComponent(c);
-        assert!(r.referenced().contains(&c));
+        let c = kind("/Content/Components/LightSource");
+        let r = Rule::HasComponent(c.clone());
+        assert!(r.classes().contains(&c));
         assert!(!r.is_open());
     }
 
@@ -1066,9 +1089,9 @@ mod tests {
     fn the_new_variants_round_trip_on_the_wire() {
         use crate::serialize::{from_bytes, to_bytes};
         for r in [
-            Rule::HasComponent(kind("hinge")),
+            Rule::HasComponent(kind("/Content/Components/Hinge")),
             Rule::Nearby {
-                kind: kind("bomb_flower"),
+                kind: kind("/Content/Props/BombFlower"),
                 within: 8.0,
                 scope: InstanceScope::Area,
             },

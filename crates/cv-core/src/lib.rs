@@ -35,6 +35,7 @@
 #![forbid(unsafe_code)]
 
 pub mod arena;
+pub mod class;
 pub mod collision;
 pub mod component;
 pub mod content;
@@ -50,6 +51,7 @@ pub mod lifecycle;
 pub mod mission;
 pub mod node;
 pub mod object;
+pub mod path;
 pub mod placement;
 pub mod probe;
 pub mod query;
@@ -66,6 +68,9 @@ pub mod trivalent;
 pub mod unlock;
 
 pub use arena::{Arena, Handle};
+pub use class::{
+    ClassError, ClassRecord, ClassRegistry, CoreClass, FieldValue, Kind, PinType, Ref, ResourceRef,
+};
 pub use collision::{CollisionBody, CollisionData, CollisionLayer};
 pub use component::{Attached, CollisionMode, Component, Components, Direction};
 pub use content::{ContentEntry, ContentKind, ContentRegistry, RegistryError};
@@ -86,6 +91,7 @@ pub use mission::{
 };
 pub use node::{InstanceScope, Node, NodeError, NodeGraph, NodeKind, NodeResult, NodeState};
 pub use object::{IdAllocator, Object, ObjectHeader, ObjectId};
+pub use path::{AssetPath, ClassPath, Mount, PathError};
 pub use placement::{
     Constraint, DirectionCone, Interaction, ItemClass, Preference, Role, RoleEvidence, ScheduleRule,
 };
