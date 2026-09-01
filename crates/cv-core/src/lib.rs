@@ -35,6 +35,7 @@
 #![forbid(unsafe_code)]
 
 pub mod arena;
+pub mod budget;
 pub mod class;
 pub mod collision;
 pub mod component;
@@ -68,6 +69,7 @@ pub mod trivalent;
 pub mod unlock;
 
 pub use arena::{Arena, Handle};
+pub use budget::{Budget, BudgetBook, BudgetError, BudgetRef, Cost};
 pub use class::{
     ClassError, ClassRecord, ClassRegistry, CoreClass, FieldValue, Kind, PinType, Ref, ResourceRef,
 };
@@ -84,7 +86,7 @@ pub use fingerprint::{Fingerprint, FingerprintBuilder, ReproductionBundle, Repro
 pub use floor::{ConvexHull, FloorSurface, ScopeBounds};
 pub use geometry::{CoarseGeometry, Collider, ColliderId, Face, Hit, Sweep};
 pub use intra::{EdgeSource, FloorEdge, IntraSpace};
-pub use judge::{Budget, Obligation, Path, PathStep, Route, Verdict};
+pub use judge::{Obligation, Path, PathStep, Route, Verdict};
 pub use lifecycle::{Event, Quantity, Replenish};
 pub use mission::{
     Accessibility, EdgeSpan, Location, LocationId, MissionEdge, MissionGraph, Rule, Sphere,

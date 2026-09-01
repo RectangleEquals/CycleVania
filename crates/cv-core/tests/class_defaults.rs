@@ -32,8 +32,8 @@ fn class(p: &str) -> ClassPath {
 /// A small project: two authored items, an authored surface, and a resource class.
 fn project() -> ClassRegistry {
     let mut r = ClassRegistry::with_core();
-    r.register(class("/Core/MeshResource"), class("/Core/Resource"))
-        .unwrap();
+    // ⚠ `/Core/MeshResource` and the rest of the tier-1 tree come with `with_core` — a project never
+    // re-declares the core, or two projects would eventually disagree about what extends what.
     r.register(class("/Content/Surfaces/Stone"), class("/Core/Surface"))
         .unwrap();
     r.register(class("/Content/Items/Hookshot"), class("/Core/Item"))
@@ -305,7 +305,7 @@ fn a_rules_unlocks_and_its_classes_are_two_sets_that_never_overlap() {
         Rule::HasComponent(class("/Content/Components/TetherComponent")),
         Rule::Nearby {
             kind: class("/Content/Items/Hookshot"),
-            within: 8.0,
+            within: cv_core::BudgetRef::distance(8.0),
             scope: InstanceScope::Space,
         },
     ]);

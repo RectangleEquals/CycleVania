@@ -1647,8 +1647,8 @@ mod tests {
         (g, reach_handles)
     }
 
-    /// Example's loop: start → <anything> → capstone(boss) → terminal(treasury, an exit of capstone).
-    fn example_spine() -> SpineTemplate {
+    /// A loop spine: start → <anything> → capstone(boss) → terminal(treasury, an exit of capstone).
+    fn loop_spine() -> SpineTemplate {
         SpineTemplate::new(oid("spine", "reach_loop"), NodeKind::Reach)
             .slot(SpineSlot::new("start").role(SlotRole::Start))
             .slot(SpineSlot::new("capstone").must_contain([oid("actor", "boss")]))
@@ -1682,7 +1682,7 @@ mod tests {
     #[test]
     fn adherence_never_weakens_a_required_slot() {
         // The safety property of the dial: guarantees live in a tier it cannot reach.
-        let spine = example_spine().adherence(0.0);
+        let spine = loop_spine().adherence(0.0);
         assert_eq!(
             spine.kept_slots().len(),
             3,
@@ -1730,7 +1730,7 @@ mod tests {
 
     #[test]
     fn the_budget_floor_is_the_slots_plus_segment_minimums() {
-        let spine = example_spine();
+        let spine = loop_spine();
         // 3 slots + segment minimums (1 for start→capstone, 0 for the direct exit).
         assert_eq!(spine.required_minimum(), 4);
     }
@@ -1738,7 +1738,7 @@ mod tests {
     #[test]
     fn validation_reports_a_budget_shortfall_with_the_arithmetic() {
         let registry = registry_with(&[("actor", "boss"), ("actor", "beacon")]);
-        let spine = example_spine();
+        let spine = loop_spine();
         let v = spine.validate(&registry, 2);
         assert!(!v.is_ok());
         let message = v.errors[0].to_string();
@@ -1751,7 +1751,7 @@ mod tests {
     #[test]
     fn validation_catches_missing_content_and_bad_references() {
         // Nothing registered: the boss and beacon demands cannot be met.
-        let v = example_spine().validate(&ContentRegistry::new(), 10);
+        let v = loop_spine().validate(&ContentRegistry::new(), 10);
         assert!(v
             .errors
             .iter()
@@ -1844,7 +1844,7 @@ mod tests {
         let (g, _) = world(1, 12);
         let mut mission = MissionGraph::new(g.of_kind(NodeKind::Space).next().unwrap().0);
         let instances = SpineInstantiator::new(&g)
-            .with_template(example_spine())
+            .with_template(loop_spine())
             .instantiate(&mut mission, &Rng::new(1));
 
         let instance = &instances[0];
@@ -1916,7 +1916,7 @@ mod tests {
         }
         let registry = registry_with(&[("actor", "boss"), ("actor", "beacon")]);
         let v = SpineInstantiator::new(&g)
-            .with_template(example_spine())
+            .with_template(loop_spine())
             .validate(&registry);
         assert!(v
             .errors
@@ -1946,7 +1946,7 @@ mod tests {
         let (g, reaches) = world(2, 6);
         let mut mission = MissionGraph::new(g.of_kind(NodeKind::Space).next().unwrap().0);
         let instances = SpineInstantiator::new(&g)
-            .with_template(example_spine())
+            .with_template(loop_spine())
             .instantiate(&mut mission, &Rng::new(1));
 
         assert_eq!(instances.len(), 2, "the spine repeats per Reach");
@@ -1970,11 +1970,11 @@ mod tests {
 
     #[test]
     fn the_terminal_is_directly_connected_to_the_capstone() {
-        // Example's requirement: the Rest Treasury is an exit of the boss chamber.
+        // A common requirement: the rest room is an exit of the boss chamber.
         let (g, _) = world(1, 6);
         let mut mission = MissionGraph::new(g.of_kind(NodeKind::Space).next().unwrap().0);
         let instances = SpineInstantiator::new(&g)
-            .with_template(example_spine())
+            .with_template(loop_spine())
             .instantiate(&mut mission, &Rng::new(1));
 
         let instance = &instances[0];
@@ -2089,7 +2089,7 @@ mod tests {
     #[test]
     fn coverage_limits_which_instances_receive_the_spine() {
         let (g, _) = world(6, 5);
-        let spine = example_spine().coverage(Coverage::Every(3));
+        let spine = loop_spine().coverage(Coverage::Every(3));
         let mut mission = MissionGraph::new(g.of_kind(NodeKind::Space).next().unwrap().0);
         let instances = SpineInstantiator::new(&g)
             .with_template(spine)
@@ -2103,7 +2103,7 @@ mod tests {
         let run = || {
             let mut mission = MissionGraph::new(g.of_kind(NodeKind::Space).next().unwrap().0);
             let instances = SpineInstantiator::new(&g)
-                .with_template(example_spine())
+                .with_template(loop_spine())
                 .instantiate(&mut mission, &Rng::new(0xABC));
             (mission, instances)
         };

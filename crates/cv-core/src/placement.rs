@@ -37,7 +37,7 @@
 //! less. And content accessible **solely** through a relaxation is auto-tagged `BONUS` — enforced
 //! structurally, not by a convention someone has to remember.
 
-use crate::judge::Budget;
+use crate::budget::BudgetRef;
 // ⚠ One `Strictness` for the whole system: the design defines it as *"how hard a spine slot **or
 // preference** must hold"*, so a second copy here would be two vocabularies for one idea.
 use crate::node::NodeKind;
@@ -200,9 +200,9 @@ pub enum Constraint {
     /// ⚠ **A door writes key-to-lock distance here**, because the door names its own unlock and the
     /// key does not know its lock. This is what replaced the refused `progression_locality` dial: a
     /// per-door statement rather than a global knob.
-    MinDistanceFrom { kind: ObjectId, budget: Budget },
+    MinDistanceFrom { kind: ObjectId, budget: BudgetRef },
     /// At most this far from a named kind.
-    MaxDistanceFrom { kind: ObjectId, budget: Budget },
+    MaxDistanceFrom { kind: ObjectId, budget: BudgetRef },
     /// Must be mounted on a socket matching these tags.
     MountedOn { accepts: Vec<ObjectId> },
     /// Only inside this kind of scope.
@@ -506,7 +506,7 @@ mod tests {
         // ⚠ What replaced the refused `progression_locality` dial: a per-door statement, not a knob.
         let c = Constraint::MinDistanceFrom {
             kind: oid("tether"),
-            budget: Budget::distance(3.0),
+            budget: BudgetRef::distance(3.0),
         };
         assert_eq!(format!("{c}"), format!("far from {}", oid("tether")));
     }

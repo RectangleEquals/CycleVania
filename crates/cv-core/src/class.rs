@@ -84,6 +84,10 @@ core_class!(
     /// An external-asset target.
     ResourceClass => "/Core/Resource"
 );
+core_class!(
+    /// A named, retunable limit — see [`crate::budget`].
+    BudgetClass => "/Core/Budget"
+);
 
 /// What a class **is**, as registered.
 ///
@@ -210,18 +214,52 @@ impl ClassRegistry {
         ClassRegistry::default()
     }
 
-    /// A registry holding the tier-1 classes, rooted at `/Core/Object`.
+    /// **The tier-1 tree**, rooted at `/Core/Object` — [`05-object-model`'s tree][tree], registered.
+    ///
+    /// ⚠ **The whole tree, not a starter set.** A project that had to hand-register `/Core/Budget`
+    /// before it could reference one would be re-declaring the core in every project, and two projects
+    /// would eventually disagree about what `/Core/Component` extends.
+    ///
+    /// [tree]: https://example.invalid
     pub fn with_core() -> Self {
         let mut r = ClassRegistry::new();
         r.register_root(ObjectClass::class_path())
             .expect("the root registers into an empty registry");
+        // Parents come before children, which is also the order `register` requires.
         for (path, parent) in [
-            (ActorClass::PATH, ObjectClass::PATH),
-            (ItemClass::PATH, ActorClass::PATH),
-            (ComponentClass::PATH, ObjectClass::PATH),
-            (SurfaceClass::PATH, ObjectClass::PATH),
-            (TraversalComponentClass::PATH, ComponentClass::PATH),
-            (ResourceClass::PATH, ObjectClass::PATH),
+            // The two behavioural halves.
+            ("/Core/Actor", "/Core/Object"),
+            ("/Core/Item", "/Core/Actor"),
+            ("/Core/Component", "/Core/Object"),
+            ("/Core/MeshComponent", "/Core/Component"),
+            ("/Core/ShapeComponent", "/Core/Component"),
+            ("/Core/MountComponent", "/Core/Component"),
+            ("/Core/TraversalComponent", "/Core/Component"),
+            ("/Core/CheckpointComponent", "/Core/Component"),
+            ("/Core/FastTravelComponent", "/Core/Component"),
+            ("/Core/StateSetterComponent", "/Core/Component"),
+            ("/Core/BlocksTraversalComponent", "/Core/Component"),
+            // Geometry and meaning.
+            ("/Core/Surface", "/Core/Object"),
+            ("/Core/Shape", "/Core/Object"),
+            ("/Core/CollisionBody", "/Core/Object"),
+            // The only external-asset targets.
+            ("/Core/Resource", "/Core/Object"),
+            ("/Core/MeshResource", "/Core/Resource"),
+            ("/Core/CurveTableResource", "/Core/Resource"),
+            ("/Core/UnlockTableResource", "/Core/Resource"),
+            // Answers and obligations.
+            ("/Core/Rule", "/Core/Object"),
+            ("/Core/Verdict", "/Core/Object"),
+            ("/Core/Interaction", "/Core/Object"),
+            ("/Core/Route", "/Core/Object"),
+            ("/Core/Budget", "/Core/Object"),
+            ("/Core/Path", "/Core/Object"),
+            ("/Core/PlacementNeed", "/Core/Object"),
+            ("/Core/Constraint", "/Core/Object"),
+            ("/Core/Preference", "/Core/Object"),
+            ("/Core/ScheduleRule", "/Core/Object"),
+            ("/Core/Rationale", "/Core/Object"),
         ] {
             r.register(ClassPath::core(path), ClassPath::core(parent))
                 .expect("the tier-1 tree is well-formed");
@@ -890,13 +928,7 @@ mod tests {
     fn a_resource_reference_is_two_facts_and_neither_stands_alone() {
         // ⚠ The class is a type position, the path is a value position. The core loads the file with
         // *that class's* loader rather than guessing a format from the extension.
-        let mut r = project();
-        r.register(
-            ClassPath::core("/Core/MeshResource"),
-            ClassPath::core("/Core/Resource"),
-        )
-        .unwrap();
-
+        let r = project();
         let mesh = ResourceRef::new(
             ClassPath::core("/Core/MeshResource"),
             AssetPath::new("/Content/Meshes/hookshot.glb").unwrap(),

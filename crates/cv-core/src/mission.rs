@@ -30,6 +30,7 @@
 //! Computing them is a fixed point: sweep for what is accessible, collect what is there, sweep again,
 //! until nothing new appears.
 
+use crate::budget::BudgetRef;
 use crate::node::{InstanceScope, Node, NodeGraph, NodeKind};
 use crate::object::ObjectId;
 use crate::path::ClassPath;
@@ -79,12 +80,12 @@ pub enum Rule {
     /// which would be silently answering the wrong one. There is deliberately no `Floor` scope — see
     /// [`InstanceScope`].
     ///
-    /// ▶ `within` is a distance in world units. The design types it `Ref<Budget>`; that retype waits
-    /// on `Ref<T>`, because an owned `Budget` would embed a *spent* counter in a **declaration**, which
-    /// is the one thing a declaration must not carry.
+    /// ⚠ `within` is a **budget reference**, so *"a Bomb Flower within carry range"* says exactly
+    /// that rather than *"within 8.0"*. Carry range is a concept a project retunes; a gate that had
+    /// inlined the number would keep the old one, silently, forever.
     Nearby {
         kind: ClassPath,
-        within: f64,
+        within: BudgetRef,
         scope: InstanceScope,
     },
     /// Every sub-rule holds.
@@ -951,7 +952,7 @@ impl Serialize for Rule {
             } => {
                 w.u8(7);
                 w.write(kind);
-                w.f64(*within);
+                w.write(within);
                 w.u8(*scope as u8);
             }
         }
@@ -970,7 +971,7 @@ impl Deserialize for Rule {
             6 => Rule::HasComponent(r.read()?),
             7 => Rule::Nearby {
                 kind: r.read()?,
-                within: r.f64()?,
+                within: r.read()?,
                 scope: match r.u8()? {
                     0 => InstanceScope::World,
                     1 => InstanceScope::Reach,
@@ -1038,7 +1039,7 @@ mod tests {
             Rule::has(dash),
             Rule::Nearby {
                 kind: flower.clone(),
-                within: 8.0,
+                within: BudgetRef::by_name("carry range"),
                 scope: InstanceScope::Space,
             },
         ]);
@@ -1092,7 +1093,7 @@ mod tests {
             Rule::HasComponent(kind("/Content/Components/Hinge")),
             Rule::Nearby {
                 kind: kind("/Content/Props/BombFlower"),
-                within: 8.0,
+                within: BudgetRef::distance(8.0),
                 scope: InstanceScope::Area,
             },
         ] {

@@ -281,8 +281,8 @@ pub struct ScopeRecord {
     pub neighbors: Vec<ScopeRef>,
     /// The spine slot this scope was allocated to, if any.
     ///
-    /// **This is how a host finds the room a spine guaranteed.** Example must know *which* Space is
-    /// the Rest Treasury in order to place its Beacon interaction; a Zelda-like must know which is the
+    /// **This is how a host finds the room a spine guaranteed.** A roguelite must know *which* Space
+    /// is the rest room in order to place its save interaction; a Zelda-like must know which is the
     /// boss arena. Being told beats re-deriving structure the generator already knew.
     pub spine_slot: Option<SpineSlotTag>,
 }

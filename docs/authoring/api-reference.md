@@ -10,7 +10,7 @@
 
 # API reference
 
-The tier-1 surface: **136 declarations** and **330 members**, generated from the manifest.
+The tier-1 surface: **135 declarations** and **336 members**, generated from the manifest.
 
 Notation: a **field** is a plain read and appears in a graph as a pure *get* node. A **method** takes an argument, computes, or mutates, and appears as a *call* node with execution pins — so the shape of a node tells you whether it costs anything. A **hook** is a question the core asks; hooks are what a schematic's `OVERRIDES` list is built from.
 
@@ -225,7 +225,7 @@ A node in a travel network. Not cosmetic: a network collapses traversal cost acr
 | Field | Type | | |
 |---|---|---|---|
 | `network` | `String` | mutable · exposed | Nodes sharing a network name connect to each other. |
-| `cost` | `Ref<Budget>` | mutable · exposed | What one hop spends — in the same currency as the routes it competes with. |
+| `cost` | `BudgetRef` | mutable · exposed | What one hop spends — in the same currency as the routes it competes with. |
 | `unlocked_by` | `Ref<Rule>` | mutable · exposed | What the occupant must hold before this node joins its network. *Default: AlwaysRule.* |
 
 ### `StateSetterComponent` — extends `Component`
@@ -372,7 +372,7 @@ Something matching is accessible within range of this gate. The contextual half:
 | Field | Type | | |
 |---|---|---|---|
 | `kind` | `Kind<Object>` | mutable · exposed | What must be nearby. |
-| `within` | `Ref<Budget>` | mutable · exposed | How near, in whatever currency the budget names. |
+| `within` | `BudgetRef` | mutable · exposed | How near, in whatever currency the budget names. |
 | `scope` | `InstanceScope` | mutable · exposed | The scope searched. |
 
 ### `Verdict` — extends `Object`
@@ -406,6 +406,7 @@ Too far. Move the target closer by roughly this much — a direction the solver 
 | Field | Type | | |
 |---|---|---|---|
 | `excess` | `float` | mutable · exposed | How much over budget. |
+| `against` | `Ref<Budget>` | mutable · exposed | Which budget it was measured against. 'Over budget by 6.2' leaves a developer guessing; 'over budget by 6.2 against grapple reach' names the lever to pull. Null only where the comparison was against a bare number. |
 
 ### `BlockedVerdict` — extends `Verdict`
 
@@ -868,7 +869,7 @@ A REQUIRED OR FORBIDDEN path with a budget, an occupant and predicates. The sign
 |---|---|---|---|
 | `from` | `Ref<Object>` | mutable · exposed | Origin. Null means unbound and resolved by the solver. |
 | `to` | `Ref<Object>` | mutable · exposed | Destination. Null means unbound. |
-| `budget` | `Ref<Budget>` | mutable · exposed | What traversing it may spend. |
+| `budget` | `BudgetRef` | mutable · exposed | What traversing it may spend. |
 | `occupant` | `Occupant` | mutable · exposed | Who traverses. Null means the player. |
 | `party` | `Array<Occupant>` | mutable · exposed | Every listed occupant must traverse — an escort, not a simultaneous hold. |
 | `cohesion` | `float` | mutable · exposed | Maximum separation in metres. 0 = unconstrained. *Default: 0.0.* |
@@ -878,37 +879,33 @@ A REQUIRED OR FORBIDDEN path with a budget, an occupant and predicates. The sign
 
 ### `Budget` — extends `Object`
 
-What a route may spend.
+A NAMED limit — a row of the project's BudgetBook, referenced rather than copied. 'Carry range' is a concept a project tunes, not a number retyped at each of the five sites that mention it.
 
 `/Core/Budget`
+
+| Field | Type | | |
+|---|---|---|---|
+| `name` | `String` | exposed | What a developer called it. Surfaces in the verdict, which is how a rejection says WHICH limit was missed. |
+| `cost` | `Cost` | exposed | The kind and the limit. Retuning this is the one edit that moves every site naming this budget. |
 
 | Method | Returns | | |
 |---|---|---|---|
 | `remaining()` | `float` | final | Unspent amount. |
-| `spend(x: float)` | `void` | final | Consume from the budget. |
+| `spend(x: float)` | `void` | final | Consume from the budget. The argument is always a DISTANCE, whatever the budget measures — a caller that had to know whether to pass metres or seconds would re-derive the conversion at every call site and one of them would get it wrong. |
+| `judge(distance: float)` | `Ref<Verdict>` | final | Judge a distance against what is left, naming this budget in the verdict. |
 
-### `DistanceBudget` — extends `Budget`
+### `BudgetBook` — extends `Object`
 
-Metres.
+The project's named budgets — the one place 'carry range' is a number. NOTHING spends against a row here: open() hands out a working copy, because spending against the shared row would make two unrelated routes drain each other and the symptom would point nowhere near the cause.
 
-`/Core/DistanceBudget`
+`/Core/BudgetBook`
 
-### `TimeBudget` — extends `Budget`
-
-Seconds. Every TimeBudget is a distance divided by player_profile.speed, which is why that setting is not optional.
-
-`/Core/TimeBudget`
-
-### `PoolBudget` — extends `Budget`
-
-Draw against a named resource pool at a rate. How a soft gate is a magnitude rather than a rule.
-
-`/Core/PoolBudget`
-
-| Field | Type | | |
+| Method | Returns | | |
 |---|---|---|---|
-| `pool` | `String` | mutable · exposed | Which declared resource. |
-| `rate` | `float` | mutable · exposed | Units per second. |
+| `declare(name: String, cost: Cost)` | `Ref<Budget>` | final | Register a named budget. |
+| `retune(budget: Ref<Budget>, cost: Cost)` | `void` | final | Change what it costs. Every site naming it moves at once, which is the point; a site that inlined the number does not, which is also the point. |
+| `by_name(name: String)` | `Ref<Budget>` | final | Look one up by the name a developer typed. |
+| `open(budget: Ref<Budget>)` | `Ref<Budget>` | final | A working copy to spend against. Null for a reference the book does not hold — a dangling budget is a load-time diagnostic, never a default limit quietly standing in. |
 
 ### `Path` — extends `Object`
 
@@ -1000,7 +997,7 @@ At least this far from a named kind. A door writes key-to-lock distance here, be
 | Field | Type | | |
 |---|---|---|---|
 | `kind` | `Kind<Object>` | mutable · exposed | What to stay away from. |
-| `budget` | `Ref<Budget>` | mutable · exposed | The minimum separation. |
+| `budget` | `BudgetRef` | mutable · exposed | The minimum separation. |
 
 ### `MaxDistanceFrom` — extends `Constraint`
 
@@ -1011,7 +1008,7 @@ At most this far from a named kind.
 | Field | Type | | |
 |---|---|---|---|
 | `kind` | `Kind<Object>` | mutable · exposed | What to stay near. |
-| `budget` | `Ref<Budget>` | mutable · exposed | The maximum separation. |
+| `budget` | `BudgetRef` | mutable · exposed | The maximum separation. |
 
 ### `MountedOn` — extends `Constraint`
 
@@ -1365,9 +1362,19 @@ A tag match with an exact/inherited toggle. Why an eligible-surface list survive
 
 ### `Cost`
 
-What an interaction spends.
+**sealed** — content may not subclass this
+
+A kind and a limit, with NO accounting — Distance(m), Time(s) or Pool(pool, rate). What a Budget is a named instance of, and what an interaction spends.
 
 `/Core/Cost`
+
+### `BudgetRef`
+
+**sealed** — content may not subclass this
+
+'This budget' — Named(Ref<Budget>) into the project's book, or Inline(Cost) authored at the site. BOTH forms stay and stay DISTINGUISHABLE: forcing a one-off through the book is ceremony for a number used once, and because the two are told apart a tool can notice the same inline number in twelve places and offer to extract it.
+
+`/Core/BudgetRef`
 
 ### `Quota`
 

@@ -8,7 +8,7 @@
 //!
 //! # The tier-1 surface, as data
 //!
-//! 136 declarations and 330 members. Every other surface in the toolchain — the VM's dispatch
+//! 135 declarations and 336 members. Every other surface in the toolchain — the VM's dispatch
 //! table, the inspector, the node palette, the reference — reads this rather than restating it.
 
 /// Which family a declaration belongs to.
@@ -1555,7 +1555,7 @@ pub const CLASSES: &[ClassDesc] = &[
             },
             FieldDesc {
                 name: "cost",
-                ty: "Ref<Budget>",
+                ty: "BudgetRef",
                 api: true,
                 is_final: false,
                 exposed: true,
@@ -2023,7 +2023,7 @@ pub const CLASSES: &[ClassDesc] = &[
             },
             FieldDesc {
                 name: "within",
-                ty: "Ref<Budget>",
+                ty: "BudgetRef",
                 api: true,
                 is_final: false,
                 exposed: true,
@@ -2108,6 +2108,17 @@ pub const CLASSES: &[ClassDesc] = &[
                 mutable: true,
                 status: Status::Stable,
                 doc: "How much over budget.",
+                default: None,
+            },
+            FieldDesc {
+                name: "against",
+                ty: "Ref<Budget>",
+                api: true,
+                is_final: false,
+                exposed: true,
+                mutable: true,
+                status: Status::Stable,
+                doc: "Which budget it was measured against. 'Over budget by 6.2' leaves a developer guessing; 'over budget by 6.2 against grapple reach' names the lever to pull. Null only where the comparison was against a bare number.",
                 default: None,
             },
         ],
@@ -3998,7 +4009,7 @@ pub const CLASSES: &[ClassDesc] = &[
             },
             FieldDesc {
                 name: "budget",
-                ty: "Ref<Budget>",
+                ty: "BudgetRef",
                 api: true,
                 is_final: false,
                 exposed: true,
@@ -4086,8 +4097,30 @@ pub const CLASSES: &[ClassDesc] = &[
         sealed: false,
         is_abstract: false,
         status: Status::Stable,
-        doc: "What a route may spend.",
+        doc: "A NAMED limit — a row of the project's BudgetBook, referenced rather than copied. 'Carry range' is a concept a project tunes, not a number retyped at each of the five sites that mention it.",
         fields: &[
+            FieldDesc {
+                name: "name",
+                ty: "String",
+                api: true,
+                is_final: false,
+                exposed: true,
+                mutable: false,
+                status: Status::Stable,
+                doc: "What a developer called it. Surfaces in the verdict, which is how a rejection says WHICH limit was missed.",
+                default: None,
+            },
+            FieldDesc {
+                name: "cost",
+                ty: "Cost",
+                api: true,
+                is_final: false,
+                exposed: true,
+                mutable: false,
+                status: Status::Stable,
+                doc: "The kind and the limit. Retuning this is the one edit that moves every site naming this budget.",
+                default: None,
+            },
         ],
         methods: &[
             MethodDesc {
@@ -4114,76 +4147,96 @@ pub const CLASSES: &[ClassDesc] = &[
                 is_abstract: false,
                 hook: false,
                 status: Status::Stable,
-                doc: "Consume from the budget.",
+                doc: "Consume from the budget. The argument is always a DISTANCE, whatever the budget measures — a caller that had to know whether to pass metres or seconds would re-derive the conversion at every call site and one of them would get it wrong.",
                 default: None,
             },
-        ],
-        values: &[
-        ],
-    },
-    ClassDesc {
-        path: "/Core/DistanceBudget",
-        extends: Some("/Core/Budget"),
-        kind: DeclKind::Object,
-        sealed: false,
-        is_abstract: false,
-        status: Status::Stable,
-        doc: "Metres.",
-        fields: &[
-        ],
-        methods: &[
-        ],
-        values: &[
-        ],
-    },
-    ClassDesc {
-        path: "/Core/TimeBudget",
-        extends: Some("/Core/Budget"),
-        kind: DeclKind::Object,
-        sealed: false,
-        is_abstract: false,
-        status: Status::Stable,
-        doc: "Seconds. Every TimeBudget is a distance divided by player_profile.speed, which is why that setting is not optional.",
-        fields: &[
-        ],
-        methods: &[
-        ],
-        values: &[
-        ],
-    },
-    ClassDesc {
-        path: "/Core/PoolBudget",
-        extends: Some("/Core/Budget"),
-        kind: DeclKind::Object,
-        sealed: false,
-        is_abstract: false,
-        status: Status::Stable,
-        doc: "Draw against a named resource pool at a rate. How a soft gate is a magnitude rather than a rule.",
-        fields: &[
-            FieldDesc {
-                name: "pool",
-                ty: "String",
+            MethodDesc {
+                name: "judge",
+                params: &[
+                    ParamDesc { name: "distance", ty: "float" },
+                ],
+                returns: "Ref<Verdict>",
                 api: true,
-                is_final: false,
-                exposed: true,
-                mutable: true,
+                is_final: true,
+                is_abstract: false,
+                hook: false,
                 status: Status::Stable,
-                doc: "Which declared resource.",
-                default: None,
-            },
-            FieldDesc {
-                name: "rate",
-                ty: "float",
-                api: true,
-                is_final: false,
-                exposed: true,
-                mutable: true,
-                status: Status::Stable,
-                doc: "Units per second.",
+                doc: "Judge a distance against what is left, naming this budget in the verdict.",
                 default: None,
             },
         ],
+        values: &[
+        ],
+    },
+    ClassDesc {
+        path: "/Core/BudgetBook",
+        extends: Some("/Core/Object"),
+        kind: DeclKind::Object,
+        sealed: false,
+        is_abstract: false,
+        status: Status::Stable,
+        doc: "The project's named budgets — the one place 'carry range' is a number. NOTHING spends against a row here: open() hands out a working copy, because spending against the shared row would make two unrelated routes drain each other and the symptom would point nowhere near the cause.",
+        fields: &[
+        ],
         methods: &[
+            MethodDesc {
+                name: "declare",
+                params: &[
+                    ParamDesc { name: "name", ty: "String" },
+                    ParamDesc { name: "cost", ty: "Cost" },
+                ],
+                returns: "Ref<Budget>",
+                api: true,
+                is_final: true,
+                is_abstract: false,
+                hook: false,
+                status: Status::Stable,
+                doc: "Register a named budget.",
+                default: None,
+            },
+            MethodDesc {
+                name: "retune",
+                params: &[
+                    ParamDesc { name: "budget", ty: "Ref<Budget>" },
+                    ParamDesc { name: "cost", ty: "Cost" },
+                ],
+                returns: "void",
+                api: true,
+                is_final: true,
+                is_abstract: false,
+                hook: false,
+                status: Status::Stable,
+                doc: "Change what it costs. Every site naming it moves at once, which is the point; a site that inlined the number does not, which is also the point.",
+                default: None,
+            },
+            MethodDesc {
+                name: "by_name",
+                params: &[
+                    ParamDesc { name: "name", ty: "String" },
+                ],
+                returns: "Ref<Budget>",
+                api: true,
+                is_final: true,
+                is_abstract: false,
+                hook: false,
+                status: Status::Stable,
+                doc: "Look one up by the name a developer typed.",
+                default: None,
+            },
+            MethodDesc {
+                name: "open",
+                params: &[
+                    ParamDesc { name: "budget", ty: "Ref<Budget>" },
+                ],
+                returns: "Ref<Budget>",
+                api: true,
+                is_final: true,
+                is_abstract: false,
+                hook: false,
+                status: Status::Stable,
+                doc: "A working copy to spend against. Null for a reference the book does not hold — a dangling budget is a load-time diagnostic, never a default limit quietly standing in.",
+                default: None,
+            },
         ],
         values: &[
         ],
@@ -4515,7 +4568,7 @@ pub const CLASSES: &[ClassDesc] = &[
             },
             FieldDesc {
                 name: "budget",
-                ty: "Ref<Budget>",
+                ty: "BudgetRef",
                 api: true,
                 is_final: false,
                 exposed: true,
@@ -4552,7 +4605,7 @@ pub const CLASSES: &[ClassDesc] = &[
             },
             FieldDesc {
                 name: "budget",
-                ty: "Ref<Budget>",
+                ty: "BudgetRef",
                 api: true,
                 is_final: false,
                 exposed: true,
@@ -5875,10 +5928,25 @@ pub const CLASSES: &[ClassDesc] = &[
         path: "/Core/Cost",
         extends: None,
         kind: DeclKind::Struct,
-        sealed: false,
+        sealed: true,
         is_abstract: false,
         status: Status::Stable,
-        doc: "What an interaction spends.",
+        doc: "A kind and a limit, with NO accounting — Distance(m), Time(s) or Pool(pool, rate). What a Budget is a named instance of, and what an interaction spends.",
+        fields: &[
+        ],
+        methods: &[
+        ],
+        values: &[
+        ],
+    },
+    ClassDesc {
+        path: "/Core/BudgetRef",
+        extends: None,
+        kind: DeclKind::Struct,
+        sealed: true,
+        is_abstract: false,
+        status: Status::Stable,
+        doc: "'This budget' — Named(Ref<Budget>) into the project's book, or Inline(Cost) authored at the site. BOTH forms stay and stay DISTINGUISHABLE: forcing a one-off through the book is ceremony for a number used once, and because the two are told apart a tool can notice the same inline number in twelve places and offer to extract it.",
         fields: &[
         ],
         methods: &[
@@ -6237,7 +6305,7 @@ pub const CLASSES: &[ClassDesc] = &[
 ];
 
 /// Declaration counts, asserted by the manifest's own tests.
-pub const OBJECT_COUNT: usize = 91;
-pub const STRUCT_COUNT: usize = 29;
+pub const OBJECT_COUNT: usize = 89;
+pub const STRUCT_COUNT: usize = 30;
 pub const ENUM_COUNT: usize = 16;
-pub const MEMBER_COUNT: usize = 330;
+pub const MEMBER_COUNT: usize = 336;

@@ -16,7 +16,7 @@
 //! that a proposal's *shape* does not change between them — only its precision — so the same mechanic
 //! answers all three without knowing which it is in.
 
-use cv_core::judge::{Budget, Verdict};
+use cv_core::judge::{Budget, Cost, Verdict};
 use cv_core::{Fidelity, Tolerances, Trivalent};
 use cv_determinism::Rng;
 
@@ -30,8 +30,12 @@ struct Tether {
 
 impl Tether {
     /// ⚠ **The magnitude is the whole point.** `OverBudget(excess)` says *move it this much closer*.
+    ///
+    /// ⚠ The budget is **named**, so the verdict carries the name too — a solver told *"over budget by
+    /// 6.2 against tether reach"* can report which lever to pull, where one told *"over budget by
+    /// 6.2"* cannot.
     fn judge(&self, gap: f64) -> Verdict {
-        Budget::distance(self.reach).judge(gap)
+        Budget::named("tether reach", Cost::distance(self.reach)).judge(gap)
     }
 
     /// The same mechanic, deliberately crippled: it answers only yes or no.

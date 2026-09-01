@@ -45,11 +45,18 @@ fn declaration_counts() {
 
     // M03a: +/Core/UnlockTableResource (object, 3 members) and +/Core/Unlock (struct, doc-only as
     // every struct here is); -Object::satisfied_by. So 328 - 1 + 3 = 330.
-    assert_eq!(objects, 91, "object declarations");
-    assert_eq!(structs, 29, "struct declarations");
+    //
+    // Budgets became named rows: -DistanceBudget/-TimeBudget/-PoolBudget (their three forms are
+    // variants of `Cost`, which is a *value* and so cannot be subclassed), +BudgetBook. Objects
+    // 91 - 3 + 1 = 89. +BudgetRef makes structs 30.
+    //
+    // Members: +Budget::{name, cost, judge}, +BudgetBook::{declare, retune, by_name, open},
+    // +OverBudgetVerdict::against, -PoolBudget::{pool, rate}. So 330 + 8 - 2 = 336.
+    assert_eq!(objects, 89, "object declarations");
+    assert_eq!(structs, 30, "struct declarations");
     assert_eq!(enums, 16, "enum declarations");
-    assert_eq!(m.classes.len(), 136, "total declarations");
-    assert_eq!(m.member_count(), 330, "fields + methods");
+    assert_eq!(m.classes.len(), 135, "total declarations");
+    assert_eq!(m.member_count(), 336, "fields + methods");
 }
 
 /// Spot-checks against `.notes/Design/v0.2b/06-api/reference.md`. Not exhaustive — the exhaustive

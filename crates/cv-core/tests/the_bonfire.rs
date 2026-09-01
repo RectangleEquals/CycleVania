@@ -12,9 +12,9 @@
 //! only because something special-cased *bonfire* would still pass the first half. It passes the
 //! second half only if the two halves work alone — which is what makes the whole thing a composition.
 
+use cv_core::budget::BudgetRef;
 use cv_core::collision::{CollisionBody, CollisionData, CollisionLayer};
 use cv_core::component::{Attached, CollisionMode, Component, Components, Direction};
-use cv_core::judge::Budget;
 use cv_core::mission::Rule;
 use cv_core::schedule::Span;
 use cv_core::shape::Shape;
@@ -44,7 +44,7 @@ fn checkpoint(scope: InstanceScope) -> Component {
 fn fast_travel(network: &str, unlocked_by: Rule) -> Component {
     Component::FastTravel {
         network: network.to_string(),
-        cost: Some(Budget::distance(0.0)),
+        cost: Some(BudgetRef::free()),
         unlocked_by,
     }
 }
@@ -260,12 +260,12 @@ fn a_gate_that_names_a_nearby_kind_must_say_at_what_scope() {
     // with different answers. A rule that could not say which would silently answer the wrong one.
     let near = Rule::Nearby {
         kind: class("/Content/Props/BombFlower"),
-        within: 8.0,
+        within: BudgetRef::by_name("carry range"),
         scope: InstanceScope::Space,
     };
     let far = Rule::Nearby {
         kind: class("/Content/Props/BombFlower"),
-        within: 8.0,
+        within: BudgetRef::by_name("carry range"),
         scope: InstanceScope::World,
     };
     assert_ne!(near, far);

@@ -1081,7 +1081,7 @@ doc = "A node in a travel network. Not cosmetic: a network collapses traversal c
 
   [[class.field]]
   name = "cost"
-  type = "Ref<Budget>"
+  type = "BudgetRef"
   api = true
   mutable = true
   exposed = true
@@ -1411,7 +1411,7 @@ doc = "Something matching is accessible within range of this gate. The contextua
 
   [[class.field]]
   name = "within"
-  type = "Ref<Budget>"
+  type = "BudgetRef"
   api = true
   mutable = true
   exposed = true
@@ -1472,6 +1472,15 @@ doc = "Too far. Move the target closer by roughly this much — a direction the 
   exposed = true
   status = "stable"
   doc = "How much over budget."
+
+  [[class.field]]
+  name = "against"
+  type = "Ref<Budget>"
+  api = true
+  mutable = true
+  exposed = true
+  status = "stable"
+  doc = "Which budget it was measured against. 'Over budget by 6.2' leaves a developer guessing; 'over budget by 6.2 against grapple reach' names the lever to pull. Null only where the comparison was against a bare number."
 
 [[class]]
 path = "/Core/BlockedVerdict"
@@ -2696,7 +2705,7 @@ doc = "A REQUIRED OR FORBIDDEN path with a budget, an occupant and predicates. T
   doc = "Destination. Null means unbound."
   [[class.field]]
   name = "budget"
-  type = "Ref<Budget>"
+  type = "BudgetRef"
   api = true
   mutable = true
   exposed = true
@@ -2760,7 +2769,23 @@ extends = "/Core/Object"
 kind = "object"
 sealed = false
 status = "stable"
-doc = "What a route may spend."
+doc = "A NAMED limit — a row of the project's BudgetBook, referenced rather than copied. 'Carry range' is a concept a project tunes, not a number retyped at each of the five sites that mention it."
+  [[class.field]]
+  name = "name"
+  type = "String"
+  api = true
+  mutable = false
+  exposed = true
+  status = "stable"
+  doc = "What a developer called it. Surfaces in the verdict, which is how a rejection says WHICH limit was missed."
+  [[class.field]]
+  name = "cost"
+  type = "Cost"
+  api = true
+  mutable = false
+  exposed = true
+  status = "stable"
+  doc = "The kind and the limit. Retuning this is the one edit that moves every site naming this budget."
   [[class.method]]
   name = "remaining"
   args = []
@@ -2776,44 +2801,59 @@ doc = "What a route may spend."
   api = true
   final = true
   status = "stable"
-  doc = "Consume from the budget."
-
-[[class]]
-path = "/Core/DistanceBudget"
-extends = "/Core/Budget"
-kind = "object"
-status = "stable"
-doc = "Metres."
-
-[[class]]
-path = "/Core/TimeBudget"
-extends = "/Core/Budget"
-kind = "object"
-status = "stable"
-doc = "Seconds. Every TimeBudget is a distance divided by player_profile.speed, which is why that setting is not optional."
-
-[[class]]
-path = "/Core/PoolBudget"
-extends = "/Core/Budget"
-kind = "object"
-status = "stable"
-doc = "Draw against a named resource pool at a rate. How a soft gate is a magnitude rather than a rule."
-  [[class.field]]
-  name = "pool"
-  type = "String"
+  doc = "Consume from the budget. The argument is always a DISTANCE, whatever the budget measures — a caller that had to know whether to pass metres or seconds would re-derive the conversion at every call site and one of them would get it wrong."
+  [[class.method]]
+  name = "judge"
+  args = [ { name = "distance", type = "float" } ]
+  returns = "Ref<Verdict>"
   api = true
-  mutable = true
-  exposed = true
+  final = true
   status = "stable"
-  doc = "Which declared resource."
-  [[class.field]]
-  name = "rate"
-  type = "float"
+  doc = "Judge a distance against what is left, naming this budget in the verdict."
+
+[[class]]
+path = "/Core/BudgetBook"
+extends = "/Core/Object"
+kind = "object"
+status = "stable"
+doc = "The project's named budgets — the one place 'carry range' is a number. NOTHING spends against a row here: open() hands out a working copy, because spending against the shared row would make two unrelated routes drain each other and the symptom would point nowhere near the cause."
+  [[class.method]]
+  name = "declare"
+  args = [ { name = "name", type = "String" }, { name = "cost", type = "Cost" } ]
+  returns = "Ref<Budget>"
   api = true
-  mutable = true
-  exposed = true
+  final = true
   status = "stable"
-  doc = "Units per second."
+  doc = "Register a named budget."
+  [[class.method]]
+  name = "retune"
+  args = [ { name = "budget", type = "Ref<Budget>" }, { name = "cost", type = "Cost" } ]
+  returns = "void"
+  api = true
+  final = true
+  status = "stable"
+  doc = "Change what it costs. Every site naming it moves at once, which is the point; a site that inlined the number does not, which is also the point."
+  [[class.method]]
+  name = "by_name"
+  args = [ { name = "name", type = "String" } ]
+  returns = "Ref<Budget>"
+  api = true
+  final = true
+  status = "stable"
+  doc = "Look one up by the name a developer typed."
+  [[class.method]]
+  name = "open"
+  args = [ { name = "budget", type = "Ref<Budget>" } ]
+  returns = "Ref<Budget>"
+  api = true
+  final = true
+  status = "stable"
+  doc = "A working copy to spend against. Null for a reference the book does not hold — a dangling budget is a load-time diagnostic, never a default limit quietly standing in."
+
+# NOTE: Cost's three forms — Distance(m), Time(s), Pool(pool, rate) — are VARIANTS OF A VALUE, not
+# subclasses. A struct is copied, not referenced, so it cannot be subclassed here (and should not be:
+# giving a cost identity is exactly the confusion Budget exists to resolve). The forms are recorded on
+# /Core/Cost's own doc and in 06-api's ▸ notation.
 
 [[class]]
 path = "/Core/Path"
@@ -3009,7 +3049,7 @@ doc = "At least this far from a named kind. A door writes key-to-lock distance h
   doc = "What to stay away from."
   [[class.field]]
   name = "budget"
-  type = "Ref<Budget>"
+  type = "BudgetRef"
   api = true
   mutable = true
   exposed = true
@@ -3032,7 +3072,7 @@ doc = "At most this far from a named kind."
   doc = "What to stay near."
   [[class.field]]
   name = "budget"
-  type = "Ref<Budget>"
+  type = "BudgetRef"
   api = true
   mutable = true
   exposed = true
@@ -3759,8 +3799,16 @@ doc = "A tag match with an exact/inherited toggle. Why an eligible-surface list 
 [[class]]
 path = "/Core/Cost"
 kind = "struct"
+sealed = true
 status = "stable"
-doc = "What an interaction spends."
+doc = "A kind and a limit, with NO accounting — Distance(m), Time(s) or Pool(pool, rate). What a Budget is a named instance of, and what an interaction spends."
+
+[[class]]
+path = "/Core/BudgetRef"
+kind = "struct"
+sealed = true
+status = "stable"
+doc = "'This budget' — Named(Ref<Budget>) into the project's book, or Inline(Cost) authored at the site. BOTH forms stay and stay DISTINGUISHABLE: forcing a one-off through the book is ceremony for a number used once, and because the two are told apart a tool can notice the same inline number in twelve places and offer to extract it."
 
 [[class]]
 path = "/Core/Quota"

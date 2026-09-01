@@ -1533,7 +1533,7 @@
       "doc": "What one hop spends — in the same currency as the routes it competes with.",
       "pins": [
         { "name": "self", "type": "Ref<FastTravelComponent>", "dir": "in" },
-        { "name": "value", "type": "Ref<Budget>", "dir": "out" }
+        { "name": "value", "type": "BudgetRef", "dir": "out" }
       ]
     },
     {
@@ -1545,7 +1545,7 @@
       "pins": [
         { "name": "in", "type": "exec", "dir": "in" },
         { "name": "self", "type": "Ref<FastTravelComponent>", "dir": "in" },
-        { "name": "value", "type": "Ref<Budget>", "dir": "in" },
+        { "name": "value", "type": "BudgetRef", "dir": "in" },
         { "name": "out", "type": "exec", "dir": "out" }
       ]
     },
@@ -2029,7 +2029,7 @@
       "doc": "How near, in whatever currency the budget names.",
       "pins": [
         { "name": "self", "type": "Ref<NearbyRule>", "dir": "in" },
-        { "name": "value", "type": "Ref<Budget>", "dir": "out" }
+        { "name": "value", "type": "BudgetRef", "dir": "out" }
       ]
     },
     {
@@ -2041,7 +2041,7 @@
       "pins": [
         { "name": "in", "type": "exec", "dir": "in" },
         { "name": "self", "type": "Ref<NearbyRule>", "dir": "in" },
-        { "name": "value", "type": "Ref<Budget>", "dir": "in" },
+        { "name": "value", "type": "BudgetRef", "dir": "in" },
         { "name": "out", "type": "exec", "dir": "out" }
       ]
     },
@@ -2114,6 +2114,30 @@
         { "name": "in", "type": "exec", "dir": "in" },
         { "name": "self", "type": "Ref<OverBudgetVerdict>", "dir": "in" },
         { "name": "value", "type": "float", "dir": "in" },
+        { "name": "out", "type": "exec", "dir": "out" }
+      ]
+    },
+    {
+      "op": "/Core/OverBudgetVerdict.against#get",
+      "label": "get against",
+      "category": "OverBudgetVerdict",
+      "shape": "pure",
+      "doc": "Which budget it was measured against. 'Over budget by 6.2' leaves a developer guessing; 'over budget by 6.2 against grapple reach' names the lever to pull. Null only where the comparison was against a bare number.",
+      "pins": [
+        { "name": "self", "type": "Ref<OverBudgetVerdict>", "dir": "in" },
+        { "name": "value", "type": "Ref<Budget>", "dir": "out" }
+      ]
+    },
+    {
+      "op": "/Core/OverBudgetVerdict.against#set",
+      "label": "set against",
+      "category": "OverBudgetVerdict",
+      "shape": "call",
+      "doc": "Which budget it was measured against. 'Over budget by 6.2' leaves a developer guessing; 'over budget by 6.2 against grapple reach' names the lever to pull. Null only where the comparison was against a bare number.",
+      "pins": [
+        { "name": "in", "type": "exec", "dir": "in" },
+        { "name": "self", "type": "Ref<OverBudgetVerdict>", "dir": "in" },
+        { "name": "value", "type": "Ref<Budget>", "dir": "in" },
         { "name": "out", "type": "exec", "dir": "out" }
       ]
     },
@@ -4465,7 +4489,7 @@
       "doc": "What traversing it may spend.",
       "pins": [
         { "name": "self", "type": "Ref<Route>", "dir": "in" },
-        { "name": "value", "type": "Ref<Budget>", "dir": "out" }
+        { "name": "value", "type": "BudgetRef", "dir": "out" }
       ]
     },
     {
@@ -4477,7 +4501,7 @@
       "pins": [
         { "name": "in", "type": "exec", "dir": "in" },
         { "name": "self", "type": "Ref<Route>", "dir": "in" },
-        { "name": "value", "type": "Ref<Budget>", "dir": "in" },
+        { "name": "value", "type": "BudgetRef", "dir": "in" },
         { "name": "out", "type": "exec", "dir": "out" }
       ]
     },
@@ -4626,6 +4650,28 @@
       ]
     },
     {
+      "op": "/Core/Budget.name#get",
+      "label": "get name",
+      "category": "Budget",
+      "shape": "pure",
+      "doc": "What a developer called it. Surfaces in the verdict, which is how a rejection says WHICH limit was missed.",
+      "pins": [
+        { "name": "self", "type": "Ref<Budget>", "dir": "in" },
+        { "name": "value", "type": "String", "dir": "out" }
+      ]
+    },
+    {
+      "op": "/Core/Budget.cost#get",
+      "label": "get cost",
+      "category": "Budget",
+      "shape": "pure",
+      "doc": "The kind and the limit. Retuning this is the one edit that moves every site naming this budget.",
+      "pins": [
+        { "name": "self", "type": "Ref<Budget>", "dir": "in" },
+        { "name": "value", "type": "Cost", "dir": "out" }
+      ]
+    },
+    {
       "op": "/Core/Budget.remaining",
       "label": "remaining",
       "category": "Budget",
@@ -4643,7 +4689,7 @@
       "label": "spend",
       "category": "Budget",
       "shape": "call",
-      "doc": "Consume from the budget.",
+      "doc": "Consume from the budget. The argument is always a DISTANCE, whatever the budget measures — a caller that had to know whether to pass metres or seconds would re-derive the conversion at every call site and one of them would get it wrong.",
       "pins": [
         { "name": "in", "type": "exec", "dir": "in" },
         { "name": "self", "type": "Ref<Budget>", "dir": "in" },
@@ -4652,51 +4698,74 @@
       ]
     },
     {
-      "op": "/Core/PoolBudget.pool#get",
-      "label": "get pool",
-      "category": "PoolBudget",
-      "shape": "pure",
-      "doc": "Which declared resource.",
+      "op": "/Core/Budget.judge",
+      "label": "judge",
+      "category": "Budget",
+      "shape": "call",
+      "doc": "Judge a distance against what is left, naming this budget in the verdict.",
       "pins": [
-        { "name": "self", "type": "Ref<PoolBudget>", "dir": "in" },
-        { "name": "value", "type": "String", "dir": "out" }
+        { "name": "in", "type": "exec", "dir": "in" },
+        { "name": "self", "type": "Ref<Budget>", "dir": "in" },
+        { "name": "distance", "type": "float", "dir": "in" },
+        { "name": "out", "type": "exec", "dir": "out" },
+        { "name": "return", "type": "Ref<Verdict>", "dir": "out" }
       ]
     },
     {
-      "op": "/Core/PoolBudget.pool#set",
-      "label": "set pool",
-      "category": "PoolBudget",
+      "op": "/Core/BudgetBook.declare",
+      "label": "declare",
+      "category": "BudgetBook",
       "shape": "call",
-      "doc": "Which declared resource.",
+      "doc": "Register a named budget.",
       "pins": [
         { "name": "in", "type": "exec", "dir": "in" },
-        { "name": "self", "type": "Ref<PoolBudget>", "dir": "in" },
-        { "name": "value", "type": "String", "dir": "in" },
+        { "name": "self", "type": "Ref<BudgetBook>", "dir": "in" },
+        { "name": "name", "type": "String", "dir": "in" },
+        { "name": "cost", "type": "Cost", "dir": "in" },
+        { "name": "out", "type": "exec", "dir": "out" },
+        { "name": "return", "type": "Ref<Budget>", "dir": "out" }
+      ]
+    },
+    {
+      "op": "/Core/BudgetBook.retune",
+      "label": "retune",
+      "category": "BudgetBook",
+      "shape": "call",
+      "doc": "Change what it costs. Every site naming it moves at once, which is the point; a site that inlined the number does not, which is also the point.",
+      "pins": [
+        { "name": "in", "type": "exec", "dir": "in" },
+        { "name": "self", "type": "Ref<BudgetBook>", "dir": "in" },
+        { "name": "budget", "type": "Ref<Budget>", "dir": "in" },
+        { "name": "cost", "type": "Cost", "dir": "in" },
         { "name": "out", "type": "exec", "dir": "out" }
       ]
     },
     {
-      "op": "/Core/PoolBudget.rate#get",
-      "label": "get rate",
-      "category": "PoolBudget",
-      "shape": "pure",
-      "doc": "Units per second.",
+      "op": "/Core/BudgetBook.by_name",
+      "label": "by_name",
+      "category": "BudgetBook",
+      "shape": "call",
+      "doc": "Look one up by the name a developer typed.",
       "pins": [
-        { "name": "self", "type": "Ref<PoolBudget>", "dir": "in" },
-        { "name": "value", "type": "float", "dir": "out" }
+        { "name": "in", "type": "exec", "dir": "in" },
+        { "name": "self", "type": "Ref<BudgetBook>", "dir": "in" },
+        { "name": "name", "type": "String", "dir": "in" },
+        { "name": "out", "type": "exec", "dir": "out" },
+        { "name": "return", "type": "Ref<Budget>", "dir": "out" }
       ]
     },
     {
-      "op": "/Core/PoolBudget.rate#set",
-      "label": "set rate",
-      "category": "PoolBudget",
+      "op": "/Core/BudgetBook.open",
+      "label": "open",
+      "category": "BudgetBook",
       "shape": "call",
-      "doc": "Units per second.",
+      "doc": "A working copy to spend against. Null for a reference the book does not hold — a dangling budget is a load-time diagnostic, never a default limit quietly standing in.",
       "pins": [
         { "name": "in", "type": "exec", "dir": "in" },
-        { "name": "self", "type": "Ref<PoolBudget>", "dir": "in" },
-        { "name": "value", "type": "float", "dir": "in" },
-        { "name": "out", "type": "exec", "dir": "out" }
+        { "name": "self", "type": "Ref<BudgetBook>", "dir": "in" },
+        { "name": "budget", "type": "Ref<Budget>", "dir": "in" },
+        { "name": "out", "type": "exec", "dir": "out" },
+        { "name": "return", "type": "Ref<Budget>", "dir": "out" }
       ]
     },
     {
@@ -4981,7 +5050,7 @@
       "doc": "The minimum separation.",
       "pins": [
         { "name": "self", "type": "Ref<MinDistanceFrom>", "dir": "in" },
-        { "name": "value", "type": "Ref<Budget>", "dir": "out" }
+        { "name": "value", "type": "BudgetRef", "dir": "out" }
       ]
     },
     {
@@ -4993,7 +5062,7 @@
       "pins": [
         { "name": "in", "type": "exec", "dir": "in" },
         { "name": "self", "type": "Ref<MinDistanceFrom>", "dir": "in" },
-        { "name": "value", "type": "Ref<Budget>", "dir": "in" },
+        { "name": "value", "type": "BudgetRef", "dir": "in" },
         { "name": "out", "type": "exec", "dir": "out" }
       ]
     },
@@ -5029,7 +5098,7 @@
       "doc": "The maximum separation.",
       "pins": [
         { "name": "self", "type": "Ref<MaxDistanceFrom>", "dir": "in" },
-        { "name": "value", "type": "Ref<Budget>", "dir": "out" }
+        { "name": "value", "type": "BudgetRef", "dir": "out" }
       ]
     },
     {
@@ -5041,7 +5110,7 @@
       "pins": [
         { "name": "in", "type": "exec", "dir": "in" },
         { "name": "self", "type": "Ref<MaxDistanceFrom>", "dir": "in" },
-        { "name": "value", "type": "Ref<Budget>", "dir": "in" },
+        { "name": "value", "type": "BudgetRef", "dir": "in" },
         { "name": "out", "type": "exec", "dir": "out" }
       ]
     },

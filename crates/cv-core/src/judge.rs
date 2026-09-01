@@ -54,7 +54,15 @@ pub enum Verdict {
     /// is why the number survives into the trace rather than being thresholded here.
     Accepted { slack: f64 },
     /// Too far, by roughly this much. **A direction the solver can act on.**
-    OverBudget { excess: f64 },
+    ///
+    /// ⚠ `against` names the budget it was measured against, and it is what turns *"over budget by
+    /// 6.2"* — a number with no referent — into *"over budget by 6.2 against grapple reach"*. For a
+    /// developer asking *"why did this fail?"* that name is the single most useful fact, and it is
+    /// free once budgets have names. `None` only where the comparison was against a bare number.
+    OverBudget {
+        excess: f64,
+        against: Option<ObjectId>,
+    },
     /// Something is in the way. Remove or reposition it, or route around it.
     Blocked { by: ObjectId },
     /// Wrong kind of thing.
@@ -78,7 +86,30 @@ impl Verdict {
         if excess <= 0.0 {
             Verdict::Accepted { slack: -excess }
         } else {
-            Verdict::OverBudget { excess }
+            Verdict::OverBudget {
+                excess,
+                against: None,
+            }
+        }
+    }
+
+    /// Name the budget this was measured against.
+    ///
+    /// ⚠ Chaining rather than a constructor argument, so an `Accepted` verdict silently absorbs it —
+    /// a fit has nothing to attribute, and forcing every caller to branch on that would put the same
+    /// `if` at every call site.
+    pub fn against(mut self, budget: ObjectId) -> Self {
+        if let Verdict::OverBudget { against, .. } = &mut self {
+            *against = Some(budget);
+        }
+        self
+    }
+
+    /// Which budget this was measured against, if it was a rejection that names one.
+    pub fn budget(&self) -> Option<ObjectId> {
+        match self {
+            Verdict::OverBudget { against, .. } => *against,
+            _ => None,
         }
     }
 
@@ -112,7 +143,7 @@ impl Verdict {
     /// rejections, and neither is measured in metres.
     pub fn shortfall(&self) -> Option<f64> {
         match self {
-            Verdict::OverBudget { excess } => Some(*excess),
+            Verdict::OverBudget { excess, .. } => Some(*excess),
             Verdict::Accepted { .. } | Verdict::Blocked { .. } | Verdict::Unsuitable { .. } => None,
         }
     }
@@ -122,7 +153,14 @@ impl fmt::Display for Verdict {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Verdict::Accepted { slack } => write!(f, "accepted with {slack} to spare"),
-            Verdict::OverBudget { excess } => write!(f, "over budget by {excess}"),
+            Verdict::OverBudget {
+                excess,
+                against: Some(b),
+            } => write!(f, "over budget by {excess} against {b}"),
+            Verdict::OverBudget {
+                excess,
+                against: None,
+            } => write!(f, "over budget by {excess}"),
             Verdict::Blocked { by } => write!(f, "blocked by {by}"),
             Verdict::Unsuitable { reason } => write!(f, "unsuitable: {reason}"),
         }
@@ -130,92 +168,14 @@ impl fmt::Display for Verdict {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Budget
+// Budgets live in their own module
 // ---------------------------------------------------------------------------------------------
 
-/// What a route may spend.
-///
-/// ⚠ **Every `Time` budget is a distance divided by `player_profile.speed`**, which is why that
-/// setting is not optional: without a speed there is no way to turn seconds into a reachable distance,
-/// and the whole time axis becomes unusable.
-#[derive(Clone, Debug, PartialEq)]
-pub enum Budget {
-    /// World units.
-    Distance { limit: f64, spent: f64 },
-    /// Seconds, converted through the player's speed.
-    Time { limit: f64, spent: f64, speed: f64 },
-    /// A draw against a named resource pool, at a rate.
-    ///
-    /// ⚠ **This is how a soft gate becomes a magnitude rather than a rule.** *"You can cross the
-    /// lava if you have enough hearts"* is a budget question, not a lock — and expressing it as one
-    /// means the solver can trade it off instead of treating it as impassable.
-    Pool {
-        pool: String,
-        limit: f64,
-        spent: f64,
-        rate: f64,
-    },
-}
-
-impl Budget {
-    /// A distance budget in world units.
-    pub fn distance(limit: f64) -> Self {
-        Budget::Distance { limit, spent: 0.0 }
-    }
-
-    /// A time budget in seconds, spent at `speed` world units per second.
-    pub fn time(limit: f64, speed: f64) -> Self {
-        Budget::Time {
-            limit,
-            spent: 0.0,
-            speed,
-        }
-    }
-
-    /// A draw against a named pool.
-    pub fn pool(pool: impl Into<String>, limit: f64, rate: f64) -> Self {
-        Budget::Pool {
-            pool: pool.into(),
-            limit,
-            spent: 0.0,
-            rate,
-        }
-    }
-
-    /// What is left.
-    pub fn remaining(&self) -> f64 {
-        match self {
-            Budget::Distance { limit, spent }
-            | Budget::Time { limit, spent, .. }
-            | Budget::Pool { limit, spent, .. } => limit - spent,
-        }
-    }
-
-    /// Spend `distance` world units against this budget.
-    ///
-    /// ⚠ **The argument is always a distance**, whatever the budget measures. A caller that had to
-    /// know whether to pass metres or seconds would be re-deriving the conversion at every call site,
-    /// and one of them would get it wrong.
-    pub fn spend(&mut self, distance: f64) {
-        match self {
-            Budget::Distance { spent, .. } => *spent += distance,
-            Budget::Time { spent, speed, .. } => {
-                *spent += if *speed > 0.0 { distance / *speed } else { 0.0 }
-            }
-            Budget::Pool { spent, rate, .. } => *spent += distance * *rate,
-        }
-    }
-
-    /// Judge a distance against what is left.
-    ///
-    /// The bridge from budgets to [`Verdict`], and the reason a route rejection carries a number the
-    /// solver can act on.
-    pub fn judge(&self, distance: f64) -> Verdict {
-        let mut probe = self.clone();
-        probe.spend(distance);
-        Verdict::over_budget(-probe.remaining())
-    }
-}
+// ⚠ **`Budget` moved to [`crate::budget`], and it is not a rename.** It used to fuse the *declaration*
+// ("at most 8 metres") with the *accounting* ("6.2 spent"), so every rule and route that named a limit
+// owned a private copy of it — and a project retuning "carry range" edited twelve sites and missed one.
+// A budget is now a named row a project retunes in one place, and the name survives into the verdict.
+pub use crate::budget::{Budget, BudgetBook, BudgetError, BudgetRef, Cost};
 
 // ---------------------------------------------------------------------------------------------
 // Path
@@ -328,7 +288,11 @@ pub struct Route {
     /// Required or forbidden.
     pub obligation: Obligation,
     /// What it may spend.
-    pub budget: Budget,
+    /// What it may spend.
+    ///
+    /// ⚠ **A reference, not an owned limit.** *"Within carry range"* is a project-level concept; a
+    /// route that owned its own `8.0` would drift from every other site the moment anyone retuned it.
+    pub budget: BudgetRef,
     /// Must the whole path have line of sight?
     pub line_of_sight: bool,
     /// Must it be walkable from a standing start?
@@ -341,7 +305,7 @@ pub struct Route {
 
 impl Route {
     /// A route that must exist.
-    pub fn required(from: ObjectId, to: ObjectId, budget: Budget) -> Self {
+    pub fn required(from: ObjectId, to: ObjectId, budget: BudgetRef) -> Self {
         Route {
             from,
             to,
@@ -355,7 +319,7 @@ impl Route {
     }
 
     /// A route that must not exist.
-    pub fn forbidden(from: ObjectId, to: ObjectId, budget: Budget) -> Self {
+    pub fn forbidden(from: ObjectId, to: ObjectId, budget: BudgetRef) -> Self {
         Route {
             obligation: Obligation::Forbidden,
             ..Route::required(from, to, budget)
@@ -379,8 +343,16 @@ impl Route {
     /// ⚠ **A forbidden route inverts the answer, not the reasoning.** A path that fits the budget
     /// *satisfies* a required route and *violates* a forbidden one, and having one function say so
     /// keeps the two from drifting apart.
-    pub fn judge(&self, path: &Path) -> Verdict {
-        let fits = self.budget.judge(path.length());
+    ///
+    /// ⚠ Takes the project's [`BudgetBook`], because the route names a budget rather than owning one.
+    /// A reference the book does not hold is `Unsuitable` — **not** `OverBudget`: no amount of moving
+    /// the candidate fixes a budget that was never declared, so the search must stop rather than
+    /// retry, and the message must name the missing budget.
+    pub fn judge(&self, path: &Path, book: &BudgetBook) -> Verdict {
+        let Some(budget) = self.budget.open(book) else {
+            return Verdict::unsuitable(format!("no such budget: {}", self.budget));
+        };
+        let fits = budget.judge(path.length());
         match self.obligation {
             Obligation::Required => fits,
             Obligation::Forbidden => match fits {
@@ -404,9 +376,10 @@ impl Serialize for Verdict {
                 w.u8(0);
                 w.f64(*slack);
             }
-            Verdict::OverBudget { excess } => {
+            Verdict::OverBudget { excess, against } => {
                 w.u8(1);
                 w.f64(*excess);
+                w.write(against);
             }
             Verdict::Blocked { by } => {
                 w.u8(2);
@@ -424,7 +397,10 @@ impl Deserialize for Verdict {
     fn deserialize(r: &mut Reader<'_>) -> SerResult<Self> {
         match r.u8()? {
             0 => Ok(Verdict::Accepted { slack: r.f64()? }),
-            1 => Ok(Verdict::OverBudget { excess: r.f64()? }),
+            1 => Ok(Verdict::OverBudget {
+                excess: r.f64()?,
+                against: r.read()?,
+            }),
             2 => Ok(Verdict::Blocked {
                 by: ObjectId::deserialize(r)?,
             }),
@@ -485,61 +461,36 @@ mod tests {
 
     // --- budgets --------------------------------------------------------------------------------
 
-    #[test]
-    fn a_time_budget_is_a_distance_divided_by_speed() {
-        // ⚠ Which is why `player_profile.speed` is not optional: without it there is no way to turn
-        // seconds into a reachable distance.
-        let mut b = Budget::time(10.0, 5.0);
-        b.spend(20.0); // 20 units at 5 units/s = 4 seconds
-        assert_eq!(b.remaining(), 6.0);
-    }
+    // ⚠ The budget suite lives in [`crate::budget`] now. What stays here is the one thing that is a
+    // *judging* question rather than a budget question: that a verdict carries the budget's name.
 
     #[test]
-    fn a_pool_budget_draws_at_a_rate() {
-        // ⚠ How a soft gate becomes a magnitude rather than a rule — the solver can trade it off.
-        let mut b = Budget::pool("stamina", 100.0, 2.5);
-        b.spend(10.0);
-        assert_eq!(b.remaining(), 75.0);
-        assert_eq!(b.judge(10.0), Verdict::over_budget(-50.0));
-    }
+    fn a_rejection_names_the_budget_it_was_measured_against() {
+        // ⚠ *"Over budget by 6.2"* does not say against what. For a developer asking *"why did this
+        // fail?"*, the name is the fact that turns a number into an action.
+        let mut book = BudgetBook::new();
+        let reach = book.declare("grapple reach", Cost::distance(30.0)).unwrap();
+        let v = book.open(reach).unwrap().judge(36.2);
 
-    #[test]
-    fn every_budget_is_spent_in_distance_whatever_it_measures() {
-        // A caller that had to know whether to pass metres or seconds would eventually pass the wrong
-        // one. The conversion lives here, once.
-        for mut b in [
-            Budget::distance(100.0),
-            Budget::time(100.0, 1.0),
-            Budget::pool("p", 100.0, 1.0),
-        ] {
-            b.spend(40.0);
-            assert_eq!(b.remaining(), 60.0);
-        }
-    }
-
-    #[test]
-    fn a_budget_judges_a_distance_into_an_actionable_verdict() {
-        let b = Budget::distance(30.0);
-        assert_eq!(b.judge(20.0), Verdict::accepted(10.0));
+        assert_eq!(v.budget(), Some(reach));
+        let excess = v.shortfall().expect("over budget carries a magnitude");
         // ⚠ Compared with a tolerance, not for equality: the excess is *computed*, and
         // `36.2 - 30.0` is `6.200000000000003`. Asserting exact equality on a derived float is the
         // habit the binding contract exists to break.
-        let excess = b
-            .judge(36.2)
-            .shortfall()
-            .expect("over budget carries a magnitude");
         assert!(
             math::abs(excess - 6.2) < 1e-9,
             "expected roughly 6.2, got {excess}"
         );
+        assert!(v.to_string().contains("against"), "{v}");
     }
 
     #[test]
-    fn a_zero_speed_profile_cannot_silently_spend_forever() {
-        // Guarding the division rather than trusting settings validation to have run first.
-        let mut b = Budget::time(10.0, 0.0);
-        b.spend(1_000.0);
-        assert_eq!(b.remaining(), 10.0);
+    fn a_fit_has_nothing_to_attribute_and_absorbs_the_name() {
+        // ⚠ `against` chains rather than taking a constructor argument, so callers do not each write
+        // the same `if` around a verdict that may or may not be a rejection.
+        let fit = Verdict::accepted(4.0).against(oid("some budget"));
+        assert_eq!(fit, Verdict::accepted(4.0));
+        assert_eq!(fit.budget(), None);
     }
 
     // --- paths ----------------------------------------------------------------------------------
@@ -572,11 +523,43 @@ mod tests {
 
     // --- routes ---------------------------------------------------------------------------------
 
+    /// A book with the one budget these routes name.
+    fn routes_book() -> BudgetBook {
+        let mut b = BudgetBook::new();
+        b.declare("short hop", Cost::distance(30.0)).unwrap();
+        b.declare("very short hop", Cost::distance(10.0)).unwrap();
+        b
+    }
+
     #[test]
     fn a_required_route_is_satisfied_by_a_path_within_budget() {
-        let r = Route::required(oid("a"), oid("b"), Budget::distance(30.0));
+        let book = routes_book();
+        let r = Route::required(oid("a"), oid("b"), BudgetRef::by_name("short hop"));
         let p = Path::from(Vec3::ZERO).step_to(Vec3::new(20.0, 0.0, 0.0));
-        assert!(r.judge(&p).is_accepted());
+        assert!(r.judge(&p, &book).is_accepted());
+    }
+
+    #[test]
+    fn a_route_naming_a_budget_that_does_not_exist_stops_the_search() {
+        // ⚠ **`Unsuitable`, not `OverBudget`.** No amount of moving the candidate fixes a budget that
+        // was never declared, so the search must terminate rather than retry — and the message has to
+        // name what is missing, or the developer is left guessing.
+        let book = routes_book();
+        let r = Route::required(oid("a"), oid("b"), BudgetRef::by_name("typo'd name"));
+        let p = Path::from(Vec3::ZERO).step_to(Vec3::new(1.0, 0.0, 0.0));
+        let v = r.judge(&p, &book);
+        assert!(!v.is_retryable());
+        assert!(v.to_string().contains("no such budget"), "{v}");
+    }
+
+    #[test]
+    fn an_inline_cost_needs_no_book_entry() {
+        // ⚠ The one-off case must not require registering a name first, or every throwaway route pays
+        // ceremony for a number used once.
+        let book = BudgetBook::new();
+        let r = Route::required(oid("a"), oid("b"), BudgetRef::distance(30.0));
+        let p = Path::from(Vec3::ZERO).step_to(Vec3::new(20.0, 0.0, 0.0));
+        assert!(r.judge(&p, &book).is_accepted());
     }
 
     #[test]
@@ -585,21 +568,26 @@ mod tests {
         // statement as *"these two must connect"*, and one search satisfies both.
         let walkable = Path::from(Vec3::ZERO).step_to(Vec3::new(20.0, 0.0, 0.0));
         let far = Path::from(Vec3::ZERO).step_to(Vec3::new(500.0, 0.0, 0.0));
-        let r = Route::forbidden(oid("entrance"), oid("boss"), Budget::distance(30.0));
+        let book = routes_book();
+        let r = Route::forbidden(
+            oid("entrance"),
+            oid("boss"),
+            BudgetRef::by_name("short hop"),
+        );
 
         assert!(
-            !r.judge(&walkable).is_accepted(),
+            !r.judge(&walkable, &book).is_accepted(),
             "an affordable path is exactly what a forbidden route must not have"
         );
         assert!(
-            r.judge(&far).is_accepted(),
+            r.judge(&far, &book).is_accepted(),
             "unaffordable means the forbidden route does not exist, which satisfies it"
         );
     }
 
     #[test]
     fn route_predicates_are_declared_not_inferred() {
-        let r = Route::required(oid("a"), oid("b"), Budget::distance(10.0))
+        let r = Route::required(oid("a"), oid("b"), BudgetRef::by_name("very short hop"))
             .needing_line_of_sight()
             .avoiding([oid("lava")]);
         assert!(r.line_of_sight);

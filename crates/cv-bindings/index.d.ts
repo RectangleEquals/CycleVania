@@ -607,7 +607,7 @@ export interface FastTravelComponent extends Component {
   /**
    * What one hop spends — in the same currency as the routes it competes with.
    */
-  cost: InstanceRef<Budget>;
+  cost: BudgetRef;
   /**
    * What the occupant must hold before this node joins its network.
    * @default AlwaysRule
@@ -817,7 +817,7 @@ export interface NearbyRule extends Rule {
   /**
    * How near, in whatever currency the budget names.
    */
-  within: InstanceRef<Budget>;
+  within: BudgetRef;
   /**
    * The scope searched.
    */
@@ -855,6 +855,12 @@ export interface OverBudgetVerdict extends Verdict {
    * How much over budget.
    */
   excess: number;
+  /**
+   * Which budget it was measured against. 'Over budget by 6.2' leaves a developer guessing;
+   * 'over budget by 6.2 against grapple reach' names the lever to pull. Null only where the
+   * comparison was against a bare number.
+   */
+  against: InstanceRef<Budget>;
 }
 
 /**
@@ -1583,7 +1589,7 @@ export interface Route extends Object {
   /**
    * What traversing it may spend.
    */
-  budget: InstanceRef<Budget>;
+  budget: BudgetRef;
   /**
    * Who traverses. Null means the player.
    */
@@ -1615,44 +1621,61 @@ export interface Route extends Object {
 }
 
 /**
- * What a route may spend.
+ * A NAMED limit — a row of the project's BudgetBook, referenced rather than copied. 'Carry
+ * range' is a concept a project tunes, not a number retyped at each of the five sites that mention
+ * it.
  */
 export interface Budget extends Object {
+  /**
+   * What a developer called it. Surfaces in the verdict, which is how a rejection says WHICH
+   * limit was missed.
+   */
+  readonly name: string;
+  /**
+   * The kind and the limit. Retuning this is the one edit that moves every site naming this
+   * budget.
+   */
+  readonly cost: Cost;
   /**
    * Unspent amount.
    */
   remaining(): number;
   /**
-   * Consume from the budget.
+   * Consume from the budget. The argument is always a DISTANCE, whatever the budget measures —
+   * a caller that had to know whether to pass metres or seconds would re-derive the conversion
+   * at every call site and one of them would get it wrong.
    */
   spend(x: number): void;
-}
-
-/**
- * Metres.
- */
-export interface DistanceBudget extends Budget {
-}
-
-/**
- * Seconds. Every TimeBudget is a distance divided by player_profile.speed, which is why that
- * setting is not optional.
- */
-export interface TimeBudget extends Budget {
-}
-
-/**
- * Draw against a named resource pool at a rate. How a soft gate is a magnitude rather than a rule.
- */
-export interface PoolBudget extends Budget {
   /**
-   * Which declared resource.
+   * Judge a distance against what is left, naming this budget in the verdict.
    */
-  pool: string;
+  judge(distance: number): InstanceRef<Verdict>;
+}
+
+/**
+ * The project's named budgets — the one place 'carry range' is a number. NOTHING spends against
+ * a row here: open() hands out a working copy, because spending against the shared row would make
+ * two unrelated routes drain each other and the symptom would point nowhere near the cause.
+ */
+export interface BudgetBook extends Object {
   /**
-   * Units per second.
+   * Register a named budget.
    */
-  rate: number;
+  declare(name: string, cost: Cost): InstanceRef<Budget>;
+  /**
+   * Change what it costs. Every site naming it moves at once, which is the point; a site that
+   * inlined the number does not, which is also the point.
+   */
+  retune(budget: InstanceRef<Budget>, cost: Cost): void;
+  /**
+   * Look one up by the name a developer typed.
+   */
+  by_name(name: string): InstanceRef<Budget>;
+  /**
+   * A working copy to spend against. Null for a reference the book does not hold — a dangling
+   * budget is a load-time diagnostic, never a default limit quietly standing in.
+   */
+  open(budget: InstanceRef<Budget>): InstanceRef<Budget>;
 }
 
 /**
@@ -1777,7 +1800,7 @@ export interface MinDistanceFrom extends Constraint {
   /**
    * The minimum separation.
    */
-  budget: InstanceRef<Budget>;
+  budget: BudgetRef;
 }
 
 /**
@@ -1791,7 +1814,7 @@ export interface MaxDistanceFrom extends Constraint {
   /**
    * The maximum separation.
    */
-  budget: InstanceRef<Budget>;
+  budget: BudgetRef;
 }
 
 /**
@@ -2319,9 +2342,23 @@ export interface TagQuery {
 }
 
 /**
- * What an interaction spends.
+ * A kind and a limit, with NO accounting — Distance(m), Time(s) or Pool(pool, rate). What a
+ * Budget is a named instance of, and what an interaction spends.
+ *
+ * Sealed: content may not subclass this.
  */
 export interface Cost {
+}
+
+/**
+ * 'This budget' — Named(Ref<Budget>) into the project's book, or Inline(Cost) authored at the
+ * site. BOTH forms stay and stay DISTINGUISHABLE: forcing a one-off through the book is ceremony
+ * for a number used once, and because the two are told apart a tool can notice the same inline
+ * number in twelve places and offer to extract it.
+ *
+ * Sealed: content may not subclass this.
+ */
+export interface BudgetRef {
 }
 
 /**

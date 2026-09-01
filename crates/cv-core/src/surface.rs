@@ -32,7 +32,7 @@
 //! as [`crate::floor`] is concerned — **geometry never vetoes**, and this is where the difference is
 //! actually stated.
 
-use crate::judge::Budget;
+use crate::budget::BudgetRef;
 use crate::mission::Rule;
 use crate::object::ObjectId;
 use crate::placement::Interaction;
@@ -52,7 +52,7 @@ pub struct Support {
     ///
     /// ⚠ **This is how standing on lava with fire boots differs from standing on stone.** Both are
     /// supported; only one runs out.
-    pub endurance: Option<Budget>,
+    pub endurance: Option<BudgetRef>,
 }
 
 impl Support {
@@ -75,7 +75,7 @@ impl Support {
     }
 
     /// Supported, but only for so long.
-    pub fn lasting(mut self, budget: Budget) -> Self {
+    pub fn lasting(mut self, budget: BudgetRef) -> Self {
         self.endurance = Some(budget);
         self
     }
@@ -360,7 +360,7 @@ mod tests {
         // then depend on something the generator never placed.
         let boots = unlock("fire_boots");
         let lava = Surface::unsupported("lava").supporting(
-            Support::permitted_by(Rule::has(boots), 10.0).lasting(Budget::time(4.0, 5.0)),
+            Support::permitted_by(Rule::has(boots), 10.0).lasting(BudgetRef::time(4.0, 5.0)),
         );
 
         let barefoot = Occupant::player([]);

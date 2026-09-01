@@ -520,7 +520,7 @@ fn a_ceiling_that_contradicts_the_same_slots_own_demands_is_an_authoring_error()
         .iter()
         .any(|e| matches!(e, SpineError::DegreeContradiction { .. })));
 
-    // The Example shape itself is *not* a contradiction — one route in, capped at one.
+    // The loop shape itself is *not* a contradiction — one route in, capped at one.
     assert!(treasury_loop().validate(&registry(), 9).is_ok());
 }
 

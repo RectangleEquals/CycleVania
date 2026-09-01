@@ -25,9 +25,10 @@
 //! makes every difficulty judgement in the project silently wrong — not slightly off, wrong, because
 //! the budget it was measured against no longer describes the world.
 
+use crate::budget::BudgetRef;
 use crate::class::ResourceRef;
 use crate::collision::{CollisionBody, CollisionData};
-use crate::judge::{Budget, Route};
+use crate::judge::Route;
 use crate::mission::Rule;
 use crate::node::InstanceScope;
 use crate::path::ClassPath;
@@ -168,7 +169,10 @@ pub enum Component {
     FastTravel {
         network: String,
         /// What arriving costs — `None` for a free jump.
-        cost: Option<Budget>,
+        ///
+        /// ⚠ A **reference**: a network whose legs each owned a private cost could not be retuned as a
+        /// network, which is the one thing a fast-travel network is always tuned as.
+        cost: Option<BudgetRef>,
         unlocked_by: Rule,
     },
     /// Sets a world-state variable.
@@ -481,7 +485,7 @@ mod tests {
     fn fast_travel(network: &str) -> Component {
         Component::FastTravel {
             network: network.to_string(),
-            cost: Some(Budget::distance(0.0)),
+            cost: Some(BudgetRef::free()),
             unlocked_by: Rule::Always,
         }
     }
