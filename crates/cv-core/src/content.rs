@@ -154,7 +154,9 @@ impl fmt::Display for ContentKind {
 }
 
 /// One registered piece of content.
-#[derive(Clone, Debug, PartialEq, Eq)]
+///
+/// ⚠ `PartialEq` but not `Eq`: the header carries metadata, which may hold a float.
+#[derive(Clone, Debug, PartialEq)]
 pub struct ContentEntry {
     header: ObjectHeader,
     kind: ContentKind,
@@ -227,7 +229,7 @@ impl std::error::Error for RegistryError {}
 ///
 /// Ordered by [`ObjectId`] throughout, so iteration — and therefore the fingerprint — does not depend
 /// on registration order.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct ContentRegistry {
     entries: BTreeMap<ObjectId, ContentEntry>,
 }

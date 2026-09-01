@@ -3897,6 +3897,76 @@ status = "stable"
 doc = "A kind and a limit, with NO accounting — Distance(m), Time(s) or Pool(pool, rate). What a Budget is a named instance of, and what an interaction spends."
 
 [[class]]
+path = "/Core/MetaValue"
+kind = "variant"
+sealed = true
+status = "stable"
+doc = "What a metadata value may hold. A CLOSED set, deliberately: an open Any would let content stash a handle the fingerprint cannot see, and the first symptom would be a world that fails to reproduce with no visible cause."
+
+[[class]]
+path = "/Core/BoolMeta"
+extends = "/Core/MetaValue"
+kind = "variant"
+status = "stable"
+doc = "A yes or no."
+
+[[class]]
+path = "/Core/IntMeta"
+extends = "/Core/MetaValue"
+kind = "variant"
+status = "stable"
+doc = "A whole number. i32, not i64: a JavaScript number is exact only below 2^53, and metadata crosses the binding seam constantly."
+
+[[class]]
+path = "/Core/FloatMeta"
+extends = "/Core/MetaValue"
+kind = "variant"
+status = "stable"
+doc = "A real number."
+
+[[class]]
+path = "/Core/StringMeta"
+extends = "/Core/MetaValue"
+kind = "variant"
+status = "stable"
+doc = "Text."
+
+[[class]]
+path = "/Core/Vec3Meta"
+extends = "/Core/MetaValue"
+kind = "variant"
+status = "stable"
+doc = "A position or direction."
+
+[[class]]
+path = "/Core/TransformMeta"
+extends = "/Core/MetaValue"
+kind = "variant"
+status = "stable"
+doc = "A placement."
+
+[[class]]
+path = "/Core/ArrayMeta"
+extends = "/Core/MetaValue"
+kind = "variant"
+status = "stable"
+doc = "An ordered list of metadata values."
+
+[[class]]
+path = "/Core/MapMeta"
+extends = "/Core/MetaValue"
+kind = "variant"
+status = "stable"
+doc = "A named map of metadata values."
+
+[[class]]
+path = "/Core/RefMeta"
+extends = "/Core/MetaValue"
+kind = "variant"
+status = "stable"
+doc = "A reference to something with identity."
+
+[[class]]
 path = "/Core/BudgetRef"
 kind = "variant"
 sealed = true

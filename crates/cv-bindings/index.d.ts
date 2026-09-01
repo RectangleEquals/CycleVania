@@ -2460,6 +2460,85 @@ export type CostForm =
   | (PoolCost & { form: "PoolCost" });
 
 /**
+ * What a metadata value may hold. A CLOSED set, deliberately: an open Any would let content stash
+ * a handle the fingerprint cannot see, and the first symptom would be a world that fails to
+ * reproduce with no visible cause.
+ *
+ * Sealed: content may not subclass this.
+ */
+export interface MetaValue {
+}
+
+/**
+ * The forms of MetaValue. Switch on `form` — TypeScript narrows each arm.
+ */
+export type MetaValueForm =
+  | (BoolMeta & { form: "BoolMeta" })
+  | (IntMeta & { form: "IntMeta" })
+  | (FloatMeta & { form: "FloatMeta" })
+  | (StringMeta & { form: "StringMeta" })
+  | (Vec3Meta & { form: "Vec3Meta" })
+  | (TransformMeta & { form: "TransformMeta" })
+  | (ArrayMeta & { form: "ArrayMeta" })
+  | (MapMeta & { form: "MapMeta" })
+  | (RefMeta & { form: "RefMeta" });
+
+/**
+ * A yes or no.
+ */
+export interface BoolMeta extends MetaValue {
+}
+
+/**
+ * A whole number. i32, not i64: a JavaScript number is exact only below 2^53, and metadata crosses
+ * the binding seam constantly.
+ */
+export interface IntMeta extends MetaValue {
+}
+
+/**
+ * A real number.
+ */
+export interface FloatMeta extends MetaValue {
+}
+
+/**
+ * Text.
+ */
+export interface StringMeta extends MetaValue {
+}
+
+/**
+ * A position or direction.
+ */
+export interface Vec3Meta extends MetaValue {
+}
+
+/**
+ * A placement.
+ */
+export interface TransformMeta extends MetaValue {
+}
+
+/**
+ * An ordered list of metadata values.
+ */
+export interface ArrayMeta extends MetaValue {
+}
+
+/**
+ * A named map of metadata values.
+ */
+export interface MapMeta extends MetaValue {
+}
+
+/**
+ * A reference to something with identity.
+ */
+export interface RefMeta extends MetaValue {
+}
+
+/**
  * 'This budget' — Named(Ref<Budget>) into the project's book, or Inline(Cost) authored at the
  * site. BOTH forms stay and stay DISTINGUISHABLE: forcing a one-off through the book is ceremony
  * for a number used once, and because the two are told apart a tool can notice the same inline

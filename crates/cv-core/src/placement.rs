@@ -40,8 +40,9 @@
 use crate::budget::BudgetRef;
 // ⚠ One `Strictness` for the whole system: the design defines it as *"how hard a spine slot **or
 // preference** must hold"*, so a second copy here would be two vocabularies for one idea.
-use crate::node::NodeKind;
+use crate::node::{InstanceScope, NodeKind};
 use crate::object::ObjectId;
+use crate::path::ClassPath;
 use crate::spine::Strictness;
 use cv_determinism::Vec3;
 use std::fmt;
@@ -214,6 +215,41 @@ pub enum Constraint {
     /// ⚠ **The first constraint about *pacing* rather than topology**, and the one developers reach
     /// for soonest — *"the capstone must not be accessible before sphere 3"*.
     SpherePin { min: u32, max: u32 },
+    /// *"These instances belong together."*
+    ///
+    /// Three siblings in the room with the door they gate; twelve markers paired with twelve
+    /// World-scattered items. The members are **genuinely separate placeables** — each gets its own
+    /// position, and the cohort only says they must be placed as a set.
+    ///
+    /// ⚠ **Prefer co-locating as components of one Actor** wherever that applies. A cohort is the
+    /// answer when the pieces must sit in *different places*; using it for things that could have
+    /// been one Actor buys a solver constraint in exchange for nothing.
+    Cohort {
+        /// The classes that must be placed together.
+        members: Vec<ClassPath>,
+        /// How wide the *together* is — the scope they must share.
+        scope: InstanceScope,
+        /// ⚠ **Default `true`.** A half-placed distributed puzzle is worse than an absent one: the
+        /// player finds three of the four levers and no fourth exists. All-or-nothing is what makes
+        /// scarcity produce *no puzzle* rather than *a broken puzzle*.
+        all_or_nothing: bool,
+        /// ⚠ **Default `false`.** Ordering constrains the solver hard, and most cohorts do not need
+        /// it — twelve scattered markers have no first. A developer who *does* need it is saying the
+        /// members must be reachable in listed order.
+        ordered: bool,
+    },
+}
+
+impl Constraint {
+    /// A cohort with the design's defaults: all-or-nothing, unordered.
+    pub fn cohort(members: impl IntoIterator<Item = ClassPath>, scope: InstanceScope) -> Self {
+        Constraint::Cohort {
+            members: members.into_iter().collect(),
+            scope,
+            all_or_nothing: true,
+            ordered: false,
+        }
+    }
 }
 
 impl fmt::Display for Constraint {
@@ -223,6 +259,17 @@ impl fmt::Display for Constraint {
             Constraint::MinDistanceFrom { kind, .. } => write!(f, "far from {kind}"),
             Constraint::MaxDistanceFrom { kind, .. } => write!(f, "near {kind}"),
             Constraint::MountedOn { .. } => write!(f, "mounted on a matching socket"),
+            Constraint::Cohort {
+                members,
+                scope,
+                ordered,
+                ..
+            } => write!(
+                f,
+                "placed with {} others in one {scope:?}{}",
+                members.len().saturating_sub(1),
+                if *ordered { ", in order" } else { "" }
+            ),
             Constraint::WithinScope { scope } => write!(f, "within a {scope}"),
             Constraint::NotWithinScope { scope } => write!(f, "not within a {scope}"),
             Constraint::SpherePin { min, max } => write!(f, "in spheres {min}–{max}"),

@@ -52,6 +52,7 @@ pub mod geometry;
 pub mod intra;
 pub mod judge;
 pub mod lifecycle;
+pub mod meta;
 pub mod mission;
 pub mod node;
 pub mod object;
@@ -94,6 +95,7 @@ pub use geometry::{CoarseGeometry, Collider, ColliderId, Face, Hit, Sweep};
 pub use intra::{EdgeSource, FloorEdge, IntraSpace};
 pub use judge::{Obligation, Path, PathStep, Route, Verdict};
 pub use lifecycle::{Event, Quantity, Replenish};
+pub use meta::{MetaError, MetaValue, Metadata};
 pub use mission::{
     Accessibility, EdgeSpan, Location, LocationId, MissionEdge, MissionGraph, Rule, Sphere,
 };

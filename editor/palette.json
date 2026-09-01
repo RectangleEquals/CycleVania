@@ -6513,6 +6513,96 @@
       "pins": [{ "name": "value", "type": "Cost", "dir": "out" }]
     },
     {
+      "op": "/Core/MetaValue",
+      "label": "MetaValue",
+      "category": "Variant",
+      "shape": "form",
+      "doc": "What a metadata value may hold. A CLOSED set, deliberately: an open Any would let content stash a handle the fingerprint cannot see, and the first symptom would be a world that fails to reproduce with no visible cause.",
+      "forms": ["BoolMeta", "IntMeta", "FloatMeta", "StringMeta", "Vec3Meta", "TransformMeta", "ArrayMeta", "MapMeta", "RefMeta"],
+      "pins": [{ "name": "value", "type": "MetaValue", "dir": "out" }]
+    },
+    {
+      "op": "/Core/BoolMeta",
+      "label": "BoolMeta",
+      "category": "Variant",
+      "shape": "form",
+      "doc": "A yes or no.",
+      "forms": [],
+      "pins": [{ "name": "value", "type": "BoolMeta", "dir": "out" }]
+    },
+    {
+      "op": "/Core/IntMeta",
+      "label": "IntMeta",
+      "category": "Variant",
+      "shape": "form",
+      "doc": "A whole number. i32, not i64: a JavaScript number is exact only below 2^53, and metadata crosses the binding seam constantly.",
+      "forms": [],
+      "pins": [{ "name": "value", "type": "IntMeta", "dir": "out" }]
+    },
+    {
+      "op": "/Core/FloatMeta",
+      "label": "FloatMeta",
+      "category": "Variant",
+      "shape": "form",
+      "doc": "A real number.",
+      "forms": [],
+      "pins": [{ "name": "value", "type": "FloatMeta", "dir": "out" }]
+    },
+    {
+      "op": "/Core/StringMeta",
+      "label": "StringMeta",
+      "category": "Variant",
+      "shape": "form",
+      "doc": "Text.",
+      "forms": [],
+      "pins": [{ "name": "value", "type": "StringMeta", "dir": "out" }]
+    },
+    {
+      "op": "/Core/Vec3Meta",
+      "label": "Vec3Meta",
+      "category": "Variant",
+      "shape": "form",
+      "doc": "A position or direction.",
+      "forms": [],
+      "pins": [{ "name": "value", "type": "Vec3Meta", "dir": "out" }]
+    },
+    {
+      "op": "/Core/TransformMeta",
+      "label": "TransformMeta",
+      "category": "Variant",
+      "shape": "form",
+      "doc": "A placement.",
+      "forms": [],
+      "pins": [{ "name": "value", "type": "TransformMeta", "dir": "out" }]
+    },
+    {
+      "op": "/Core/ArrayMeta",
+      "label": "ArrayMeta",
+      "category": "Variant",
+      "shape": "form",
+      "doc": "An ordered list of metadata values.",
+      "forms": [],
+      "pins": [{ "name": "value", "type": "ArrayMeta", "dir": "out" }]
+    },
+    {
+      "op": "/Core/MapMeta",
+      "label": "MapMeta",
+      "category": "Variant",
+      "shape": "form",
+      "doc": "A named map of metadata values.",
+      "forms": [],
+      "pins": [{ "name": "value", "type": "MapMeta", "dir": "out" }]
+    },
+    {
+      "op": "/Core/RefMeta",
+      "label": "RefMeta",
+      "category": "Variant",
+      "shape": "form",
+      "doc": "A reference to something with identity.",
+      "forms": [],
+      "pins": [{ "name": "value", "type": "RefMeta", "dir": "out" }]
+    },
+    {
       "op": "/Core/BudgetRef",
       "label": "BudgetRef",
       "category": "Variant",

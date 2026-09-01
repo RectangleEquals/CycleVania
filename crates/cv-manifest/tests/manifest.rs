@@ -57,11 +57,16 @@ fn declaration_counts() {
     // Distance/Time/PoolCost and Named/InlineBudget, carrying 8 members between them.
     //
     // Objects 89 - 21 = 68. Structs 30 - 2 = 28. Variants 21 + 2 + 5 = 28. Members 336 + 8 = 344.
+    //
+    // Then `MetaValue` — used as a type throughout and never *declared*, so it lived in the
+    // validator's whitelist of undeclared shells. It is a value with nine forms, which is exactly
+    // what `variant` is for, so it and its forms are declared and the whitelist entry is gone.
+    // Variants 28 + 10 = 38; members unchanged, because a metadata form carries no members of its own.
     assert_eq!(objects, 68, "object declarations");
     assert_eq!(structs, 28, "struct declarations");
-    assert_eq!(variants, 28, "variant declarations");
+    assert_eq!(variants, 38, "variant declarations");
     assert_eq!(enums, 16, "enum declarations");
-    assert_eq!(m.classes.len(), 140, "total declarations");
+    assert_eq!(m.classes.len(), 150, "total declarations");
     assert_eq!(m.member_count(), 344, "fields + methods");
 }
 

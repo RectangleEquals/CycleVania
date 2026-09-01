@@ -725,9 +725,10 @@ fn build_events(fingerprint: Fingerprint, seed: u64) -> Vec<GenEvent> {
             scope: ScopeRef(4),
             reason: "footprint exceeds the space".into(),
         },
-        GenEvent::Signal {
-            name: "door_opened".into(),
-            detail: "by key_bronze".into(),
+        GenEvent::Message {
+            text: "opened by key_bronze".into(),
+            channel: "door_opened".into(),
+            debug_only: false,
         },
         GenEvent::Finished {
             instances: 2,

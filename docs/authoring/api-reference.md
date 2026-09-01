@@ -10,7 +10,7 @@
 
 # API reference
 
-The tier-1 surface: **140 declarations** and **344 members**, generated from the manifest.
+The tier-1 surface: **150 declarations** and **344 members**, generated from the manifest.
 
 Notation: a **field** is a plain read and appears in a graph as a pure *get* node. A **method** takes an argument, computes, or mutates, and appears as a *call* node with execution pins — so the shape of a node tells you whether it costs anything. A **hook** is a question the core asks; hooks are what a schematic's `OVERRIDES` list is built from.
 
@@ -1442,6 +1442,68 @@ A cost authored at this site. Right for a one-off; a magic number if it repeats 
 A kind and a limit, with NO accounting — Distance(m), Time(s) or Pool(pool, rate). What a Budget is a named instance of, and what an interaction spends.
 
 `/Core/Cost`
+
+### `MetaValue`
+
+**sealed** — content may not subclass this
+
+What a metadata value may hold. A CLOSED set, deliberately: an open Any would let content stash a handle the fingerprint cannot see, and the first symptom would be a world that fails to reproduce with no visible cause.
+
+`/Core/MetaValue`
+
+### `BoolMeta` — extends `MetaValue`
+
+A yes or no.
+
+`/Core/BoolMeta`
+
+### `IntMeta` — extends `MetaValue`
+
+A whole number. i32, not i64: a JavaScript number is exact only below 2^53, and metadata crosses the binding seam constantly.
+
+`/Core/IntMeta`
+
+### `FloatMeta` — extends `MetaValue`
+
+A real number.
+
+`/Core/FloatMeta`
+
+### `StringMeta` — extends `MetaValue`
+
+Text.
+
+`/Core/StringMeta`
+
+### `Vec3Meta` — extends `MetaValue`
+
+A position or direction.
+
+`/Core/Vec3Meta`
+
+### `TransformMeta` — extends `MetaValue`
+
+A placement.
+
+`/Core/TransformMeta`
+
+### `ArrayMeta` — extends `MetaValue`
+
+An ordered list of metadata values.
+
+`/Core/ArrayMeta`
+
+### `MapMeta` — extends `MetaValue`
+
+A named map of metadata values.
+
+`/Core/MapMeta`
+
+### `RefMeta` — extends `MetaValue`
+
+A reference to something with identity.
+
+`/Core/RefMeta`
 
 ### `BudgetRef`
 

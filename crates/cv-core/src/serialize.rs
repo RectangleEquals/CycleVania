@@ -593,9 +593,12 @@ impl Deserialize for ObjectId {
 }
 
 impl Serialize for ObjectHeader {
+    /// ⚠ Metadata is written **key-sorted**, so two projects that typed the same keys in a different
+    /// order produce the same bytes. See [`crate::meta::Metadata`].
     fn serialize(&self, w: &mut Writer) {
         w.write(&self.id);
         w.str(&self.name);
+        w.write(&self.meta);
     }
 }
 
@@ -603,7 +606,8 @@ impl Deserialize for ObjectHeader {
     fn deserialize(r: &mut Reader<'_>) -> SerResult<Self> {
         let id = r.read::<ObjectId>()?;
         let name = r.str()?;
-        Ok(ObjectHeader { id, name })
+        let meta = r.read()?;
+        Ok(ObjectHeader { id, name, meta })
     }
 }
 

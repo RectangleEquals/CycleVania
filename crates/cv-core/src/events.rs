@@ -62,8 +62,20 @@ pub enum GenEvent {
         scope: ScopeRef,
         reason: String,
     },
-    /// A script emitted one of its own declared signals.
-    Signal { name: String, detail: String },
+    /// **Content sent the host a message.** `SendMessage(text, channel, debug_only)`.
+    ///
+    /// ⚠ **Observational only, and one-way by construction.** A host reply that changed the solve
+    /// would kill replayability; cancellation aborts rather than alters, which is why it is the only
+    /// permitted influence.
+    ///
+    /// ⚠ `debug_only` messages are **stripped entirely at cook**, not merely suppressed — see
+    /// [`EventLog::cook`]. Suppression leaves the text in the shipped build, which is how a debug
+    /// string ends up in a player's log.
+    Message {
+        text: String,
+        channel: String,
+        debug_only: bool,
+    },
     /// The run finished.
     Finished { instances: u32, meshes: u32 },
 }
@@ -77,9 +89,9 @@ impl GenEvent {
             GenEvent::ScopeAdvanced { .. } => "scope",
             GenEvent::Placed { .. } => "placed",
             GenEvent::Rejected { .. } => "rejected",
-            // A script signal routes under its own name, so a host subscribes to `"door_opened"`
-            // rather than to `"signal"` and then re-dispatching.
-            GenEvent::Signal { name, .. } => name,
+            // A message routes under its **channel**, so a host subscribes to `"door_opened"` rather
+            // than to `"message"` and then re-dispatching.
+            GenEvent::Message { channel, .. } => channel,
             GenEvent::Finished { .. } => "finished",
         }
     }
@@ -99,7 +111,7 @@ impl GenEvent {
             GenEvent::ScopeAdvanced { .. } => 2,
             GenEvent::Placed { .. } => 3,
             GenEvent::Rejected { .. } => 4,
-            GenEvent::Signal { .. } => 5,
+            GenEvent::Message { .. } => 5,
             GenEvent::Finished { .. } => 6,
         }
     }
@@ -123,7 +135,14 @@ impl fmt::Display for GenEvent {
             } => {
                 write!(f, "rejected {content} in {scope}: {reason}")
             }
-            GenEvent::Signal { name, detail } => write!(f, "signal {name}: {detail}"),
+            GenEvent::Message {
+                text,
+                channel,
+                debug_only,
+            } => {
+                let mark = if *debug_only { " [debug]" } else { "" };
+                write!(f, "{channel}{mark}: {text}")
+            }
             GenEvent::Finished { instances, meshes } => {
                 write!(f, "finished — {instances} instances, {meshes} meshes")
             }
@@ -154,6 +173,10 @@ pub struct EventLog {
     /// Counts events dropped by verbosity, so a trace can say "12 340 rejections suppressed" rather
     /// than quietly appearing to have had none.
     suppressed: u64,
+    /// ⚠ **A cooked build never constructs a `debug_only` message at all.** Not a verbosity level:
+    /// verbosity is a *listener's* choice and can be turned back up, while cook is a property of the
+    /// build and must not be.
+    cooked: bool,
 }
 
 impl EventLog {
@@ -168,7 +191,27 @@ impl EventLog {
             events: Vec::new(),
             verbosity,
             suppressed: 0,
+            cooked: false,
         }
+    }
+
+    /// A log for a **cooked build**, where `debug_only` messages do not exist.
+    ///
+    /// ⚠ **Stripped, not suppressed.** A suppressed message still carries its text through the build;
+    /// a stripped one is never constructed. That difference is the whole reason `debug_only` defaults
+    /// to `true` — a developer who forgets to think about it ships nothing rather than everything.
+    pub fn cooked() -> Self {
+        EventLog {
+            events: Vec::new(),
+            verbosity: Verbosity::Coarse,
+            suppressed: 0,
+            cooked: true,
+        }
+    }
+
+    /// Is this log for a cooked build?
+    pub fn is_cooked(&self) -> bool {
+        self.cooked
     }
 
     /// The current verbosity.
@@ -180,6 +223,20 @@ impl EventLog {
     ///
     /// Returns nothing, deliberately — see the module docs. There is no path for a host to answer.
     pub fn emit(&mut self, event: GenEvent) {
+        // ⚠ **Before verbosity, and not counted as suppressed.** A cooked build has no debug messages
+        // to have dropped, so reporting "1 suppressed" would be telling a player's log that something
+        // was withheld from it.
+        if self.cooked
+            && matches!(
+                event,
+                GenEvent::Message {
+                    debug_only: true,
+                    ..
+                }
+            )
+        {
+            return;
+        }
         match self.verbosity {
             Verbosity::Silent => {
                 self.suppressed += 1;
@@ -261,9 +318,14 @@ impl Serialize for GenEvent {
                 w.write(scope);
                 w.str(reason);
             }
-            GenEvent::Signal { name, detail } => {
-                w.str(name);
-                w.str(detail);
+            GenEvent::Message {
+                text,
+                channel,
+                debug_only,
+            } => {
+                w.str(text);
+                w.str(channel);
+                w.u8(u8::from(*debug_only));
             }
             GenEvent::Finished { instances, meshes } => {
                 w.u32(*instances);
@@ -298,9 +360,10 @@ impl Deserialize for GenEvent {
                 scope: r.read()?,
                 reason: r.str()?,
             },
-            5 => GenEvent::Signal {
-                name: r.str()?,
-                detail: r.str()?,
+            5 => GenEvent::Message {
+                text: r.str()?,
+                channel: r.str()?,
+                debug_only: r.u8()? != 0,
             },
             6 => GenEvent::Finished {
                 instances: r.u32()?,
@@ -341,9 +404,10 @@ mod tests {
                 scope: ScopeRef(3),
                 state: NodeState::Realized,
             },
-            GenEvent::Signal {
-                name: "door_opened".into(),
-                detail: "by key_bronze".into(),
+            GenEvent::Message {
+                text: "by key_bronze".into(),
+                channel: "door_opened".into(),
+                debug_only: false,
             },
             GenEvent::Finished {
                 instances: 12,
@@ -428,11 +492,12 @@ mod tests {
                 "finished"
             ]
         );
-        // A script signal routes under its declared name, so a host subscribes directly to it.
+        // A message routes under its channel, so a host subscribes directly to it.
         assert_eq!(
-            GenEvent::Signal {
-                name: "boss_placed".into(),
-                detail: String::new()
+            GenEvent::Message {
+                text: String::new(),
+                channel: "boss_placed".into(),
+                debug_only: false,
             }
             .name(),
             "boss_placed"

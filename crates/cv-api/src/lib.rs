@@ -8,7 +8,7 @@
 //!
 //! # The tier-1 surface, as data
 //!
-//! 140 declarations and 344 members. Every other surface in the toolchain — the VM's dispatch
+//! 150 declarations and 344 members. Every other surface in the toolchain — the VM's dispatch
 //! table, the inspector, the node palette, the reference — reads this rather than restating it.
 
 /// Which family a declaration belongs to.
@@ -6102,6 +6102,156 @@ pub const CLASSES: &[ClassDesc] = &[
         is_abstract: false,
         status: Status::Stable,
         doc: "A kind and a limit, with NO accounting — Distance(m), Time(s) or Pool(pool, rate). What a Budget is a named instance of, and what an interaction spends.",
+        fields: &[
+        ],
+        methods: &[
+        ],
+        values: &[
+        ],
+    },
+    ClassDesc {
+        path: "/Core/MetaValue",
+        extends: None,
+        kind: DeclKind::Variant,
+        sealed: true,
+        is_abstract: false,
+        status: Status::Stable,
+        doc: "What a metadata value may hold. A CLOSED set, deliberately: an open Any would let content stash a handle the fingerprint cannot see, and the first symptom would be a world that fails to reproduce with no visible cause.",
+        fields: &[
+        ],
+        methods: &[
+        ],
+        values: &[
+        ],
+    },
+    ClassDesc {
+        path: "/Core/BoolMeta",
+        extends: Some("/Core/MetaValue"),
+        kind: DeclKind::Variant,
+        sealed: false,
+        is_abstract: false,
+        status: Status::Stable,
+        doc: "A yes or no.",
+        fields: &[
+        ],
+        methods: &[
+        ],
+        values: &[
+        ],
+    },
+    ClassDesc {
+        path: "/Core/IntMeta",
+        extends: Some("/Core/MetaValue"),
+        kind: DeclKind::Variant,
+        sealed: false,
+        is_abstract: false,
+        status: Status::Stable,
+        doc: "A whole number. i32, not i64: a JavaScript number is exact only below 2^53, and metadata crosses the binding seam constantly.",
+        fields: &[
+        ],
+        methods: &[
+        ],
+        values: &[
+        ],
+    },
+    ClassDesc {
+        path: "/Core/FloatMeta",
+        extends: Some("/Core/MetaValue"),
+        kind: DeclKind::Variant,
+        sealed: false,
+        is_abstract: false,
+        status: Status::Stable,
+        doc: "A real number.",
+        fields: &[
+        ],
+        methods: &[
+        ],
+        values: &[
+        ],
+    },
+    ClassDesc {
+        path: "/Core/StringMeta",
+        extends: Some("/Core/MetaValue"),
+        kind: DeclKind::Variant,
+        sealed: false,
+        is_abstract: false,
+        status: Status::Stable,
+        doc: "Text.",
+        fields: &[
+        ],
+        methods: &[
+        ],
+        values: &[
+        ],
+    },
+    ClassDesc {
+        path: "/Core/Vec3Meta",
+        extends: Some("/Core/MetaValue"),
+        kind: DeclKind::Variant,
+        sealed: false,
+        is_abstract: false,
+        status: Status::Stable,
+        doc: "A position or direction.",
+        fields: &[
+        ],
+        methods: &[
+        ],
+        values: &[
+        ],
+    },
+    ClassDesc {
+        path: "/Core/TransformMeta",
+        extends: Some("/Core/MetaValue"),
+        kind: DeclKind::Variant,
+        sealed: false,
+        is_abstract: false,
+        status: Status::Stable,
+        doc: "A placement.",
+        fields: &[
+        ],
+        methods: &[
+        ],
+        values: &[
+        ],
+    },
+    ClassDesc {
+        path: "/Core/ArrayMeta",
+        extends: Some("/Core/MetaValue"),
+        kind: DeclKind::Variant,
+        sealed: false,
+        is_abstract: false,
+        status: Status::Stable,
+        doc: "An ordered list of metadata values.",
+        fields: &[
+        ],
+        methods: &[
+        ],
+        values: &[
+        ],
+    },
+    ClassDesc {
+        path: "/Core/MapMeta",
+        extends: Some("/Core/MetaValue"),
+        kind: DeclKind::Variant,
+        sealed: false,
+        is_abstract: false,
+        status: Status::Stable,
+        doc: "A named map of metadata values.",
+        fields: &[
+        ],
+        methods: &[
+        ],
+        values: &[
+        ],
+    },
+    ClassDesc {
+        path: "/Core/RefMeta",
+        extends: Some("/Core/MetaValue"),
+        kind: DeclKind::Variant,
+        sealed: false,
+        is_abstract: false,
+        status: Status::Stable,
+        doc: "A reference to something with identity.",
         fields: &[
         ],
         methods: &[

@@ -139,13 +139,22 @@ impl IdAllocator {
 ///
 /// Deliberately minimal. Everything here is *universal*; anything that belongs to only some objects
 /// (transforms, components, gates) lives on the concrete type, not in this header.
-#[derive(Clone, Debug, PartialEq, Eq)]
+///
+/// ⚠ **`PartialEq` but not `Eq`**, because metadata may hold a float. Deriving `Eq` would be claiming
+/// that two headers are either equal or not — and for a `NaN` in a metadata value, neither is true.
+#[derive(Clone, Debug, PartialEq)]
 pub struct ObjectHeader {
     /// Stable identity.
     pub id: ObjectId,
     /// Human-facing name: shown in the editor, the trace, and diagnostics. Not an identity — two
     /// objects may share a name, and renaming does not change what an object *is*.
     pub name: String,
+    /// **The escape hatch that is not an escape from determinism.**
+    ///
+    /// ⚠ Lives on the header rather than on each concrete type, because a project always has one
+    /// fact the core did not model and the alternative to a metadata channel is a project fork. The
+    /// `CV_` namespace is core-reserved — see [`crate::meta`].
+    pub meta: crate::meta::Metadata,
 }
 
 impl ObjectHeader {
@@ -154,6 +163,7 @@ impl ObjectHeader {
         ObjectHeader {
             id,
             name: name.into(),
+            meta: crate::meta::Metadata::new(),
         }
     }
 
@@ -163,6 +173,7 @@ impl ObjectHeader {
         ObjectHeader {
             id: ObjectId::derived(namespace, &name),
             name,
+            meta: crate::meta::Metadata::new(),
         }
     }
 }
@@ -190,6 +201,35 @@ pub trait Object {
     /// Human-facing name.
     fn name(&self) -> &str {
         &self.header().name
+    }
+
+    /// Read a metadata key.
+    fn meta(&self, key: &str) -> Option<&crate::meta::MetaValue> {
+        self.header().meta.get(key)
+    }
+
+    /// Write a metadata key. **Refuses the core-reserved `CV_` namespace.**
+    fn set_meta(
+        &mut self,
+        key: &str,
+        value: crate::meta::MetaValue,
+    ) -> Result<(), crate::meta::MetaError> {
+        self.header_mut().meta.set(key, value)
+    }
+
+    /// Is the key present?
+    fn has_meta(&self, key: &str) -> bool {
+        self.header().meta.has(key)
+    }
+
+    /// Remove a metadata key; `true` if it was there.
+    fn remove_meta(&mut self, key: &str) -> bool {
+        self.header_mut().meta.remove(key)
+    }
+
+    /// Every metadata key, in insertion order.
+    fn meta_keys(&self) -> Vec<&str> {
+        self.header().meta.keys().collect()
     }
 
     /// A one-line description for traces and errors, e.g. `Door "heavy_gate" #00000000000004d2`.

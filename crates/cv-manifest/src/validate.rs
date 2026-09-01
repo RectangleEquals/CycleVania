@@ -130,7 +130,6 @@ fn references_resolve(m: &Manifest, out: &mut Vec<Violation>) {
             "void",
             "exec",
             "ObjectId",
-            "MetaValue",
             "Bytes",
             "Array",
             "Map",
