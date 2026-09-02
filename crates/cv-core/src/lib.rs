@@ -39,6 +39,7 @@
 // is not available.
 #![forbid(unsafe_code)]
 
+pub mod adopt;
 pub mod arena;
 pub mod axis;
 pub mod budget;
@@ -50,7 +51,9 @@ pub mod context;
 pub mod curve;
 pub mod descriptor;
 pub mod dial;
+pub mod escalate;
 pub mod events;
+pub mod exclusion;
 pub mod fingerprint;
 pub mod floor;
 pub mod gate;
@@ -70,6 +73,8 @@ pub mod probe;
 pub mod query;
 pub mod satisfy;
 pub mod schedule;
+pub mod search;
+pub mod sequence;
 pub mod serialize;
 pub mod settings;
 pub mod shape;
@@ -80,7 +85,9 @@ pub mod surface;
 pub mod tag;
 pub mod trivalent;
 pub mod unlock;
+pub mod verify;
 
+pub use adopt::{Adoption, AdoptionGate, Discovery, DiscoveryTrace, Refusal};
 pub use arena::{Arena, Handle};
 pub use axis::{AxisBook, AxisError, AxisInput, ProgressionAxis};
 pub use budget::{Budget, BudgetBook, BudgetError, BudgetRef, Cost};
@@ -97,7 +104,9 @@ pub use descriptor::{
     ScopeRecord, ScopeRef, Socket, SpineSlotTag, WorldDescriptor,
 };
 pub use dial::{DialBook, DialError, DialId, DialValue, Resolved, ResolvedDials};
+pub use escalate::{AttemptBudget, Escalation, EscalationReport, Failure, Layer, Response};
 pub use events::{EventLog, GenEvent, Verbosity};
+pub use exclusion::Exclusion;
 pub use fingerprint::{Fingerprint, FingerprintBuilder, ReproductionBundle, ReproductionError};
 pub use floor::{ConvexHull, FloorSurface, ScopeBounds};
 pub use gate::{Discoverability, Domain, GatePolicy, SkipPolicy};
@@ -124,6 +133,8 @@ pub use schedule::{
     Schedule, ScheduleBook, SchedulePlan, Scheduler, ScopeFilter, SeedPolicy, SlotRule, Span,
     TargetOutcome, TargetReasoning, WorldLimit,
 };
+pub use search::{Heuristic, Move, Nudge, SearchPolicy, Target};
+pub use sequence::{Held, Placed, Preferences, Relaxed, Sequencer};
 pub use serialize::{Deserialize, Reader, SerError, SerResult, Serialize, Writer};
 pub use shape::{Shape, ShapeFamily};
 pub use softlock::{
@@ -139,6 +150,7 @@ pub use surface::{Approach, AttemptKind, Harm, Occupant, Support, Surface};
 pub use tag::{Tag, TagQuery};
 pub use trivalent::{within, Fidelity, Tolerances, Trivalent};
 pub use unlock::{GrantMap, TableError, Unlock, UnlockTable};
+pub use verify::{Verification, Verifier, VerifyError};
 
 /// This crate's version.
 pub fn version() -> &'static str {

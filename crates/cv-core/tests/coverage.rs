@@ -30,6 +30,7 @@ use std::collections::BTreeSet;
 const BUILT: &[&str] = &[
     // --- object model ---
     "Object",
+    "Exclusion",
     "Actor",
     "Item",
     "Component",
@@ -199,7 +200,6 @@ const OWED: &[(&str, &str)] = &[
         "ScopeHandle",
         "M12 — the Context lens's scope type, not a solver internal",
     ),
-    ("Exclusion", "M10b — the adoption gate"),
     (
         "Spine",
         "M11 — `.cvspine`; the format spec's `Kind'/Core/Spine'` base",
