@@ -495,3 +495,130 @@ doc = "d"
         );
     }
 }
+
+// ---------------------------------------------------------------------------------------------
+// Content extensions and build output are two disjoint sets, and the boundary is enforced.
+// ---------------------------------------------------------------------------------------------
+
+/// The formats a project **authors and commits**.
+///
+/// ⚠ `09-format.md` §4: these are the declared set. Anything else claiming to be content is either a
+/// typo or a build product that has escaped `build/`.
+const CONTENT_EXTENSIONS: &[&str] = &[".cvs", ".cvspine", ".cvstate", ".cvcurve", ".cvunlock"];
+
+/// What the toolchain **produces** and nobody commits.
+///
+/// ⚠ `.cvo` is the compiled-bytecode intermediate — CycleVania *Object*, in the compiler's sense:
+/// compiled, unlinked, consumed by a later step, never shipped on its own. It is deliberately **not**
+/// derived from CVB, which is the block *notation* that `.cvs`, `.cvspine` and `.cvstate` are written
+/// in — an extension named after it would read as *"a CVB file"*, a category that does not exist.
+const BUILD_EXTENSIONS: &[&str] = &[".cvo", ".cvpak"];
+
+#[test]
+fn content_and_build_extensions_never_overlap() {
+    // ⚠ An overlap would put a build product under version control, into the asset globs, and into the
+    // cook's walk of authored roots — three failures from one misplaced file.
+    for b in BUILD_EXTENSIONS {
+        assert!(
+            !CONTENT_EXTENSIONS.contains(b),
+            "{b} is claimed as both content and build output"
+        );
+    }
+}
+
+/// **The two sets above are closed**: no source in the workspace may name a `.cv*` extension that is
+/// not in one of them.
+///
+/// ⚠ **This replaces a blacklist, and is strictly stronger.** A blacklist forbids the one extension
+/// somebody thought to write down and admits every variant nobody did. A closed set needs no list of
+/// the forbidden — an extension is legal because it was *declared*, and a superseded one cannot come
+/// back without failing here. It is also the only form of this check that does not have to name the
+/// thing it excludes, which matters when the name is itself the confusion being retired.
+#[test]
+fn every_extension_named_in_the_workspace_is_declared() {
+    fn walk(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return;
+        };
+        for e in entries.flatten() {
+            let p = e.path();
+            if p.is_dir() {
+                if p.file_name().is_some_and(|n| n == "target") {
+                    continue;
+                }
+                walk(&p, out);
+            } else if p.extension().is_some_and(|x| x == "rs") {
+                out.push(p);
+            }
+        }
+    }
+    let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let mut sources = Vec::new();
+    walk(&root.join("crates"), &mut sources);
+    assert!(!sources.is_empty(), "found no sources to scan");
+
+    let mut offenders = Vec::new();
+    for path in sources {
+        let Ok(src) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("?");
+        for (i, line) in src.lines().enumerate() {
+            // Every `.cv…` run of lowercase letters, wherever it appears — prose, string literal or
+            // path. An extension that only ever shows up in a comment is still an extension somebody
+            // will act on.
+            for (at, _) in line.match_indices(".cv") {
+                let ext: String = line[at..]
+                    .chars()
+                    .take_while(|c| *c == '.' || c.is_ascii_lowercase())
+                    .collect();
+                if ext.len() <= 3 {
+                    continue; // bare `.cv`, or a sentence ending
+                }
+                if CONTENT_EXTENSIONS.contains(&ext.as_str())
+                    || BUILD_EXTENSIONS.contains(&ext.as_str())
+                {
+                    continue;
+                }
+                offenders.push(format!("{name}:{}: undeclared extension {ext}", i + 1));
+            }
+        }
+    }
+    assert!(
+        offenders.is_empty(),
+        "extensions named but never declared as content or build output:
+  {}",
+        offenders.join(
+            "
+  "
+        )
+    );
+}
+
+/// The compiled intermediate never lives under the content root.
+///
+/// ⚠ Stated in `09-format.md` §11 and checked here, because *"do not write it there"* is a rule someone
+/// follows until the first time a path is built by string concatenation.
+#[test]
+fn the_bytecode_intermediate_is_not_a_content_path() {
+    for path in [
+        "build/schematics/door.cvo",
+        "build/game.cvpak",
+        "target/cv/door.cvo",
+    ] {
+        assert!(
+            !path.starts_with("content/"),
+            "{path} puts a build product under the content root"
+        );
+        assert!(
+            BUILD_EXTENSIONS.iter().any(|e| path.ends_with(e)),
+            "{path} is in a build location but is not build output"
+        );
+    }
+    for path in ["content/schematics/door.cvs", "content/curves/wear.cvcurve"] {
+        assert!(
+            CONTENT_EXTENSIONS.iter().any(|e| path.ends_with(e)),
+            "{path} is under the content root but is not a content format"
+        );
+    }
+}

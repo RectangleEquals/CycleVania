@@ -81,8 +81,8 @@ fn core_sources() -> Vec<PathBuf> {
 /// Every Rust source in the workspace, not just this crate's.
 ///
 /// ⚠ **Scanning one crate is how `cv-vm` and `cv-determinism` drifted unchecked.** Both carried claims
-/// about a text scripting language and a `.cvb` artifact that cannot exist, and no lint looked
-/// at them because the lint lived next to the crate it was written for.
+/// about a text scripting language and a shipped bytecode artifact, neither of which exists, and no
+/// lint looked at them because the lint lived next to the crate it was written for.
 fn workspace_sources() -> Vec<PathBuf> {
     fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
         let Ok(entries) = fs::read_dir(dir) else {
@@ -123,10 +123,6 @@ const SUPERSEDED: &[(&str, &str)] = &[
     ),
     ("L6", "there is no L6; v0.1's dressing layer is v0.2b's L5 Finalize"),
     (
-        ".cvb",
-        "CVB is a NOTATION, not a file type — `.cvs`, `.cvspine` and `.cvstate` are separate          formats written in it, so an extension named after the notation is a category error",
-    ),
-    (
         "CVB file",
         "CVB is a notation, not a format; the file is a schematic, a spine template or a state graph",
     ),
@@ -153,19 +149,35 @@ fn no_superseded_concept_survives_in_a_comment() {
             if !(t.starts_with("//") || t.starts_with("///") || t.starts_with("//!")) {
                 continue;
             }
-            // ⚠ **A denial is not a use.** *"There is no scheduling layer"* is the sentence that
-            // documents the rule, and a checker that cannot tell it from an affirmative use flags the
-            // very comment it wants written — failing in the direction that looks like diligence,
-            // which is how a lint trains people to ignore it.
-            let denies = [
+            // ⚠ **A denial is not a use, and neither is a history.** *"There is no scheduling
+            // layer"* is the sentence that documents the rule; *"v0.1 numbered the pipeline L0-L6"*
+            // explains why a reader will not find one. A checker that cannot tell either from an
+            // affirmative use flags the very comments it wants written — failing in the direction
+            // that looks like diligence, which is how a lint trains people to ignore it.
+            //
+            // The signal is a marker of pastness or absence. Every note here that legitimately names
+            // a superseded thing carries one, because that is how a supersession gets explained.
+            const HISTORICAL: &[&str] = &[
                 "there is no",
-                "There is no",
-                "no scheduling layer",
+                "v0.1",
+                "pre-v0.2",
+                "used to",
+                "no longer",
+                "superseded",
+                "never ships",
+                "not committed",
+                "was deleted",
+                "repurposed",
                 "not a declared",
-            ]
-            .iter()
-            .any(|d| line.contains(d));
-            if denies {
+                "must not",
+                "deliberately not",
+                "does not exist",
+            ];
+            // ⚠ Compared with emphasis stripped and case folded. Chasing `**Deliberately not**` versus
+            // `deliberately **not**` is a game the lint loses: a marker that depends on where an author
+            // put an asterisk is a marker that fails on correct prose.
+            let plain = line.replace(['*', '_', '`'], "").to_lowercase();
+            if HISTORICAL.iter().any(|d| plain.contains(d)) {
                 continue;
             }
             for (term, why) in SUPERSEDED {
