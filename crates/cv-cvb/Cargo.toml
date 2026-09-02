@@ -1,0 +1,11 @@
+[package]
+name = "cv-cvb"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "CVB — the CycleVania Block notation: one parser and canonical writer for the three formats written in it."
+
+[lints]
+workspace = true
+
+[dependencies]

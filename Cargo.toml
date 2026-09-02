@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/cv-determinism",
     "crates/cv-manifest",
+    "crates/cv-cvb",
     "crates/cv-api",
     "crates/cv-core",
     "crates/cv-vm",
