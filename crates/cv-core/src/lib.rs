@@ -48,6 +48,7 @@ pub mod dial;
 pub mod events;
 pub mod fingerprint;
 pub mod floor;
+pub mod gate;
 pub mod geometry;
 pub mod handoff;
 pub mod intra;
@@ -55,12 +56,14 @@ pub mod judge;
 pub mod lifecycle;
 pub mod meta;
 pub mod mission;
+pub mod need;
 pub mod node;
 pub mod object;
 pub mod path;
 pub mod placement;
 pub mod probe;
 pub mod query;
+pub mod satisfy;
 pub mod schedule;
 pub mod serialize;
 pub mod settings;
@@ -92,6 +95,7 @@ pub use dial::{DialBook, DialError, DialId, DialValue, Resolved, ResolvedDials};
 pub use events::{EventLog, GenEvent, Verbosity};
 pub use fingerprint::{Fingerprint, FingerprintBuilder, ReproductionBundle, ReproductionError};
 pub use floor::{ConvexHull, FloorSurface, ScopeBounds};
+pub use gate::{Discoverability, Domain, GatePolicy, SkipPolicy};
 pub use geometry::{CoarseGeometry, Collider, ColliderId, Face, Hit, Sweep};
 pub use handoff::{CoreFacts, CoreMeta};
 pub use intra::{EdgeSource, FloorEdge, IntraSpace};
@@ -101,6 +105,7 @@ pub use meta::{MetaError, MetaValue, Metadata};
 pub use mission::{
     Accessibility, EdgeSpan, Location, LocationId, MissionEdge, MissionGraph, Rule, Sphere,
 };
+pub use need::{PlacementNeed, Spatial};
 pub use node::{InstanceScope, Node, NodeError, NodeGraph, NodeKind, NodeResult, NodeState};
 pub use object::{IdAllocator, Object, ObjectHeader, ObjectId};
 pub use path::{AssetPath, ClassPath, Mount, PathError};
@@ -108,6 +113,7 @@ pub use placement::{
     Constraint, DirectionCone, Interaction, ItemClass, Preference, Role, RoleEvidence, ScheduleRule,
 };
 pub use query::{Consider, Detail, Query, Trace};
+pub use satisfy::{Candidates, Scored, Situation, Veto};
 pub use schedule::{
     AdaptiveRange, Candidate, ContentPool, CountRule, Curve, PlannedSlot, PoolEntry, Progression,
     Schedule, ScheduleBook, SchedulePlan, Scheduler, ScopeFilter, SeedPolicy, SlotRule, Span,

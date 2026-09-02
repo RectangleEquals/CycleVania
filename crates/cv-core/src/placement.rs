@@ -44,6 +44,7 @@ use crate::node::{InstanceScope, NodeKind};
 use crate::object::ObjectId;
 use crate::path::ClassPath;
 use crate::spine::Strictness;
+use crate::tag::TagQuery;
 use cv_determinism::Vec3;
 use std::fmt;
 
@@ -204,8 +205,12 @@ pub enum Constraint {
     MinDistanceFrom { kind: ObjectId, budget: BudgetRef },
     /// At most this far from a named kind.
     MaxDistanceFrom { kind: ObjectId, budget: BudgetRef },
-    /// Must be mounted on a socket matching these tags.
-    MountedOn { accepts: Vec<ObjectId> },
+    /// Must be mounted on a socket matching this query.
+    ///
+    /// ⚠ **A `TagQuery`, not a class list** — the same filters-instead-of-ids reasoning as
+    /// `MountComponent.accepts`. *"Any sconce"* written as four class ids silently excludes the fifth
+    /// the day someone adds it; written as a query it does not.
+    MountedOn { accepts: TagQuery },
     /// Only inside this kind of scope.
     WithinScope { scope: NodeKind },
     /// Never inside this kind of scope.

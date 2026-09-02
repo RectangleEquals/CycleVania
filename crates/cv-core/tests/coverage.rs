@@ -154,6 +154,13 @@ const BUILT: &[&str] = &[
     "Fidelity",
     "Strictness",
     "Interpolation",
+    "SkipPolicy",
+    // --- the solver's own surface ---
+    "PlacementNeed",
+    "Query",
+    "SpineSlot",
+    "Rng",
+    "Context",
     // --- progression ---
     "ProgressionAxis",
     "Depth",
@@ -196,14 +203,8 @@ const OWED: &[(&str, &str)] = &[
     ("BooleanOp", "M27 L4 — CSG on realized geometry"),
     // --- the pieces that need a file format or a VM first ---
     ("MeshResource", "M14 — mesh import"),
-    (
-        "Query",
-        "M12 — the query builder is a Rust builder today, not a tier-1 object",
-    ),
     ("ScopeHandle", "M10 — the solver's per-scope handle"),
     ("Exclusion", "M10 — push-it-out"),
-    ("SkipPolicy", "M10 — per-lock skip policy"),
-    ("PlacementNeed", "M10 — requires() returns these"),
     ("NeedsActor", "M10 — a PlacementNeed form"),
     ("NeedsClearance", "M10 — a PlacementNeed form"),
     ("BlocksTraversal", "M10 — a PlacementNeed form"),
@@ -211,9 +212,6 @@ const OWED: &[(&str, &str)] = &[
         "Spine",
         "M11 — `.cvspine`; the format spec's `Kind'/Core/Spine'` base",
     ),
-    ("SpineSlot", "M11 — `.cvspine`"),
-    ("Rng", "cv-determinism owns it; not a cv-core type"),
-    ("Context", "M12 — the VM supplies it"),
 ];
 
 /// Where the Rust spelling differs from the manifest's.
@@ -235,6 +233,9 @@ const ALIASES: &[(&str, &str)] = &[
     // form, so it drops it.
     ("CurveTableResource", "cv_core::curve::CurveTable"),
     ("UnlockTableResource", "cv_core::unlock::UnlockTable"),
+    // The `Needs` prefix marks a PlacementNeed form in the manifest; Rust reads them as variants.
+    ("NeedsActor", "cv_core::need::PlacementNeed::Actor"),
+    ("NeedsClearance", "cv_core::need::PlacementNeed::Clearance"),
 ];
 
 fn manifest_paths() -> Vec<String> {
@@ -271,6 +272,10 @@ fn every_declaration_is_either_built_or_explicitly_owed() {
 }
 
 /// Every Rust type, enum, trait and variant name defined in the workspace.
+///
+/// ⚠ Variants are included because a design name legitimately maps onto one — `CubeShape` is
+/// `Shape::Cube`. That looseness is right for confirming a `BUILT` claim and wrong for challenging an
+/// `OWED` one, so [`rust_definitions`] is the stricter index the mirror check uses.
 fn rust_names() -> BTreeSet<String> {
     let mut out = BTreeSet::new();
     let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
@@ -376,6 +381,71 @@ fn every_alias_resolves_to_something_real() {
     assert!(
         dangling.is_empty(),
         "aliases pointing at nothing: {dangling:?}"
+    );
+}
+
+/// Only genuine top-level definitions — no variants, no match arms.
+///
+/// ⚠ The loose index reported `Ray` and `Spine` as built when neither exists, because a `Ray {` in a
+/// doc comment or a match arm reads the same as a declaration. A false *"you already built this"* is
+/// the expensive direction: it retires a debt that is still owed.
+fn rust_definitions() -> BTreeSet<String> {
+    let mut out = BTreeSet::new();
+    let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    for dir in ["crates/cv-core/src", "crates/cv-determinism/src"] {
+        let Ok(rd) = std::fs::read_dir(root.join(dir)) else {
+            continue;
+        };
+        for e in rd.flatten() {
+            let Ok(src) = std::fs::read_to_string(e.path()) else {
+                continue;
+            };
+            for line in src.lines() {
+                for kw in ["pub struct ", "pub enum ", "pub trait ", "pub type "] {
+                    if let Some(rest) = line.trim().strip_prefix(kw) {
+                        let name: String = rest
+                            .chars()
+                            .take_while(|c| c.is_alphanumeric() || *c == '_')
+                            .collect();
+                        if !name.is_empty() {
+                            out.insert(name);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    out
+}
+
+/// ⚠ **The mirror of the phantom check, and the one that was missing.**
+///
+/// `every_built_entry_names_something_that_actually_exists` catches a `BUILT` entry that is not built.
+/// Nothing caught an `OWED` entry that **is** — so a milestone could build something and leave the
+/// ledger claiming a later milestone still owes it. That is a stale debt: it reads as work outstanding,
+/// so a reader plans around a hole that closed.
+#[test]
+fn no_owed_entry_has_quietly_been_built() {
+    let defined = rust_definitions();
+    let mut done = Vec::new();
+    for (name, _) in OWED {
+        // An alias is a recorded divergence, not a debt.
+        if ALIASES.iter().any(|(a, _)| a == name) {
+            continue;
+        }
+        if defined.contains(*name) {
+            done.push(*name);
+        }
+    }
+    assert!(
+        done.is_empty(),
+        "listed as OWED but a Rust definition exists:
+  {}
+         Move each to BUILT — a debt that is already paid reads as a hole that is still open.",
+        done.join(
+            "
+  "
+        )
     );
 }
 
