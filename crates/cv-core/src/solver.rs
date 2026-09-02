@@ -1,4 +1,4 @@
-//! **L2's algorithm** — placing progression items so the world is solvable *by construction*, and
+//! **L1's algorithm** — placing progression items so the world is solvable *by construction*, and
 //! shaping how linear that world feels.
 //!
 //! # Solvable by construction, not by checking
@@ -51,7 +51,7 @@ pub enum SolveError {
         item: ObjectId,
         placed_so_far: usize,
     },
-    /// The world was built, but something required by L1 could not be placed.
+    /// The world was built, but something a schedule required could not be placed.
     UnmetDemand { content: ObjectId },
 }
 

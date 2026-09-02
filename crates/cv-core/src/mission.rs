@@ -8,7 +8,7 @@
 //! locked door between them are neighbours in space and worlds apart in progression, and conflating
 //! the two is how a generator ends up unable to reason about gating at all.
 //!
-//! So L2 takes the spatial adjacency as its starting topology, then decides what each connection
+//! So L1 takes the spatial adjacency as its starting topology, then decides what each connection
 //! *requires*.
 //!
 //! # Spheres: the shape of progression
@@ -55,10 +55,10 @@ use std::fmt;
 /// the editor can render one as a tree.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub enum Rule {
-    /// Always satisfied — an open passage. The default: connections are open until L2 gates them.
+    /// Always satisfied — an open passage. The default: connections are open until L1 gates them.
     #[default]
     Always,
-    /// Never satisfied. Useful as a placeholder for "sealed until L3 decides".
+    /// Never satisfied. Useful as a placeholder for "sealed until the solve decides".
     Never,
     /// The player holds this unlock.
     Has(ObjectId),
@@ -506,7 +506,7 @@ impl MissionGraph {
     /// item location can be added to it, so nothing can be found there and nothing can gate on
     /// anything inside it. The host furnishes it however it likes.
     ///
-    /// L1 has to be told separately — pass the same scopes to
+    /// The scheduler has to be told separately — pass the same scopes to
     /// [`Scheduler::excluding`](crate::schedule::Scheduler::excluding) — because scheduling runs
     /// against the scope graph and never sees this one.
     pub fn exclude_content(&mut self, scope: Handle<Node>) -> &mut Self {
@@ -682,7 +682,7 @@ impl MissionGraph {
         true
     }
 
-    /// Replace an edge's rule — how L2 gates a connection.
+    /// Replace an edge's rule — how L1 gates a connection.
     pub fn gate_edge(&mut self, index: usize, rule: Rule) -> bool {
         match self.edges.get_mut(index) {
             Some(edge) => {

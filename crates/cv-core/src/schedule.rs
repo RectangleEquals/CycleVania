@@ -1,14 +1,18 @@
-//! **L0 + L1** — resolving what content exists into what the world should aim to contain.
+//! **Scheduling** — resolving what content exists into what the world should aim to contain.
 //!
-//! # What L1 decides, and what it does not
+//! ⚠ **There is no scheduling layer.** Schedules are declared on content and *arbitrated inside the
+//! **L1** solve, where they can backtrack* — strictly better than the one-shot pass it replaced. This
+//! module is the arbitration, not a stage of its own.
 //!
-//! L1 produces **targets, not placements**. It answers "this room should aim for about three things,
-//! drawn from these five candidates, weighted like so" — and then L2 has final say, because
-//! solvability outranks aesthetics. A schedule that cannot be honoured is not an error; it is a
+//! # What scheduling decides, and what it does not
+//!
+//! It produces **targets, not placements**. It answers "this room should aim for about three things,
+//! drawn from these five candidates, weighted like so" — and then **L1 has final say, because
+//! solvability outranks aesthetics.** A schedule that cannot be honoured is not an error; it is a
 //! preference the solver declined.
 //!
-//! Keeping that boundary sharp is what stops the two layers fighting. L1 never asks whether a world is
-//! solvable, and L2 never asks whether it is well-paced.
+//! Keeping that boundary sharp is what stops the two concerns fighting. Scheduling never asks whether
+//! a world is solvable, and the solve never asks whether it is well-paced.
 //!
 //! # Whose count is `AdaptiveRange`?
 //!
@@ -18,7 +22,7 @@
 //! this slot*, which is a property of the slot, not of any one candidate.
 //!
 //! Content declares its own eligibility ([`Schedule`]); per-scope limits are a *constraint*
-//! (a `MaxPerScope` constraint — ▶ M07), enforced by L2/L3 where placement actually happens.
+//! (a `MaxPerScope` constraint — ▶ M07), enforced where placement actually happens.
 //!
 //! # The inputs a dev has
 //!
@@ -39,7 +43,7 @@
 //! four report their reasoning, so choosing control does not cost you the explanation.
 //!
 //! [`WorldLimit`] exists because a per-slot count cannot express a world-wide fact. "Exactly one final
-//! boss" has no per-room formulation; L1 records the demand and L2 honours it.
+//! boss" has no per-room formulation; scheduling records the demand and the solve honours it.
 //!
 //! # The adaptive part
 //!
@@ -621,8 +625,8 @@ impl ScopeFilter {
 /// How many of something may exist across the **whole world**.
 ///
 /// Per-slot counts cannot express "exactly one final boss" or "at most three save rooms" — those are
-/// world-wide facts, and without them a unique artifact silently becomes several. L1 records the
-/// limit; L2 is what honours it, since only L2 places anything.
+/// world-wide facts, and without them a unique artifact silently becomes several. Scheduling records
+/// the limit; the solve is what honours it, since only the solve places anything.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct WorldLimit {
     /// The world must contain at least this many. `0` means optional.
@@ -658,7 +662,7 @@ impl WorldLimit {
 
     /// Must the world contain this?
     ///
-    /// L2 treats a required piece as a **demand**, not a preference: failing to place it is a failed
+    /// The solve treats a required piece as a **demand**, not a preference: failing to place it is a failed
     /// generation, not a sparse one.
     pub fn is_required(self) -> bool {
         self.min > 0
@@ -940,7 +944,7 @@ impl ContentPool {
 
     /// Content the world is *required* to contain, with its limit.
     ///
-    /// L2 must place these; failing to is a failed generation rather than a sparse one.
+    /// The solve must place these; failing to is a failed generation rather than a sparse one.
     pub fn demands(&self) -> impl Iterator<Item = (ObjectId, WorldLimit)> + '_ {
         self.entries
             .iter()
@@ -977,7 +981,7 @@ pub struct Candidate {
 }
 
 // ---------------------------------------------------------------------------------------------
-// L1 — the plan
+// The plan
 // ---------------------------------------------------------------------------------------------
 
 /// One scope's target, with the candidates that may fill it.
@@ -987,7 +991,7 @@ pub struct PlannedSlot {
     pub scope: Handle<Node>,
     /// How far through the world it sits.
     pub progression: Progression,
-    /// How many things to aim for. **A target, not a guarantee** — L2 may place fewer.
+    /// How many things to aim for. **A target, not a guarantee** — the solve may place fewer.
     pub target: u32,
     /// What may fill it, in content-id order with weights.
     pub candidates: Vec<Candidate>,
@@ -995,7 +999,7 @@ pub struct PlannedSlot {
     pub reasoning: TargetReasoning,
 }
 
-/// **L1's output** — the authoritative plan L2 works from.
+/// **Scheduling's output** — the authoritative plan the L1 solve works from.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct SchedulePlan {
     slots: Vec<PlannedSlot>,
@@ -1037,7 +1041,7 @@ impl SchedulePlan {
 
     /// Content the world is **required** to contain, carried through from L0.
     ///
-    /// L1 cannot enforce a world-wide limit — it places nothing — so it records the demand and L2
+    /// Scheduling cannot enforce a world-wide limit — it places nothing — so it records the demand and the solve
     /// honours it. Without this hand-off, "exactly one final boss" would have nowhere to live: a
     /// per-slot count cannot express a world-wide fact.
     pub fn demands(&self) -> &[(ObjectId, WorldLimit)] {
@@ -1045,7 +1049,7 @@ impl SchedulePlan {
     }
 }
 
-/// Runs L1: turns a pool and a graph into per-scope targets.
+/// Runs the scheduler: turns a pool and a graph into per-scope targets.
 ///
 /// Deterministic given the same graph, pool, rules and seed. Slot order follows the graph walk, and
 /// each slot's jitter is drawn from a stream **forked on the scope's identity** rather than on its
@@ -1076,7 +1080,7 @@ impl<'a> Scheduler<'a> {
 
     /// Plan nothing for these scopes — their interiors belong to the host.
     ///
-    /// The L1 half of an emptiness declaration; the L2 half is
+    /// The scheduling half of an emptiness declaration; the solve half is
     /// [`MissionGraph::exclude_content`](crate::mission::MissionGraph::exclude_content). Both are
     /// needed because a scope with no scheduled content could still be handed an item location, and a
     /// scope with no locations could still be handed scenery. Feed both from

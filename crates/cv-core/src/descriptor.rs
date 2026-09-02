@@ -158,9 +158,9 @@ impl From<Transform> for Placement {
 /// reasoning exists only at the moment of the decision.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum PlacementReason {
-    /// L1's schedule called for it.
+    /// A schedule called for it.
     Scheduled,
-    /// L2 required it for solvability — a key, a gate, a recovery affordance.
+    /// The L1 solve required it for solvability — a key, a gate, a recovery affordance.
     SolverRequired,
     /// Structural: a connector or transition between scopes.
     Connector,

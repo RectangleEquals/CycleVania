@@ -22,7 +22,7 @@ Most people need exactly one of these. If you are building a game, you will live
 
 | Section | Audience | Contains |
 |---|---|---|
-| **`concepts/`** | everyone | The mental model: determinism, the L0–L6 pipeline, lazy generation, the linearity dials. Read once; refer back. No API detail. |
+| **`concepts/`** | everyone | The mental model: determinism, the L0–L5 pipeline, lazy generation, the linearity dials. Read once; refer back. No API detail. |
 | **`authoring/`** | content authors | The visual authoring surface: schematics, graphs, spines, state graphs, and the generated [API reference](authoring/api-reference.md). |
 | **`hosting/`** | integrators | Getting generation into a real game: the TypeScript package, Rust/WASM, project layout, consuming the output, shipping a build. |
 | **`editor/`** | anyone tuning a world | The dev tool: panels, dials, the seed lab, the generation trace. |

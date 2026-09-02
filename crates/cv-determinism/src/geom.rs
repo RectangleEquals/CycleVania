@@ -1,5 +1,6 @@
 //! Deterministic geometry kernels — the numeric core behind the `Vec3` / `Transform` / `AABB` value
-//! types CVScript exposes as immutable `api class`es at M19.
+//! types CVScript exposes as immutable `api class`es — CVScript being the **visual** authoring system,
+//! so these are pin types on a node graph rather than syntax in a text file.
 //!
 //! Every routine here is built from [`crate::math`], so the whole set inherits the float contract:
 //! bit-identical on native and wasm32. These are plain `Copy` value types with no identity — they are

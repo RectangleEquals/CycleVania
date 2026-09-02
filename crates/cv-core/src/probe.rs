@@ -671,7 +671,7 @@ fn build_schedule_values() -> (ScheduleBook, SeedPolicy, Vec<u8>) {
     (book, policy, w.finish())
 }
 
-/// L2 rules and edges, including a nested combinator — the grammar is script-authored at M16, so its
+/// L1 rules and edges, including a nested combinator — the grammar is graph-authored, so its
 /// encoding has to be stable across targets before anything writes one.
 fn build_mission_values() -> (Vec<Rule>, Vec<MissionEdge>) {
     let dash = ObjectId::derived("unlock", "blink_dash");

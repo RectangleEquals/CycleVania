@@ -1,4 +1,4 @@
-//! [`Context`] — the per-call lens the core hands into every [`Mechanic`](crate::Mechanic) callback.
+//! [`Context`] — the per-call lens the core hands into every authored hook.
 //!
 //! # It is the *only* argument
 //!
@@ -35,8 +35,9 @@
 //! `reflect` — are **geometric only**. `raycast` reports what is *there*; it never reports whether that
 //! thing blocks the caller, because blocking depends on what is travelling. Glass stops a bullet and
 //! passes a laser: the glass knows that, the ray does not. A flow-selective question is therefore two
-//! steps — walk `raycast_all` (sorted nearest-first) and stop at the first surface whose mechanic says
-//! it blocks — and that split is what keeps `FlowKind` out of the geometry entirely.
+//! steps — walk `raycast_all` (sorted nearest-first) and ask each [`crate::Surface`] whether it
+//! `affords` the attempt — and that split is what keeps the *set of flow kinds* out of the core
+//! entirely. Transit is a `RemoteUse` subtree the developer authors, not an enum the core publishes.
 //!
 //! Geometry is optional on a context. Without it every primitive answers as an empty world would
 //! (nothing hit, sight unobstructed, sweeps run their full length) rather than panicking, so a mechanic
@@ -595,7 +596,7 @@ mod tests {
 
     #[test]
     fn spatial_primitives_are_geometric_and_never_decide_what_blocks() {
-        // The property that keeps `FlowKind` out of the geometry: a ray reports what is *there*, and
+        // The property that keeps the flow-kind *set* out of the core: a ray reports what is there, and
         // the caller decides whether it stops them. Two mechanics can disagree about the same hit.
         use crate::geometry::{CoarseGeometry, Collider};
         let (g, reg, placed) = world();

@@ -2,13 +2,13 @@
 //!
 //! # Why "coarse"
 //!
-//! L5 builds the geometry a player actually sees. Everything before it — the solver, the skeleton, the
+//! L4 builds the geometry a player actually sees. Everything before it — the solver, the skeleton, the
 //! volume pass — has to reason spatially *without* that, using scope envelopes and reserved volumes.
 //! So the primitives here answer questions about **boxes**, and they are deliberately honest about it:
 //! a `raycast` result names the face of an AABB, not a triangle.
 //!
 //! That is not a placeholder. A mechanic asking *"can the laser reach the catcher from here?"* is
-//! asking a question about layout, and layout is settled long before geometry is. When L5 lands
+//! asking a question about layout, and layout is settled long before geometry is. When L4 lands
 //! it refines what a [`Collider`] is; the questions and their shapes stay put.
 //!
 //! # The primitives are flow-agnostic, on purpose
@@ -22,16 +22,22 @@
 //!
 //! ```ignore
 //! for hit in geometry.raycast_all(origin, dir, range) {
-//!     if mechanic_for(hit.owner).blocks(&ctx, FlowKind::Laser) {
-//!         break;              // the glass/laser puzzle falls out of this
+//!     // The Surface answers per attempt — `Interaction::RemoteUse` with a `Beam` target here.
+//!     if surface_of(&hit).affords(&beam).is_open() {
+//!         continue;           // glass passes the laser
 //!     }
+//!     break;                  // and stops the bullet
 //! }
 //! ```
 //!
+//! ⚠ **`affords` takes an `Interaction`, not a verb**, which is the whole reason one pane of glass can
+//! block ballistics and walking while passing a laser and a sightline: transit is a `RemoteUse` subtree
+//! a developer authors — `Sightline`, `Ballistic`, `Beam` — and the Surface answers per kind. An enum of
+//! flow kinds would have made that set the core's to decide.
+//!
 //! [`raycast_all`](CoarseGeometry::raycast_all) returns hits **sorted by distance** so that loop is
 //! correct by construction, and it returns a plain `Vec` rather than taking a predicate because this
-//! surface has to survive being exposed to CVScript — a closure would not translate, an array
-//! does.
+//! surface crosses the binding seam — a closure would not translate, an array does.
 //!
 //! # Determinism
 //!
@@ -59,7 +65,7 @@ use std::fmt;
 
 /// One of a box's six sides — the finest surface granularity coarse geometry has.
 ///
-/// A face is what carries surface tags before L5 exists: "this wall is portal-able" is a statement
+/// A face is what carries surface tags before L4 exists: "this wall is portal-able" is a statement
 /// about a face, and stays meaningful when the face later becomes a set of triangles.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Face {
@@ -398,7 +404,7 @@ impl CoarseGeometry {
     /// The first thing in the way, or `None` if the ray runs clear.
     ///
     /// "First" is geometric, not semantic — see the module docs on why this does not take a
-    /// [`FlowKind`](crate::FlowKind).
+    /// the attempt, via [`Surface::affords`](crate::Surface::affords).
     pub fn raycast(&self, origin: Vec3, direction: Vec3, max_distance: f64) -> Option<Hit> {
         self.raycast_all(origin, direction, max_distance)
             .into_iter()

@@ -78,6 +78,114 @@ fn core_sources() -> Vec<PathBuf> {
     out
 }
 
+/// Every Rust source in the workspace, not just this crate's.
+///
+/// ⚠ **Scanning one crate is how `cv-vm` and `cv-determinism` drifted unchecked.** Both carried claims
+/// about a text scripting language and a `.cvb` artifact that cannot exist, and no lint looked
+/// at them because the lint lived next to the crate it was written for.
+fn workspace_sources() -> Vec<PathBuf> {
+    fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
+        let Ok(entries) = fs::read_dir(dir) else {
+            return;
+        };
+        for e in entries.flatten() {
+            let p = e.path();
+            if p.is_dir() {
+                if p.file_name().is_some_and(|n| n == "target") {
+                    continue;
+                }
+                walk(&p, out);
+            } else if p.extension().is_some_and(|x| x == "rs") {
+                out.push(p);
+            }
+        }
+    }
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let mut out = Vec::new();
+    walk(&root.join("crates"), &mut out);
+    out
+}
+
+/// A concept that v0.2 or v0.2b **superseded**, and what it is now.
+///
+/// ⚠ **A stale comment is worse than no comment.** It reads as current, so the next person to touch the
+/// file builds on it — and `geometry.rs` carried a runnable-looking example calling two deleted APIs.
+/// The v0.1 pipeline is the sharpest case: v0.2 folded scheduling into the content layer and
+/// **renumbered everything**, so a comment saying `L2` may be wrong even where `L2` still exists.
+const SUPERSEDED: &[(&str, &str)] = &[
+    (
+        "L0-L6",
+        "v0.2 folded the scheduling layer into L0; the pipeline is L0-L5          (Content, Mission, Skeleton, Volume, Geometry, Finalize)",
+    ),
+    (
+        "L0–L6",
+        "v0.2 folded the scheduling layer into L0; the pipeline is L0-L5",
+    ),
+    ("L6", "there is no L6; v0.1's dressing layer is v0.2b's L5 Finalize"),
+    (
+        ".cvb",
+        "CVB is a NOTATION, not a file type — `.cvs`, `.cvspine` and `.cvstate` are separate          formats written in it, so an extension named after the notation is a category error",
+    ),
+    (
+        "CVB file",
+        "CVB is a notation, not a format; the file is a schematic, a spine template or a state graph",
+    ),
+    (
+        "scheduling layer",
+        "03-pipeline.md §1 states there is no scheduling layer — schedules are arbitrated inside L1",
+    ),
+];
+
+#[test]
+fn no_superseded_concept_survives_in_a_comment() {
+    let mut offenders = Vec::new();
+    for path in workspace_sources() {
+        let Ok(src) = fs::read_to_string(&path) else {
+            continue;
+        };
+        let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("?");
+        // This file names them on purpose — it is the table.
+        if name == "conformance.rs" {
+            continue;
+        }
+        for (i, line) in src.lines().enumerate() {
+            let t = line.trim();
+            if !(t.starts_with("//") || t.starts_with("///") || t.starts_with("//!")) {
+                continue;
+            }
+            // ⚠ **A denial is not a use.** *"There is no scheduling layer"* is the sentence that
+            // documents the rule, and a checker that cannot tell it from an affirmative use flags the
+            // very comment it wants written — failing in the direction that looks like diligence,
+            // which is how a lint trains people to ignore it.
+            let denies = [
+                "there is no",
+                "There is no",
+                "no scheduling layer",
+                "not a declared",
+            ]
+            .iter()
+            .any(|d| line.contains(d));
+            if denies {
+                continue;
+            }
+            for (term, why) in SUPERSEDED {
+                if line.contains(term) {
+                    offenders.push(format!("{name}:{}: `{term}` — {why}", i + 1));
+                }
+            }
+        }
+    }
+    assert!(
+        offenders.is_empty(),
+        "comments describe concepts v0.2+ superseded:
+  {}",
+        offenders.join(
+            "
+  "
+        )
+    );
+}
+
 #[test]
 fn the_core_carries_nothing_the_design_refuses() {
     let mut offenders = Vec::new();

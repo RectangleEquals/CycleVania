@@ -174,7 +174,7 @@ impl GrantSpec {
 // Slots and segments
 // ---------------------------------------------------------------------------------------------
 
-/// What a slot demands of its **topology** — consumed by L2.
+/// What a slot demands of its **topology** — consumed by the L1 solve.
 ///
 /// Grouped rather than flattened onto [`SpineSlot`] because these are the constraints one *layer*
 /// reads, and because a slot that says nothing about shape should cost nothing to write or to read.
@@ -197,7 +197,7 @@ pub struct SlotShape {
     pub adjacent_to: Vec<String>,
 }
 
-/// What a slot demands of its **contents** — consumed by L0/L1 and the solver.
+/// What a slot demands of its **contents** — consumed by scheduling and the solver.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct SlotContents {
     /// Content that must be placed here.
@@ -253,7 +253,7 @@ pub struct SpineSlot {
     /// Content demands — what goes in it, or that nothing does.
     pub contents: SlotContents,
     // ▶ Future groups land here rather than lengthening the list above: `pacing` (sphere bounds, gate
-    // budget) and `space` (volume and theming hints for L3/L4).
+    // budget) and `space` (volume and theming hints for L3/L4 — hull and geometry).
 }
 
 impl SpineSlot {
@@ -512,7 +512,7 @@ impl Coverage {
 // The template
 // ---------------------------------------------------------------------------------------------
 
-/// An opt-in macro-structure constraint on L2's topology.
+/// An opt-in macro-structure constraint on the L1 solve's topology.
 #[derive(Clone, Debug, PartialEq)]
 pub struct SpineTemplate {
     /// This template's registered content id.
@@ -599,7 +599,7 @@ impl SpineTemplate {
 
     /// The fewest scopes an instance needs.
     ///
-    /// **A spine raises a floor on the scope budget rather than competing with it** — L1's
+    /// **A spine raises a floor on the scope budget rather than competing with it** — the scheduler's
     /// `AdaptiveRange` and a spine are talking about the same number, so the spine informs it.
     pub fn required_minimum(&self) -> u32 {
         let slots = self
@@ -872,7 +872,7 @@ impl SpineTemplate {
             }
         }
 
-        // Budget: the spine raises a floor rather than competing with L1's count.
+        // Budget: the spine raises a floor rather than competing with the scheduler's count.
         let needed = self.required_minimum();
         if needed > available_scopes {
             v.errors.push(SpineError::BudgetTooSmall {
@@ -1102,8 +1102,8 @@ impl SpineInstance {
 
     /// The scopes the generator must leave empty.
     ///
-    /// The L2 half is applied automatically at instantiation; feed this to
-    /// [`Scheduler::excluding`](crate::schedule::Scheduler::excluding) for the L1 half, which plans
+    /// The topology half is applied automatically at instantiation; feed this to
+    /// [`Scheduler::excluding`](crate::schedule::Scheduler::excluding) for the scheduling half, which plans
     /// against the scope graph and cannot see the mission graph's decisions.
     pub fn empty_scopes(&self) -> &[Handle<Node>] {
         &self.empty
@@ -1369,7 +1369,7 @@ impl<'a> SpineInstantiator<'a> {
 
         let placed = |name: &str| assignments.iter().find(|a| a.slot == name).map(|a| a.scope);
 
-        // Emptiness: the L2 half. L1 is told via `SpineInstance::empty_scopes`, since scheduling runs
+        // Emptiness: the topology half. Scheduling is told via `SpineInstance::empty_scopes`, since it runs
         // against the scope graph and never sees this.
         let mut empty = Vec::new();
         for slot in template.slots.iter().filter(|s| s.contents.empty) {

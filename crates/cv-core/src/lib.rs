@@ -1,6 +1,11 @@
-//! cv-core — the generation engine: the deterministic data model (arena-of-handles graph), the L0–L6
-//! pipeline, the scheduling engine (L1), the solver (L2, incl. the no-softlock guarantee), and the
-//! Context API. Pure computation, no I/O; the VM (cv-vm) is embedded here for api-dispatch.
+//! cv-core — the generation engine: the deterministic data model (arena-of-handles graph), the L0–L5
+//! pipeline, the scheduler, the solver (**L1**, incl. the no-softlock guarantee), and the Context API.
+//! Pure computation, no I/O; the VM (cv-vm) is embedded here for api-dispatch.
+//!
+//! ⚠ **There is no scheduling layer.** Schedules are declared on content and *arbitrated inside the L1
+//! solve, where they can backtrack* — strictly better than the one-shot pass it replaced. What that
+//! stage produces is **targets, not placements**, and L1 has final say because solvability outranks
+//! aesthetics.
 //!
 //! **M03–M04: the data model's foundation.**
 //!
@@ -15,8 +20,8 @@
 //! * [`events`] — the one-way, batched notification bridge to the host.
 //! * [`context`] — the per-call lens handed into every authored callback.
 //! * [`unlock`] — the progression vocabulary: `Unlock` rows and their `supersedes` ordering.
-//! * [`schedule`] — L0 content resolution and the L1 plan, including `AdaptiveRange`.
-//! * [`mission`] — the L2 mission graph, the `Rule` grammar, and sphere reachability.
+//! * [`schedule`] — content resolution and the target plan, including `AdaptiveRange`.
+//! * [`mission`] — the **L1** mission graph, the `Rule` grammar, and sphere accessibility.
 //! * [`solver`] — assumed-fill placement and cycle generation.
 //! * [`softlock`] — the un-softlockable guarantee: no accessible state strands the goal.
 //! * [`spine`] — opt-in macro-structure: guaranteed slots, free-form segments.

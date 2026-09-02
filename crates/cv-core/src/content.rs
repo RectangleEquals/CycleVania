@@ -27,7 +27,7 @@ use std::fmt;
 
 /// What sort of thing a piece of registered content is.
 ///
-/// The distinction that earns its place here is [`ContentKind::is_schedulable`] — whether L1 may
+/// The distinction that earns its place here is [`ContentKind::is_schedulable`] — whether the solve may
 /// *place or bias* it. Everything else about a kind is the host's business.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ContentKind {
@@ -58,7 +58,7 @@ pub enum ContentKind {
     StaticMesh,
     /// A disk-backed curve.
     CurveTable,
-    /// An **opt-in** macro-structure template constraining L2's topology.
+    /// An **opt-in** macro-structure template constraining the L1 solve's topology.
     ///
     /// Not schedulable: a spine is not *placed*, it shapes where placement happens.
     Spine,
@@ -80,7 +80,7 @@ impl ContentKind {
         ContentKind::Spine,
     ];
 
-    /// May L1 place or bias this?
+    /// May the solve place or bias this?
     ///
     /// The compiler and the editor answer "can I schedule this?" from here rather than guessing, so a
     /// dev never has to discover by trial that a `Component` cannot be scheduled on its own.
@@ -185,7 +185,7 @@ impl ContentEntry {
         self.source_digest
     }
 
-    /// May L1 place or bias this?
+    /// May the solve place or bias this?
     pub fn is_schedulable(&self) -> bool {
         self.kind.is_schedulable()
     }
@@ -319,7 +319,7 @@ impl ContentRegistry {
         self.iter().filter(move |(_, e)| e.kind == kind)
     }
 
-    /// Everything L1 may place or bias, in id order — the eligible set the scheduler starts from.
+    /// Everything the solve may place or bias, in id order — the eligible set scheduling starts from.
     pub fn schedulable(&self) -> impl Iterator<Item = (ObjectId, &ContentEntry)> + '_ {
         self.iter().filter(|(_, e)| e.is_schedulable())
     }

@@ -560,7 +560,7 @@ pub fn class_default_id(path: &ClassPath) -> ObjectId {
 
 /// A pin's declared type, as **data**.
 ///
-/// ⚠ **The editor's pins are data, not Rust types.** A CVB file says `Type=Kind'/Core/Component'`, and
+/// ⚠ **The editor's pins are data, not Rust types.** A schematic says `Type=Kind'/Core/Component'`, and
 /// something has to refuse the wire from a `Ref'…'` pin at load time — before any Rust type exists to
 /// have prevented it. This is that check. Parsing the notation is [M11]'s; the rule is this
 /// milestone's, because the rule is what the green criterion is about.
