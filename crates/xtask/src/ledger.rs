@@ -19,10 +19,19 @@
 //!
 //! | Disposition | Means |
 //! |---|---|
-//! | `built` | a manifest declaration or a Rust name exists for it |
+//! | `present` | a manifest declaration **or** a Rust name exists for it |
 //! | `owed` | a milestone in the plan names it |
+//! | `declared` | a tier-1 manifest declaration; `coverage.rs` owns whether it is implemented |
 //! | `refused` | the design's own deliberately-absent table names it |
 //! | **`none`** | ⚠ **nobody has looked at this** |
+//!
+//! ⚠ **`present` deliberately does not mean *implemented*, and it used to be called `built`, which
+//! read as though it did.** A tier-1 class can be declared in the manifest and have no Rust behind it
+//! — `ScopeHandle` is — so the old name had this ledger reporting *built* for a surface `coverage.rs`
+//! simultaneously reported *owed*. Two ratchets contradicting each other is worse than one, because a
+//! reader believes whichever they opened. **The division of labour:** this ledger answers *has anyone
+//! taken responsibility for this surface* over the whole design; `coverage.rs` answers *is this tier-1
+//! declaration implemented*. Neither can answer the other's question, and the names now say so.
 //!
 //! The committed ledger records the count of each. A test fails when the `none` count **rises**. So the
 //! existing backlog is visible and worked down deliberately, while a new design surface that nobody has
@@ -71,6 +80,17 @@ pub enum Surface {
     /// ⚠ **The category `CV_*` fell into**, and the reason the extraction includes it at all: a design
     /// table row is an *enumeration*, and an enumeration is exactly the thing a reader skims.
     Row,
+    /// A tier-1 declaration in `manifest/tier1.toml`.
+    ///
+    /// ⚠ **The manifest is a design artefact, and leaving it out left this extraction open.** Reading
+    /// only the prose missed 37 declarations `coverage.rs` tracks — `MinDistanceFrom`, `MountedOn`,
+    /// `SpherePin`, `PlacedAfter`, `SkipPolicy`, `Detail`, `Fidelity` and more. Every one *is* in the
+    /// design, written in a form this extractor cannot see: inside a code block, on an `api class`
+    /// **continuation** line, as a member's *type* rather than its name, or in a heading. Widening the
+    /// prose scan to catch those would match ordinary English and produce a number that looks complete
+    /// and means nothing — the mistake `names_it` already documents. **So the manifest is read as
+    /// itself.**
+    Declaration,
 }
 
 impl Surface {
@@ -80,6 +100,7 @@ impl Surface {
             Surface::Member => "member",
             Surface::Tree => "tree",
             Surface::Row => "row",
+            Surface::Declaration => "declaration",
         }
     }
 }
@@ -87,12 +108,22 @@ impl Surface {
 /// What has happened to a surface.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Disposition {
-    /// Something in the manifest or the code implements it.
-    Built,
+    /// A manifest declaration or a Rust name exists for it.
+    ///
+    /// ⚠ **Not a claim that it is implemented** — see the module header. `coverage.rs` owns that
+    /// question for tier-1 declarations.
+    Present,
     /// A milestone names it.
     Owed,
     /// The design's own deliberately-absent table names it.
     Refused,
+    /// A tier-1 manifest declaration, whose *implementation* status is `coverage.rs`'s question.
+    ///
+    /// ⚠ **Not folded into `present`, which would have been circular** — a manifest-sourced entry is
+    /// in the manifest by construction, so calling it *present* on that evidence proves nothing. This
+    /// value says what is actually known: the surface is **declared**, and the other ratchet answers
+    /// whether anything implements it.
+    Declared,
     /// ⚠ **Nobody has looked at this.**
     None,
 }
@@ -100,7 +131,8 @@ pub enum Disposition {
 impl Disposition {
     fn as_str(self) -> &'static str {
         match self {
-            Disposition::Built => "built",
+            Disposition::Present => "present",
+            Disposition::Declared => "declared",
             Disposition::Owed => "owed",
             Disposition::Refused => "refused",
             Disposition::None => "none",
@@ -288,6 +320,47 @@ pub fn extract(root: &Path) -> Option<Vec<Entry>> {
             }
         }
     }
+    // ⚠ **The manifest, read as itself** — and only for names the prose scan did not already reach.
+    // Pushing every declaration unconditionally would double-count the ~100 the design also names, and
+    // a total that counts one surface twice is the same species of meaningless number as one that
+    // counts prose.
+    let seen_names: BTreeSet<String> = entries.iter().map(|e| e.name.clone()).collect();
+    if let Ok(man) = std::fs::read_to_string(root.join("manifest/tier1.toml")) {
+        let mut member_ctx = false;
+        for (i, line) in man.lines().enumerate() {
+            let t = line.trim();
+            if t.starts_with("[[class.") {
+                member_ctx = true;
+                continue;
+            }
+            if t.starts_with("[[class]]") {
+                member_ctx = false;
+                continue;
+            }
+            let name = if let Some(v) = t.strip_prefix("path = \"") {
+                v.trim_end_matches('"')
+                    .rsplit('/')
+                    .next()
+                    .map(str::to_string)
+            } else if member_ctx {
+                t.strip_prefix("name = \"")
+                    .map(|v| v.trim_end_matches('"').to_string())
+            } else {
+                None
+            };
+            let Some(name) = name else { continue };
+            if name.is_empty() || seen_names.contains(&name) {
+                continue;
+            }
+            push(
+                &name,
+                Surface::Declaration,
+                format!("manifest/tier1.toml:{}", i + 1),
+                &mut entries,
+            );
+        }
+    }
+
     entries.sort();
     Some(entries)
 }
@@ -334,6 +407,22 @@ pub fn dispose(root: &Path, entries: &mut [Entry]) {
 
     for e in entries.iter_mut() {
         let n = e.name.as_str();
+        // ⚠ **A manifest-sourced entry cannot earn `present` from the manifest.** That is the
+        // circularity the `Declared` value exists to avoid: only real code counts here.
+        if e.surface == Surface::Declaration {
+            e.disposition = if refused.contains(n) {
+                Disposition::Refused
+            } else if code.contains(&format!("struct {n}"))
+                || code.contains(&format!("enum {n}"))
+                || code.contains(&format!("fn {n}"))
+                || code.contains(&format!("pub {n}:"))
+            {
+                Disposition::Present
+            } else {
+                Disposition::Declared
+            };
+            continue;
+        }
         if refused.contains(n) {
             e.disposition = Disposition::Refused;
         } else if manifest.contains(&format!("\"/Core/{n}\""))
@@ -345,7 +434,7 @@ pub fn dispose(root: &Path, entries: &mut [Entry]) {
             // functions — so `ResourceDef.regenerates`, which exists, reported as a hole.
             || code.contains(&format!("pub {n}:"))
         {
-            e.disposition = Disposition::Built;
+            e.disposition = Disposition::Present;
         } else if names_it(&plan, n) {
             e.disposition = Disposition::Owed;
         }
@@ -396,15 +485,19 @@ pub fn render(entries: &[Entry]) -> String {
          tests job; this file answers only whether anyone has taken responsibility.\n"
     );
 
-    let mut counts = [0usize; 4];
+    let mut counts = [0usize; 5];
     for e in entries {
         counts[e.disposition as usize] += 1;
     }
     let _ = writeln!(s, "| Disposition | Count |");
     let _ = writeln!(s, "|---|---|");
     for (d, label) in [
-        (Disposition::Built, "built"),
+        (Disposition::Present, "present"),
         (Disposition::Owed, "owed"),
+        (
+            Disposition::Declared,
+            "declared — `coverage.rs` owns whether it is implemented",
+        ),
         (Disposition::Refused, "refused"),
         (Disposition::None, "**none — undispositioned**"),
     ] {

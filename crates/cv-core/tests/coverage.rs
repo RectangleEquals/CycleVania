@@ -188,26 +188,18 @@ const OWED: &[(&str, &str)] = &[
     ),
     ("Ray", "M26 L3 — raycast lands with the hull pass"),
     ("Plane", "M26 L3 — half-space tests land with the hull pass"),
-    (
-        "Quaternion",
-        "ALIAS — cv-determinism spells it `Quat`; see ALIASES",
-    ),
     // --- reporting surfaces ---
     ("Diagnostic", "M21 — the editor's lint and report channel"),
-    ("Quota", "M10 — the solver's supply accounting"),
-    (
-        "ResolveState",
-        "M10 — the solver's per-candidate resolution state",
-    ),
+    ("Quota", "M10a — per-scope counts, which fill bands consume"),
     ("QueryFilter", "M12 — the VM's query dispatch"),
     ("BooleanOp", "M27 L4 — CSG on realized geometry"),
     // --- the pieces that need a file format or a VM first ---
     ("MeshResource", "M14 — mesh import"),
-    ("ScopeHandle", "M10 — the solver's per-scope handle"),
-    ("Exclusion", "M10 — push-it-out"),
-    ("NeedsActor", "M10 — a PlacementNeed form"),
-    ("NeedsClearance", "M10 — a PlacementNeed form"),
-    ("BlocksTraversal", "M10 — a PlacementNeed form"),
+    (
+        "ScopeHandle",
+        "M12 — the Context lens's scope type, not a solver internal",
+    ),
+    ("Exclusion", "M10b — the adoption gate"),
     (
         "Spine",
         "M11 — `.cvspine`; the format spec's `Kind'/Core/Spine'` base",
@@ -236,6 +228,18 @@ const ALIASES: &[(&str, &str)] = &[
     // The `Needs` prefix marks a PlacementNeed form in the manifest; Rust reads them as variants.
     ("NeedsActor", "cv_core::need::PlacementNeed::Actor"),
     ("NeedsClearance", "cv_core::need::PlacementNeed::Clearance"),
+    (
+        "BlocksTraversal",
+        "cv_core::need::PlacementNeed::BlocksTraversal",
+    ),
+    // The manifest names the node lifecycle `ResolveState`; Rust reads it as `NodeState`.
+    //
+    // ⚠ **Its OWED entry described a different thing entirely** — *"the solver's per-candidate
+    // resolution state"* — and the manifest says `PROJECTED · RESERVED · REALIZED`, which is the
+    // projected→reserved→realized lifecycle built at M03. A debt whose stated reason does not match
+    // the surface it names is worse than a missing one: the milestone that honoured it would have
+    // built a second, parallel state machine.
+    ("ResolveState", "cv_core::node::NodeState"),
 ];
 
 fn manifest_paths() -> Vec<String> {
@@ -250,23 +254,31 @@ fn manifest_paths() -> Vec<String> {
         .collect()
 }
 
+/// There are three dispositions, not two, and pretending there were two is what put an alias in
+/// `OWED`. `Quaternion` sat there reading *"ALIAS - see ALIASES"*: a debt entry whose own text says
+/// it is not a debt, parked in the only list that would satisfy the ratchet. An alias is its own
+/// answer - *built, under a different spelling* - so it dispositions a declaration exactly as
+/// `BUILT` does, and belongs in neither of the other two.
 #[test]
-fn every_declaration_is_either_built_or_explicitly_owed() {
+fn every_declaration_has_a_disposition() {
     // ⚠ **The ratchet.** A new manifest declaration cannot pass this without someone deciding which
     // list it belongs in — which is the decision that never happened for `CV_*` metadata.
     let built: BTreeSet<&str> = BUILT.iter().copied().collect();
     let owed: BTreeSet<&str> = OWED.iter().map(|(n, _)| *n).collect();
+    let aliased: BTreeSet<&str> = ALIASES.iter().map(|(n, _)| *n).collect();
 
     let mut undecided = Vec::new();
     for path in manifest_paths() {
-        if !built.contains(path.as_str()) && !owed.contains(path.as_str()) {
+        let p = path.as_str();
+        if !built.contains(p) && !owed.contains(p) && !aliased.contains(p) {
             undecided.push(path);
         }
     }
     assert!(
         undecided.is_empty(),
         "tier-1 declarations nobody has taken responsibility for:\n  {}\n\
-         Add each to BUILT (it exists) or to OWED (with the milestone that owes it).",
+         Add each to BUILT (it exists), ALIASES (it exists under another name), or OWED
+\n         (with the milestone that owes it).",
         undecided.join("\n  ")
     );
 }
@@ -429,19 +441,26 @@ fn no_owed_entry_has_quietly_been_built() {
     let defined = rust_definitions();
     let mut done = Vec::new();
     for (name, _) in OWED {
-        // An alias is a recorded divergence, not a debt.
-        if ALIASES.iter().any(|(a, _)| a == name) {
+        // ⚠ **An alias that resolves is *proof* of built, not an exemption from the check.** This read
+        // `if aliased { continue }` — *"an alias is a recorded divergence, not a debt"* — which is true
+        // of the divergence and false of the conclusion drawn from it. An alias says *this surface
+        // exists in Rust under another spelling*, and `every_alias_resolves_to_something_real` proves
+        // the other spelling is there. So the two lists are **contradictory**, and the exemption made
+        // the contradiction unreachable: `NeedsActor` and `NeedsClearance` sat in both for a milestone.
+        if let Some((_, target)) = ALIASES.iter().find(|(a, _)| a == name) {
+            done.push(format!("{name} (aliased to {target}, which resolves)"));
             continue;
         }
         if defined.contains(*name) {
-            done.push(*name);
+            done.push(format!("{name} (a Rust definition exists)"));
         }
     }
     assert!(
         done.is_empty(),
-        "listed as OWED but a Rust definition exists:
+        "listed as OWED but already built:
   {}
-         Move each to BUILT — a debt that is already paid reads as a hole that is still open.",
+         Move each to BUILT or ALIASES — a debt that is already paid reads as a hole that is
+         still open, and a reader plans around it.",
         done.join(
             "
   "
@@ -573,5 +592,59 @@ fn the_core_writes_every_cv_key_the_design_promises() {
             "CV_AMBIENT"
         ],
         "the design's enumerated payload: role, layer, sphere, seed path, grants, ambient flags"
+    );
+}
+
+/// Every name this file tracks also has a row in the design ledger.
+///
+/// ⚠ **Two ratchets that do not know about each other are worse than one.** This file's domain is
+/// `manifest/tier1.toml`; the ledger's is the design prose. Each was closed over its own domain and
+/// neither could see the seam, so 37 declarations this file tracks — `MinDistanceFrom`, `MountedOn`,
+/// `SpherePin`, `PlacedAfter`, `SkipPolicy`, `Detail`, `Fidelity` among them — had **no ledger row at
+/// all**, while the ledger reported *"0 undispositioned"* over a total that silently omitted them. A
+/// reader consulting either one got a number that was true and incomplete in a way nothing disclosed.
+///
+/// ⚠ **The ledger lives in the private notes and is absent from a clean checkout**, so this skips
+/// rather than fails when it is not there — the same shape `xtask` uses. It is a seam check, not a
+/// build dependency on files the public repo does not carry.
+#[test]
+fn every_tracked_name_has_a_ledger_row() {
+    let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let Ok(ledger) =
+        std::fs::read_to_string(root.join(".notes/Implementation/v0.2b/design-ledger.md"))
+    else {
+        return;
+    };
+
+    let rows: BTreeSet<&str> = ledger
+        .lines()
+        .filter(|l| l.starts_with("| `"))
+        .filter_map(|l| l.split('`').nth(1))
+        .collect();
+
+    // Named in this file for the reader's sake, and outside the manifest — so outside the ledger's
+    // reach as well. Recorded, not silent.
+    let outside: BTreeSet<&str> = ["Query", "Spine", "SpineSlot"].into_iter().collect();
+
+    let mut absent: Vec<&str> = BUILT
+        .iter()
+        .copied()
+        .chain(OWED.iter().map(|(n, _)| *n))
+        .chain(ALIASES.iter().map(|(n, _)| *n))
+        .filter(|n| !rows.contains(n) && !outside.contains(n))
+        .collect();
+    absent.sort_unstable();
+    absent.dedup();
+
+    assert!(
+        absent.is_empty(),
+        "tracked here but absent from the design ledger:
+  {}
+         Either the ledger's extraction cannot see them - widen it - or they belong in the
+         `outside` list above with a reason.",
+        absent.join(
+            "
+  "
+        )
     );
 }
