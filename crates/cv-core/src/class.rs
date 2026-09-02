@@ -34,6 +34,11 @@ use std::marker::PhantomData;
 /// ⚠ **Only `/Core/…` classes implement this**, because only they have a name the compiler can see.
 /// A content class is bounded by whichever core class it extends, which is exactly the bound the
 /// picker filters on.
+///
+/// ⚠ **The markers are named `…Bound`, not `…Class`.** The design already owns `ItemClass` — it is the
+/// enum of item *classifications* (`PROGRESSION` · `USEFUL` · `BONUS` · `FILLER`), and a marker of the
+/// same name would have been two unrelated concepts under one identifier. `Bound` also says what these
+/// are: the `T` a `Kind<T>` is bounded at.
 pub trait CoreClass {
     /// The mount-pointed path of this class.
     const PATH: &'static str;
@@ -58,35 +63,35 @@ macro_rules! core_class {
 
 core_class!(
     /// The root of everything with identity.
-    ObjectClass => "/Core/Object"
+    ObjectBound => "/Core/Object"
 );
 core_class!(
     /// Placeable, authoritative, non-behavioural.
-    ActorClass => "/Core/Actor"
+    ActorBound => "/Core/Actor"
 );
 core_class!(
     /// An obtainable Actor.
-    ItemClass => "/Core/Item"
+    ItemBound => "/Core/Item"
 );
 core_class!(
     /// Attachable behaviour.
-    ComponentClass => "/Core/Component"
+    ComponentBound => "/Core/Component"
 );
 core_class!(
     /// What a piece of geometry means to a mechanic.
-    SurfaceClass => "/Core/Surface"
+    SurfaceBound => "/Core/Surface"
 );
 core_class!(
     /// A spatial delta that becomes a directed edge.
-    TraversalComponentClass => "/Core/TraversalComponent"
+    TraversalComponentBound => "/Core/TraversalComponent"
 );
 core_class!(
     /// An external-asset target.
-    ResourceClass => "/Core/Resource"
+    ResourceBound => "/Core/Resource"
 );
 core_class!(
     /// A named, retunable limit — see [`crate::budget`].
-    BudgetClass => "/Core/Budget"
+    BudgetBound => "/Core/Budget"
 );
 
 /// What a class **is**, as registered.
@@ -223,7 +228,7 @@ impl ClassRegistry {
     /// [tree]: https://example.invalid
     pub fn with_core() -> Self {
         let mut r = ClassRegistry::new();
-        r.register_root(ObjectClass::class_path())
+        r.register_root(ObjectBound::class_path())
             .expect("the root registers into an empty registry");
         // Parents come before children, which is also the order `register` requires.
         for (path, parent) in [
@@ -402,7 +407,7 @@ impl ClassRegistry {
 
 /// A picked **class** — nothing is constructed.
 ///
-/// ⚠ `T` bounds the picker: a `Kind<ActorClass>` may only hold a path that `is_a` `/Core/Actor`.
+/// ⚠ `T` bounds the picker: a `Kind<ActorBound>` may only hold a path that `is_a` `/Core/Actor`.
 #[derive(Debug)]
 pub struct Kind<T: CoreClass> {
     path: ClassPath,
@@ -483,7 +488,7 @@ impl<T: CoreClass> Kind<T> {
         registry.field(&self.path, name)
     }
 
-    /// Widen the bound — a `Kind<ItemClass>` is also a `Kind<ActorClass>`.
+    /// Widen the bound — a `Kind<ItemBound>` is also a `Kind<ActorBound>`.
     ///
     /// ⚠ Only ever widens, and the type system enforces the direction: narrowing needs the registry
     /// to check, which is what [`Kind::new`] is for.
@@ -635,7 +640,7 @@ impl ResourceRef {
 
     /// Is the class actually a resource class?
     pub fn is_well_formed(&self, registry: &ClassRegistry) -> bool {
-        registry.is_a(&self.class, &ResourceClass::class_path())
+        registry.is_a(&self.class, &ResourceBound::class_path())
     }
 }
 
@@ -695,7 +700,7 @@ mod tests {
         // ⚠ **The milestone's green criterion.** Reading a class's authored values must not require
         // constructing one — constructing to mean a kind is the bug that caused the pivot.
         let r = project();
-        let hookshot = Kind::<ItemClass>::new(&r, content("/Content/Items/Hookshot")).unwrap();
+        let hookshot = Kind::<ItemBound>::new(&r, content("/Content/Items/Hookshot")).unwrap();
 
         assert_eq!(
             hookshot
@@ -717,12 +722,12 @@ mod tests {
         // allocated. An allocated id would differ between processes, and two readers of "the same
         // class default" would silently disagree.
         let r = project();
-        let a = Kind::<ItemClass>::new(&r, content("/Content/Items/Hookshot")).unwrap();
-        let b = Kind::<ItemClass>::new(&r, content("/Content/Items/Hookshot")).unwrap();
+        let a = Kind::<ItemBound>::new(&r, content("/Content/Items/Hookshot")).unwrap();
+        let b = Kind::<ItemBound>::new(&r, content("/Content/Items/Hookshot")).unwrap();
         assert_eq!(a.defaults(), b.defaults());
         assert_eq!(a.defaults().id(), class_default_id(a.path()));
 
-        let other = Kind::<ItemClass>::new(&r, content("/Content/Items/Longshot")).unwrap();
+        let other = Kind::<ItemBound>::new(&r, content("/Content/Items/Longshot")).unwrap();
         assert_ne!(
             a.defaults(),
             other.defaults(),
@@ -766,23 +771,23 @@ mod tests {
     #[test]
     fn picking_outside_the_bound_is_refused_rather_than_reported_later() {
         let r = project();
-        let wrong = Kind::<ItemClass>::new(&r, ClassPath::core("/Core/Component"));
+        let wrong = Kind::<ItemBound>::new(&r, ClassPath::core("/Core/Component"));
         assert!(matches!(wrong, Err(ClassError::NotUnderBound { .. })));
 
-        let missing = Kind::<ItemClass>::new(&r, content("/Content/Items/Grapple"));
+        let missing = Kind::<ItemBound>::new(&r, content("/Content/Items/Grapple"));
         assert!(matches!(missing, Err(ClassError::Unknown { .. })));
     }
 
     #[test]
     fn a_narrower_kind_widens_and_a_wider_one_does_not_narrow() {
         let r = project();
-        let hookshot = Kind::<ItemClass>::new(&r, content("/Content/Items/Hookshot")).unwrap();
-        let as_actor = hookshot.upcast::<ActorClass>(&r);
+        let hookshot = Kind::<ItemBound>::new(&r, content("/Content/Items/Hookshot")).unwrap();
+        let as_actor = hookshot.upcast::<ActorBound>(&r);
         assert!(as_actor.is_some(), "every Item is an Actor");
 
-        let plain_actor = Kind::<ActorClass>::new(&r, ClassPath::core("/Core/Actor")).unwrap();
+        let plain_actor = Kind::<ActorBound>::new(&r, ClassPath::core("/Core/Actor")).unwrap();
         assert!(
-            plain_actor.upcast::<ItemClass>(&r).is_none(),
+            plain_actor.upcast::<ItemBound>(&r).is_none(),
             "not every Actor is an Item"
         );
     }
@@ -809,7 +814,7 @@ mod tests {
         // ⚠ Without this a subclass overriding one field would have to restate the other twenty, and
         // schematics would drift out of sync with their parents one forgotten field at a time.
         let r = project();
-        let longshot = Kind::<ItemClass>::new(&r, content("/Content/Items/Longshot")).unwrap();
+        let longshot = Kind::<ItemBound>::new(&r, content("/Content/Items/Longshot")).unwrap();
         assert_eq!(
             longshot
                 .default_field(&r, "range")
@@ -980,8 +985,8 @@ mod tests {
         // The compile-time half: these are two types, so the confusion is unrepresentable rather than
         // merely reported. This test exists to record that they carry different payloads at all.
         let r = project();
-        let k = Kind::<ItemClass>::new(&r, content("/Content/Items/Hookshot")).unwrap();
-        let instance: Ref<ItemClass> = Ref::new(ObjectId::derived("actor", "hookshot_01"));
+        let k = Kind::<ItemBound>::new(&r, content("/Content/Items/Hookshot")).unwrap();
+        let instance: Ref<ItemBound> = Ref::new(ObjectId::derived("actor", "hookshot_01"));
         assert_ne!(k.defaults().id(), instance.id());
         assert!(k.to_string().starts_with("Kind'"));
         assert!(instance.to_string().starts_with("Ref'"));

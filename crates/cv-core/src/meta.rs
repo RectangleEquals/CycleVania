@@ -432,11 +432,11 @@ mod tests {
     fn a_refused_write_leaves_an_existing_value_alone() {
         // A rejection must not be a delete in disguise.
         let mut m = Metadata::new();
-        m.set_core("CV_rationale", MetaValue::Text("core".into()));
+        m.set_core("CV_RATIONALE", MetaValue::Text("core".into()));
         assert!(m
-            .set("CV_rationale", MetaValue::Text("mine".into()))
+            .set("CV_RATIONALE", MetaValue::Text("mine".into()))
             .is_err());
-        assert_eq!(m.get("CV_rationale").unwrap().as_text(), Some("core"));
+        assert_eq!(m.get("CV_RATIONALE").unwrap().as_text(), Some("core"));
     }
 
     #[test]

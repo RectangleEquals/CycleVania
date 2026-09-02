@@ -33,19 +33,23 @@ use crate::placement::Role;
 ///
 /// ⚠ **Named constants rather than string literals at each write site.** A typo in a stamped key
 /// produces a host that silently finds nothing under the name it expected, and nothing else fails.
+///
+/// ⚠ **The key strings are `SCREAMING_SNAKE` too**, matching what they are: constants. A host reading
+/// `CV_ROLE` beside its own `faction` can see at a glance which side wrote which, before it even
+/// checks the prefix.
 pub mod keys {
     /// What the thing turned out to be — `Role`, assigned *after* the search.
-    pub const ROLE: &str = "CV_role";
+    pub const ROLE: &str = "CV_ROLE";
     /// Which pipeline layer committed it.
-    pub const LAYER: &str = "CV_layer";
+    pub const LAYER: &str = "CV_LAYER";
     /// Which accessibility sphere it fell in.
-    pub const SPHERE: &str = "CV_sphere";
+    pub const SPHERE: &str = "CV_SPHERE";
     /// The deterministic RNG path that produced it — how a host reproduces one decision.
-    pub const SEED_PATH: &str = "CV_seed_path";
+    pub const SEED_PATH: &str = "CV_SEED_PATH";
     /// The unlocks obtaining it grants.
-    pub const GRANTS: &str = "CV_grants";
+    pub const GRANTS: &str = "CV_GRANTS";
     /// Flags that describe the run rather than the object.
-    pub const AMBIENT: &str = "CV_ambient";
+    pub const AMBIENT: &str = "CV_AMBIENT";
 
     /// Every reserved key the core writes.
     pub const ALL: [&str; 6] = [ROLE, LAYER, SPHERE, SEED_PATH, GRANTS, AMBIENT];
@@ -120,7 +124,7 @@ impl CoreFacts {
     /// written. Content cannot reach it however it arrives, including through the bindings.
     ///
     /// ⚠ **Absent facts write no key at all**, rather than a null or a zero. A host testing
-    /// `has_meta("CV_sphere")` is asking *"did the generator determine this?"*, and a stamped null
+    /// `has_meta("CV_SPHERE")` is asking *"did the generator determine this?"*, and a stamped null
     /// would answer yes.
     pub fn stamp(&self, meta: &mut Metadata) {
         if let Some(role) = self.role {
@@ -159,7 +163,7 @@ impl CoreFacts {
 
 /// Read the core's own keys back off a metadata map — **the host's side of the channel**.
 ///
-/// ⚠ Provided so a host is not writing `"CV_role"` as a string literal either. The same typo that
+/// ⚠ Provided so a host is not writing `"CV_ROLE"` as a string literal either. The same typo that
 /// breaks a write breaks a read, and only one of the two is visible in a diff.
 pub trait CoreMeta {
     /// The map to read.

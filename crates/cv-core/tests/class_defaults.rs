@@ -15,7 +15,7 @@
 //! ⚠ **The lattice does not appear here.** Unlocks are table rows (M03a); they trade in neither
 //! instances nor classes. This machinery is for the many places that genuinely name a class.
 
-use cv_core::class::{ActorClass, ComponentClass, CoreClass, ItemClass, SurfaceClass};
+use cv_core::class::{ActorBound, ComponentBound, CoreClass, ItemBound, SurfaceBound};
 use cv_core::component::{Attached, CollisionMode, Component, Components};
 use cv_core::mission::Rule;
 use cv_core::shape::Shape;
@@ -86,7 +86,7 @@ fn a_schematics_authored_fields_are_read_without_building_one() {
     // ⚠ **The milestone's green criterion.** Nothing is constructed anywhere in this test — the
     // registry holds classes, and `defaults()` names the one core-owned object each of them owns.
     let r = project();
-    let hookshot = Kind::<ItemClass>::new(&r, class("/Content/Items/Hookshot")).unwrap();
+    let hookshot = Kind::<ItemBound>::new(&r, class("/Content/Items/Hookshot")).unwrap();
 
     assert_eq!(
         hookshot
@@ -102,8 +102,8 @@ fn a_schematics_authored_fields_are_read_without_building_one() {
     );
 
     // The default is a `Ref`, and it is the *same* Ref every time anyone asks.
-    let a: Ref<ItemClass> = hookshot.defaults();
-    let b: Ref<ItemClass> = Kind::<ItemClass>::new(&r, class("/Content/Items/Hookshot"))
+    let a: Ref<ItemBound> = hookshot.defaults();
+    let b: Ref<ItemBound> = Kind::<ItemBound>::new(&r, class("/Content/Items/Hookshot"))
         .unwrap()
         .defaults();
     assert_eq!(a, b, "one core-owned object per class, not one per lookup");
@@ -131,7 +131,7 @@ fn the_default_id_is_derived_so_two_processes_agree_on_it() {
     // ⚠ An *allocated* id would differ between runs, and two readers of "the same class default" would
     // silently disagree — the exact shape of the bug this machinery exists to close.
     let r = project();
-    let from_registry = Kind::<ItemClass>::new(&r, class("/Content/Items/Hookshot"))
+    let from_registry = Kind::<ItemBound>::new(&r, class("/Content/Items/Hookshot"))
         .unwrap()
         .defaults()
         .id();
@@ -141,7 +141,7 @@ fn the_default_id_is_derived_so_two_processes_agree_on_it() {
     // Two registries built independently still agree.
     let r2 = project();
     assert_eq!(
-        Kind::<ItemClass>::new(&r2, class("/Content/Items/Hookshot"))
+        Kind::<ItemBound>::new(&r2, class("/Content/Items/Hookshot"))
             .unwrap()
             .defaults()
             .id(),
@@ -173,7 +173,7 @@ fn a_wrong_pick_was_never_on_the_menu() {
     );
 
     assert!(matches!(
-        Kind::<ItemClass>::new(&r, class("/Content/Components/TetherComponent")),
+        Kind::<ItemBound>::new(&r, class("/Content/Components/TetherComponent")),
         Err(ClassError::NotUnderBound { .. })
     ));
 }
@@ -181,13 +181,13 @@ fn a_wrong_pick_was_never_on_the_menu() {
 #[test]
 fn the_bound_widens_upward_and_the_check_is_the_only_way_down() {
     let r = project();
-    let longshot = Kind::<ItemClass>::new(&r, class("/Content/Items/Longshot")).unwrap();
-    assert!(longshot.upcast::<ActorClass>(&r).is_some());
+    let longshot = Kind::<ItemBound>::new(&r, class("/Content/Items/Longshot")).unwrap();
+    assert!(longshot.upcast::<ActorBound>(&r).is_some());
 
     let component =
-        Kind::<ComponentClass>::new(&r, class("/Content/Components/TetherComponent")).unwrap();
+        Kind::<ComponentBound>::new(&r, class("/Content/Components/TetherComponent")).unwrap();
     assert!(
-        component.upcast::<ItemClass>(&r).is_none(),
+        component.upcast::<ItemBound>(&r).is_none(),
         "a component is not an item, in any direction"
     );
 }
@@ -209,7 +209,7 @@ fn an_override_replaces_one_field_and_inherits_the_rest() {
     // ⚠ Without this a subclass would restate every field it did not change, and schematics would
     // drift out of sync with their parents one forgotten field at a time.
     let r = project();
-    let longshot = Kind::<ItemClass>::new(&r, class("/Content/Items/Longshot")).unwrap();
+    let longshot = Kind::<ItemBound>::new(&r, class("/Content/Items/Longshot")).unwrap();
     assert_eq!(
         longshot
             .default_field(&r, "range")
@@ -254,7 +254,7 @@ fn the_component_fields_the_design_types_kind_now_hold_class_paths() {
     };
 
     // The stored path is checkable against the bound the manifest declares for that field.
-    let bound = PinType::Kind(SurfaceClass::class_path());
+    let bound = PinType::Kind(SurfaceBound::class_path());
     assert!(bound.accepts(&PinType::Kind(surface.clone()), &r));
 
     // And a wrong one is refused by the same check, at load, rather than at use.
@@ -342,7 +342,7 @@ fn a_mesh_reference_is_a_class_and_a_file_and_neither_alone() {
         panic!("a mesh");
     };
     assert_eq!(asset.asset.extension().as_deref(), Some("glb"));
-    assert!(PinType::Kind(SurfaceClass::class_path())
+    assert!(PinType::Kind(SurfaceBound::class_path())
         .accepts(&PinType::Kind(surfaces["stone"].clone()), &r));
 
     // A class in a value position is nonsense, and the well-formedness check says so.

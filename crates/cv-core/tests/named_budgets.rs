@@ -23,7 +23,7 @@
 //! place.
 
 use cv_core::budget::{Budget, BudgetBook, BudgetError, BudgetRef, Cost};
-use cv_core::class::{BudgetClass, CoreClass};
+use cv_core::class::{BudgetBound, CoreClass};
 use cv_core::component::{Attached, Component, Components};
 use cv_core::judge::{Path, Route, Verdict};
 use cv_core::mission::Rule;
@@ -271,8 +271,8 @@ fn a_budget_is_a_core_class_and_needs_no_special_case() {
     // ⚠ `/Core/Budget` is in the tier-1 tree that `with_core` registers, so a project references one
     // without re-declaring the core — and a `Kind` bounded at it behaves like any other.
     let r = ClassRegistry::with_core();
-    assert!(r.contains(&BudgetClass::class_path()));
-    let k = Kind::<BudgetClass>::new(&r, class("/Core/Budget")).unwrap();
+    assert!(r.contains(&BudgetBound::class_path()));
+    let k = Kind::<BudgetBound>::new(&r, class("/Core/Budget")).unwrap();
     assert!(k.is_a(&r, &class("/Core/Object")));
 }
 
