@@ -302,15 +302,24 @@ pub fn dispose(root: &Path, entries: &mut [Entry]) {
         .map(|v| v.into_iter().map(|(_, s)| s).collect::<Vec<_>>().join("\n"))
         .unwrap_or_default();
 
-    // The design's own "Deliberately absent" table is a disposition in its own right.
-    let refused: BTreeSet<String> = design
-        .split("Deliberately absent")
-        .skip(1)
-        .flat_map(|s| s.lines().take(24))
-        .filter(|l| l.starts_with('|'))
-        .flat_map(|l| identifiers(l.trim_start_matches('|').split('|').next().unwrap_or("")))
-        .map(|s| short(&s).to_string())
-        .collect();
+    // ⚠ **The design says "no" in more than one place**, and reading only one of them reported a
+    // deliberate refusal as an undispositioned hole. `05` has "Deliberately absent"; `13-open-gaps`
+    // §7 has "Deliberately out of scope" — same statement, different document, and a checker that
+    // knew about one was quietly wrong about the other.
+    let mut refused: BTreeSet<String> = BTreeSet::new();
+    for marker in ["Deliberately absent", "Deliberately out of scope"] {
+        for section in design.split(marker).skip(1) {
+            for line in section.lines().take(24) {
+                if !line.starts_with('|') {
+                    continue;
+                }
+                let first = line.trim_start_matches('|').split('|').next().unwrap_or("");
+                for id in identifiers(first) {
+                    refused.insert(short(&id).to_string());
+                }
+            }
+        }
+    }
 
     let mut code = String::new();
     for dir in ["crates/cv-core/src", "crates/cv-determinism/src"] {
@@ -332,12 +341,30 @@ pub fn dispose(root: &Path, entries: &mut [Entry]) {
             || code.contains(&format!("struct {n}"))
             || code.contains(&format!("enum {n}"))
             || code.contains(&format!("fn {n}"))
+            // ⚠ A design surface may be a *field*, and the detector only knew about types and
+            // functions — so `ResourceDef.regenerates`, which exists, reported as a hole.
+            || code.contains(&format!("pub {n}:"))
         {
             e.disposition = Disposition::Built;
-        } else if plan.contains(n) {
+        } else if names_it(&plan, n) {
             e.disposition = Disposition::Owed;
         }
     }
+}
+
+/// Does the plan **name** this surface, rather than merely contain the word?
+///
+/// ⚠ **A substring match is not a disposition.** `api`, `hook`, `exec` and `crawler` all appear in the
+/// plan as ordinary English, and matching on that reported them as *owed by a milestone* — a number
+/// that looked complete and meant nothing. A plan names a surface the way this codebase always does:
+/// in backticks, or bolded. Anything looser is prose agreeing with prose.
+fn names_it(plan: &str, name: &str) -> bool {
+    plan.contains(&format!("`{name}`"))
+        || plan.contains(&format!("**{name}**"))
+        || plan.contains(&format!("`{name}("))
+        || plan.contains(&format!("`{name}."))
+        || plan.contains(&format!(".{name}`"))
+        || plan.contains(&format!("::{name}`"))
 }
 
 /// Render the committed ledger.
