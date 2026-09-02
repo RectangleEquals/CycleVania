@@ -54,6 +54,7 @@ pub mod dial;
 pub mod escalate;
 pub mod events;
 pub mod exclusion;
+pub mod fill;
 pub mod fingerprint;
 pub mod floor;
 pub mod gate;
@@ -67,6 +68,7 @@ pub mod mission;
 pub mod need;
 pub mod node;
 pub mod object;
+pub mod parallel;
 pub mod path;
 pub mod placement;
 pub mod probe;
@@ -107,6 +109,10 @@ pub use dial::{DialBook, DialError, DialId, DialValue, Resolved, ResolvedDials};
 pub use escalate::{AttemptBudget, Escalation, EscalationReport, Failure, Layer, Response};
 pub use events::{EventLog, GenEvent, Verbosity};
 pub use exclusion::Exclusion;
+pub use fill::{
+    Attachment, FillBand, FillCandidate, FillError, FillGraph, FillOp, FillResult, Filled,
+    Ineligible, Rejected, Site,
+};
 pub use fingerprint::{Fingerprint, FingerprintBuilder, ReproductionBundle, ReproductionError};
 pub use floor::{ConvexHull, FloorSurface, ScopeBounds};
 pub use gate::{Discoverability, Domain, GatePolicy, SkipPolicy};
@@ -122,6 +128,7 @@ pub use mission::{
 pub use need::{PlacementNeed, Spatial};
 pub use node::{InstanceScope, Node, NodeError, NodeGraph, NodeKind, NodeResult, NodeState};
 pub use object::{IdAllocator, Object, ObjectHeader, ObjectId};
+pub use parallel::{NotSeriesParallel, Ordering, ParallelGroup, SeriesParallel};
 pub use path::{AssetPath, ClassPath, Mount, PathError};
 pub use placement::{
     Constraint, DirectionCone, Interaction, ItemClass, Preference, Role, RoleEvidence, ScheduleRule,
@@ -142,9 +149,9 @@ pub use softlock::{
 };
 pub use solver::{PlacementTrace, Solution, SolveError, Solver};
 pub use spine::{
-    Coverage, GrantSpec, Relaxation, SlotAssignment, SlotContents, SlotRole, SlotShape, SpineError,
-    SpineInstance, SpineInstantiator, SpineSegment, SpineSlot, SpineTemplate, SpineValidation,
-    SpineWarning, Strictness, UnlockRef,
+    Coverage, GrantSpec, Relaxation, SlotAssignment, SlotContents, SlotPacing, SlotRole, SlotShape,
+    SpineError, SpineInstance, SpineInstantiator, SpineSegment, SpineSlot, SpineTemplate,
+    SpineValidation, SpineWarning, Strictness, UnlockRef,
 };
 pub use surface::{Approach, AttemptKind, Harm, Occupant, Support, Surface};
 pub use tag::{Tag, TagQuery};

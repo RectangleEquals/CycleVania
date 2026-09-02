@@ -204,6 +204,17 @@ pub struct SlotContents {
     pub must_contain: Vec<ObjectId>,
     /// Content preferred here — the soft counterpart.
     pub prefer_contain: Vec<ObjectId>,
+    /// Content that must **not** be placed here — *"no merchants in a combat wing"*.
+    ///
+    /// ⚠ **Consumed by excluding matching content from this slot's candidate pool**, not merely
+    /// recorded. The inverse of a demand is only a feature if something acts on it: a
+    /// `must_not_contain` that a validator checked *after* placement would report a world it had
+    /// already built, which is a diagnostic rather than a constraint.
+    ///
+    /// ⚠ **It excludes; it does not merely deprioritise.** `prefer_contain`'s opposite would be a
+    /// weight, and a weight cannot express *"never"* — a merchant with nowhere else to go would still
+    /// land in the combat wing, which is precisely the outcome the developer wrote this to prevent.
+    pub must_not_contain: Vec<ObjectId>,
     /// State the player must hold to reach this slot.
     pub requires: Option<UnlockRef>,
     /// What the content placed here grants.
@@ -219,6 +230,48 @@ pub struct SlotContents {
     /// A host finds it by slot name through [`WorldDescriptor::spine_slot`](crate::WorldDescriptor::spine_slot)
     /// and furnishes it itself.
     pub empty: bool,
+}
+
+/// What a slot demands of its **pacing** — consumed by the schedule and checked against accessibility.
+///
+/// ⚠ **The group the original design left a comment promising.** `SpineSlot` said *"future groups
+/// land here rather than lengthening the list above: `pacing` (sphere bounds, gate budget)"*, and
+/// sphere pinning is the first of them — *"the capstone must not be accessible before sphere 3"*, the
+/// first constraint about **pacing** rather than topology, and the one developers reach for soonest.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct SlotPacing {
+    /// The slot must not be accessible before this sphere.
+    ///
+    /// ⚠ **Checked against accessibility the solver already computes**, so it costs nothing to
+    /// enforce and cannot disagree with the proof — which is the whole reason it is expressed as a
+    /// sphere rather than as a distance or a room count.
+    pub min_sphere: Option<u32>,
+    /// The slot must be accessible by this sphere.
+    ///
+    /// ⚠ **A ceiling is the harder half**, because everything after the spine can push a slot later.
+    /// Stating it is what lets a violation be *reported* rather than discovered by a player.
+    pub max_sphere: Option<u32>,
+}
+
+impl SlotPacing {
+    /// Is a slot at this sphere within its pin?
+    pub fn admits(&self, sphere: u32) -> bool {
+        self.min_sphere.is_none_or(|m| sphere >= m) && self.max_sphere.is_none_or(|m| sphere <= m)
+    }
+
+    /// Did the developer say anything about pacing at all?
+    pub fn is_declared(&self) -> bool {
+        self.min_sphere.is_some() || self.max_sphere.is_some()
+    }
+
+    /// ⚠ **Is the pin satisfiable at all?** A `min` above a `max` is an authoring mistake that would
+    /// otherwise present as *"the slot was never placed"* with no reason attached.
+    pub fn is_coherent(&self) -> bool {
+        match (self.min_sphere, self.max_sphere) {
+            (Some(lo), Some(hi)) => lo <= hi,
+            _ => true,
+        }
+    }
 }
 
 /// One guaranteed node in the sequence.
@@ -252,8 +305,10 @@ pub struct SpineSlot {
     pub shape: SlotShape,
     /// Content demands — what goes in it, or that nothing does.
     pub contents: SlotContents,
-    // ▶ Future groups land here rather than lengthening the list above: `pacing` (sphere bounds, gate
-    // budget) and `space` (volume and theming hints for L3/L4 — hull and geometry).
+    /// Pacing demands — where in the progression it may sit.
+    pub pacing: SlotPacing,
+    // Future groups land here rather than lengthening the list above: `space` (volume and theming
+    // hints for L3/L4 - hull and geometry).
 }
 
 impl SpineSlot {
@@ -267,6 +322,7 @@ impl SpineSlot {
             adherence: None,
             shape: SlotShape::default(),
             contents: SlotContents::default(),
+            pacing: SlotPacing::default(),
         }
     }
 
@@ -295,6 +351,40 @@ impl SpineSlot {
     }
 
     /// Prefer content here — the soft counterpart of [`must_contain`](Self::must_contain).
+    pub fn must_not_contain(mut self, content: impl IntoIterator<Item = ObjectId>) -> Self {
+        self.contents.must_not_contain.extend(content);
+        self
+    }
+
+    /// The slot must not be accessible before this sphere.
+    pub fn not_before_sphere(mut self, sphere: u32) -> Self {
+        self.pacing.min_sphere = Some(sphere);
+        self
+    }
+
+    /// The slot must be accessible by this sphere.
+    pub fn by_sphere(mut self, sphere: u32) -> Self {
+        self.pacing.max_sphere = Some(sphere);
+        self
+    }
+
+    /// Is this content excluded from this slot?
+    ///
+    /// ⚠ **Asked when the pool is built**, so the exclusion changes which candidates exist rather
+    /// than which of them survives a later check.
+    pub fn excludes(&self, content: ObjectId) -> bool {
+        self.contents.must_not_contain.contains(&content)
+    }
+
+    /// The candidates this slot will actually consider.
+    pub fn admissible_pool(&self, pool: &[ObjectId]) -> Vec<ObjectId> {
+        pool.iter()
+            .copied()
+            .filter(|c| !self.excludes(*c))
+            .collect()
+    }
+
+    /// Content preferred here.
     pub fn prefer_contain(mut self, content: impl IntoIterator<Item = ObjectId>) -> Self {
         self.contents.prefer_contain.extend(content);
         self
@@ -387,6 +477,8 @@ pub struct SpineSegment {
     // that used to sit here carried `progression_locality`, which the design refuses outright.
     /// What the path through here requires.
     pub gated_by: Option<UnlockRef>,
+    /// A sub-spine repeated inside this segment, and how many times.
+    pub repeat: Option<(ObjectId, AdaptiveRange)>,
 }
 
 impl SpineSegment {
@@ -397,6 +489,7 @@ impl SpineSegment {
             to: to.into(),
             length,
             gated_by: None,
+            repeat: None,
         }
     }
 
@@ -425,6 +518,23 @@ impl SpineSegment {
     /// large would overflow that sum for no benefit. This is far past any plausible scope count while
     /// staying comfortably summable.
     pub const UNBOUNDED: u32 = u32::MAX / 1024;
+
+    /// ⚠ **Repeat a sub-spine this many times inside the segment** — *"three to five combat arenas,
+    /// each with a mini-boss"*.
+    ///
+    /// ⚠ **A count and a template, not a copied slot list.** Copying would give every repetition the
+    /// same slot names, so a `must_contain` or an `adjacent_to` naming one of them would be ambiguous
+    /// the moment the count exceeded one. The sub-spine is instantiated per repetition, and each
+    /// instance owns its own names.
+    pub fn repeating(mut self, sub_spine: ObjectId, count: AdaptiveRange) -> Self {
+        self.repeat = Some((sub_spine, count));
+        self
+    }
+
+    /// The sub-spine this segment repeats, and how many times.
+    pub fn repetition(&self) -> Option<(ObjectId, AdaptiveRange)> {
+        self.repeat
+    }
 
     /// Is this segment's length unconstrained?
     pub fn is_free(&self) -> bool {
@@ -2127,5 +2237,102 @@ mod tests {
 
         assert!(instances.is_empty());
         assert_eq!(mission, before, "no spine must mean no change whatsoever");
+    }
+
+    // -----------------------------------------------------------------------------------------
+    // The three items the design still owed: must_not_contain, sphere pinning, repetition.
+    // -----------------------------------------------------------------------------------------
+
+    #[test]
+    fn must_not_contain_shrinks_the_candidate_pool_rather_than_being_recorded() {
+        // ⚠ A `must_not_contain` checked *after* placement would report a world it had already
+        // built. It has to change which candidates exist.
+        let merchant = ObjectId::derived("content", "merchant");
+        let brute = ObjectId::derived("content", "brute");
+        let slot = SpineSlot::new("combat_wing").must_not_contain([merchant]);
+
+        assert!(slot.excludes(merchant));
+        assert!(!slot.excludes(brute));
+        assert_eq!(slot.admissible_pool(&[merchant, brute]), vec![brute]);
+        assert_eq!(
+            SpineSlot::new("plain").admissible_pool(&[merchant, brute]),
+            vec![merchant, brute],
+            "a slot that said nothing excludes nothing"
+        );
+    }
+
+    #[test]
+    fn must_not_contain_excludes_rather_than_deprioritises() {
+        // ⚠ A weight cannot express "never": with nowhere else to go, the merchant would still land
+        // in the combat wing, which is exactly what the developer wrote this to prevent.
+        let merchant = ObjectId::derived("content", "merchant");
+        let slot = SpineSlot::new("combat_wing").must_not_contain([merchant]);
+        assert!(
+            slot.admissible_pool(&[merchant]).is_empty(),
+            "an empty pool is the correct outcome; placing it anyway is not"
+        );
+    }
+
+    #[test]
+    fn a_sphere_pin_admits_only_its_range() {
+        let slot = SpineSlot::new("capstone").not_before_sphere(3);
+        assert!(!slot.pacing.admits(0));
+        assert!(!slot.pacing.admits(2));
+        assert!(slot.pacing.admits(3));
+        assert!(slot.pacing.admits(99), "a floor is not a ceiling");
+
+        let windowed = SpineSlot::new("mid").not_before_sphere(2).by_sphere(4);
+        assert!(!windowed.pacing.admits(1));
+        assert!(windowed.pacing.admits(2));
+        assert!(windowed.pacing.admits(4));
+        assert!(!windowed.pacing.admits(5));
+    }
+
+    #[test]
+    fn an_unpinned_slot_admits_every_sphere_and_says_it_declared_nothing() {
+        let slot = SpineSlot::new("anywhere");
+        assert!(!slot.pacing.is_declared());
+        for sphere in [0, 1, 7, u32::MAX] {
+            assert!(slot.pacing.admits(sphere));
+        }
+    }
+
+    #[test]
+    fn an_incoherent_pin_is_detectable_rather_than_presenting_as_a_missing_slot() {
+        // ⚠ min above max would otherwise show up as "the slot was never placed", with no reason.
+        let bad = SpineSlot::new("x").not_before_sphere(5).by_sphere(2);
+        assert!(!bad.pacing.is_coherent());
+        assert!(!bad.pacing.admits(3), "and nothing satisfies it");
+        assert!(SpineSlot::new("y")
+            .not_before_sphere(2)
+            .by_sphere(5)
+            .pacing
+            .is_coherent());
+        assert!(SpineSlot::new("z").pacing.is_coherent());
+    }
+
+    #[test]
+    fn a_segment_repeats_a_sub_spine_a_bounded_number_of_times() {
+        let arena = ObjectId::derived("spine", "combat_arena");
+        let seg = SpineSegment::new("start", "end", AdaptiveRange::new(2, 6))
+            .repeating(arena, AdaptiveRange::new(3, 5));
+        let (which, count) = seg.repetition().expect("the segment repeats");
+        assert_eq!(which, arena);
+        assert_eq!(count.soft_min, 3);
+        assert_eq!(count.hard_max, 5);
+    }
+
+    #[test]
+    fn a_segment_that_repeats_nothing_says_so() {
+        assert!(SpineSegment::direct("a", "b").repetition().is_none());
+    }
+
+    #[test]
+    fn the_pacing_group_is_independently_defaultable_like_the_others() {
+        // ⚠ A dev pays only for the axes they use - the grouping exists so a slot that says nothing
+        // about pacing costs nothing to write or to read.
+        let plain = SpineSlot::new("plain");
+        assert_eq!(plain.pacing, SlotPacing::default());
+        assert_eq!(plain.contents.must_not_contain, Vec::<ObjectId>::new());
     }
 }
