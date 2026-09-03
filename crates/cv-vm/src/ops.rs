@@ -61,6 +61,23 @@ pub enum Op {
     Literal,
     /// Read a declared dial.
     DialRead,
+    // --- utilities ---
+    /// A small maths sub-language.
+    ///
+    /// ⚠ **Vector arithmetic is allowed; member access is forbidden.** `a.b.c` inside an expression
+    /// string is the seam through which a second scripting surface grows, and the whole system exists
+    /// so a developer need not learn one. The editor refuses it at author time; this op exists so the
+    /// VM has something to run when they do not.
+    Expression,
+    /// A wire-tidiness pass-through.
+    ///
+    /// ⚠ **Not eliminated at lowering.** A reroute carries a developer's *layout* intent, and a
+    /// compiler that folded it away would make a saved graph and a reloaded one different documents.
+    Reroute,
+    /// String join.
+    Concat,
+    /// Set difference.
+    Except,
     /// A generated API call — everything the manifest describes.
     ///
     /// ⚠ **One instruction for the whole generated palette**, because the palette is open: a table
@@ -71,7 +88,7 @@ pub enum Op {
 
 impl Op {
     /// Every op this table names.
-    pub const ALL: [Op; 17] = [
+    pub const ALL: [Op; 21] = [
         Op::Branch,
         Op::Return,
         Op::For,
@@ -88,6 +105,10 @@ impl Op {
         Op::Length,
         Op::Literal,
         Op::DialRead,
+        Op::Expression,
+        Op::Reroute,
+        Op::Concat,
+        Op::Except,
         Op::Call,
     ];
 
@@ -110,6 +131,10 @@ impl Op {
             Op::Length => "array.length",
             Op::Literal => "core.literal",
             Op::DialRead => "core.dial",
+            Op::Expression => "util.expression",
+            Op::Reroute => "util.reroute",
+            Op::Concat => "util.concat",
+            Op::Except => "util.except",
             Op::Call => "core.call",
         }
     }
@@ -181,7 +206,7 @@ mod tests {
             assert!(seen.insert(op.name()), "{op} shares a name");
             assert_eq!(Op::from_name(op.name()), Some(op));
         }
-        assert_eq!(Op::ALL.len(), 17);
+        assert_eq!(Op::ALL.len(), 21);
     }
 
     #[test]
@@ -258,5 +283,17 @@ mod tests {
             .filter(|o| o.is_control_flow())
             .collect();
         assert_eq!(flow, vec![Op::Branch, Op::Return, Op::For, Op::ForEach]);
+    }
+
+    #[test]
+    fn the_four_utility_ops_are_pure_and_none_of_them_sequences() {
+        // ⚠ A utility that sequenced would be an operation, not a utility — and the editor draws all
+        // four without exec pins, so the ISA has to agree.
+        for op in [Op::Expression, Op::Reroute, Op::Concat, Op::Except] {
+            assert!(op.is_pure(), "{op}");
+            assert!(!op.is_control_flow(), "{op}");
+            assert!(!op.is_loop(), "{op}");
+            assert!(op.name().starts_with("util."), "{op}");
+        }
     }
 }

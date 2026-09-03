@@ -18,13 +18,17 @@
 #![forbid(unsafe_code)]
 
 pub mod auth;
+pub mod connect;
 pub mod dials_section;
+pub mod palette;
 pub mod protocol;
 pub mod service;
 pub mod views;
 
 pub use auth::{Auth, AuthError, Origin, Session};
+pub use connect::{may_connect, widget_for, Dir, Pin, Refusal, Widget};
 pub use dials_section::{DialBody, DialDraft, DialDraftError};
+pub use palette::{Palette, PaletteNode, ProjectDial, Shape, Source, Utility};
 pub use protocol::{Envelope, Request, Response, PROTOCOL_VERSION};
 pub use service::Service;
 pub use views::{browse, inspect, overrides, viewport, BrowseEntry, InspectorField, OverrideRow};

@@ -16,3 +16,4 @@ cv-compile = { path = "../cv-compile" }
 cv-cvb = { path = "../cv-cvb" }
 cv-api = { workspace = true }
 cv-bindings = { path = "../cv-bindings" }
+cv-vm = { workspace = true }

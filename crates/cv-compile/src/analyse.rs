@@ -404,16 +404,29 @@ fn is_api_call(op: &str) -> bool {
     api_ops().iter().any(|o| o == op)
 }
 
-/// Every op the manifest generates: `<class>.<member>`, lowercased class.
+/// Every op the manifest generates.
+///
+/// ⚠ **The spelling is the *generated palette's*, not one invented here.** This built
+/// `<lowercased short name>.<member>` — `object.is_a` — while `editor/palette.json`, which is what the
+/// editor actually offers, emits `<class path>.<member>` and `<class path>.<field>#get`. The two never
+/// met, so the compiler refused **348 nodes the editor was willing to place**: a graph a developer built
+/// through the palette would not build, and neither side's own tests could see it because each was
+/// self-consistent.
+///
+/// ⚠ **Kept in sync by a test that walks the palette and compiles each node**, rather than by two
+/// people remembering.
 fn api_ops() -> Vec<String> {
     let mut out = Vec::new();
     for class in cv_api::CLASSES {
-        let prefix = class.short_name().to_ascii_lowercase();
-        for m in class.methods {
-            out.push(format!("{prefix}.{}", m.name));
+        for m in class.methods.iter().filter(|m| m.api) {
+            out.push(format!("{}.{}", class.path, m.name));
         }
-        for f in class.fields {
-            out.push(format!("{prefix}.{}", f.name));
+        for f in class.fields.iter().filter(|f| f.api) {
+            // A field is a get node; a mutable one also has a set node.
+            out.push(format!("{}.{}#get", class.path, f.name));
+            if f.mutable {
+                out.push(format!("{}.{}#set", class.path, f.name));
+            }
         }
     }
     // `core.` is the context namespace, which the palette spells without a class.
@@ -645,5 +658,19 @@ mod tests {
     fn lines_of_exposes_the_block_body() {
         let doc = schematic("   A=1\n");
         assert!(!lines_of(&doc).is_empty());
+    }
+
+    #[test]
+    fn an_api_op_is_spelled_the_way_the_generated_palette_spells_it() {
+        // ⚠ This once built `object.is_a` while the palette emitted `/Core/Object.is_a`, so the
+        // compiler refused 348 nodes the editor was willing to place. Neither side's own tests could
+        // see it, because each was self-consistent.
+        let ops = api_ops();
+        assert!(ops.iter().any(|o| o == "/Core/Object.is_a"), "a method");
+        assert!(ops.iter().any(|o| o.ends_with(".id#get")), "a field read");
+        assert!(
+            !ops.iter().any(|o| o.starts_with("object.")),
+            "the invented lowercase spelling is gone"
+        );
     }
 }

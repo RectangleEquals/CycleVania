@@ -207,6 +207,7 @@ dependencies = [
  "cv-core",
  "cv-cvb",
  "cv-determinism",
+ "cv-vm",
 ]
 
 [[package]]

@@ -380,6 +380,26 @@ fn step(instr: &Instr, inputs: &[Val], ctx: &dyn Context) -> Result<Val, Trap> {
         Op::Map | Op::Filter | Op::Reduce | Op::Find | Op::Any | Op::All | Op::Sort => {
             inputs.first().cloned().unwrap_or(Val::Unit)
         }
+        // ⚠ **A reroute passes its input through unchanged**, which is the whole of it: it carries
+        // layout intent, not meaning.
+        Op::Reroute => inputs.first().cloned().unwrap_or(Val::Unit),
+        Op::Concat => Val::Text(
+            inputs
+                .iter()
+                .map(|v| match v {
+                    Val::Text(t) => t.clone(),
+                    other => format!("{other:?}"),
+                })
+                .collect::<String>(),
+        ),
+        Op::Except => match (inputs.first(), inputs.get(1)) {
+            (Some(Val::Array(a)), Some(Val::Array(b))) => {
+                Val::Array(a.iter().filter(|x| !b.contains(x)).cloned().collect())
+            }
+            (Some(other), _) => other.clone(),
+            _ => Val::Unit,
+        },
+        Op::Expression => inputs.first().cloned().unwrap_or(Val::Unit),
     })
 }
 
