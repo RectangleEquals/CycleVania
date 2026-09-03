@@ -1,0 +1,13 @@
+[package]
+name = "cv-assets"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Asset loading: .cvcurve and .cvunlock JSON, mesh import, content hashing, and the resolution table renames survive."
+
+[lints]
+workspace = true
+
+[dependencies]
+cv-core = { path = "../cv-core" }
+cv-determinism = { workspace = true }

@@ -139,6 +139,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "cv-assets"
+version = "0.1.0"
+dependencies = [
+ "cv-core",
+ "cv-determinism",
+]
+
+[[package]]
 name = "cv-bindings"
 version = "0.1.0"
 dependencies = [
