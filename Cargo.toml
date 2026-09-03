@@ -6,6 +6,7 @@ members = [
     "crates/cv-cvb",
     "crates/cv-api",
     "crates/cv-core",
+    "crates/cv-compile",
     "crates/cv-vm",
     "crates/cv-bindings",
     "crates/cv-cli",

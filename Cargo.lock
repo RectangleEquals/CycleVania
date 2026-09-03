@@ -161,6 +161,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "cv-compile"
+version = "0.1.0"
+dependencies = [
+ "cv-api",
+ "cv-cvb",
+]
+
+[[package]]
 name = "cv-core"
 version = "0.1.0"
 dependencies = [

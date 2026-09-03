@@ -1,0 +1,13 @@
+[package]
+name = "cv-compile"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "The schematic compiler: parse -> analyse -> lower -> our own small deterministic bytecode."
+
+[lints]
+workspace = true
+
+[dependencies]
+cv-cvb = { path = "../cv-cvb" }
+cv-api = { path = "../cv-api" }
