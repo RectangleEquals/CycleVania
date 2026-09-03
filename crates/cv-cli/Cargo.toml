@@ -3,7 +3,7 @@ name = "cv-cli"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-description = "Headless CycleVania CLI: generate / validate / soak / report."
+description = "Headless CycleVania CLI: generate, check, determinism and trace. The tool every later apparatus milestone invokes."
 
 [lints]
 workspace = true
@@ -15,4 +15,10 @@ path = "src/main.rs"
 [dependencies]
 cv-core = { workspace = true }
 cv-determinism = { workspace = true }
+cv-cvb = { path = "../cv-cvb" }
+cv-compile = { path = "../cv-compile" }
+cv-assets = { path = "../cv-assets" }
 clap = { workspace = true }
+
+[dev-dependencies]
+cv-assets = { path = "../cv-assets" }
