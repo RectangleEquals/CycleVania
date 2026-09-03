@@ -23,6 +23,8 @@ pub mod dials_section;
 pub mod palette;
 pub mod protocol;
 pub mod service;
+pub mod state_view;
+pub mod tables_view;
 pub mod views;
 
 pub use auth::{Auth, AuthError, Origin, Session};
@@ -31,6 +33,10 @@ pub use dials_section::{DialBody, DialDraft, DialDraftError};
 pub use palette::{Palette, PaletteNode, ProjectDial, Shape, Source, Utility};
 pub use protocol::{Envelope, Request, Response, PROTOCOL_VERSION};
 pub use service::Service;
+pub use state_view::{Finding, State, StateGraph, Transition};
+pub use tables_view::{
+    DialRow, DialsView, FloorSlider, Rendering, TableFinding, UnlockRow, UnlockView,
+};
 pub use views::{browse, inspect, overrides, viewport, BrowseEntry, InspectorField, OverrideRow};
 
 /// This crate's version.
