@@ -19,9 +19,9 @@
 //! from anywhere but `ctx.rng`. A generator whose output depends on any of them produces a world no seed
 //! explains.
 
-use crate::ops::Op;
 use cv_cvb::parse::{Block, Line};
 use cv_cvb::value::Value;
+use cv_vm::ops::Op;
 use std::fmt;
 
 /// How much a finding stops.

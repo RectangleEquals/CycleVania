@@ -22,14 +22,17 @@
 #![forbid(unsafe_code)]
 
 pub mod analyse;
-pub mod ir;
 pub mod lower;
-pub mod ops;
 
 pub use analyse::{analyse, Analysis, Finding, Severity};
-pub use ir::{Const, Instr, Program, Ty};
 pub use lower::{lower, LowerError};
-pub use ops::Op;
+
+// ⚠ **The instruction set belongs to the VM, not to the compiler.** A compiler targets an ISA; the ISA
+// is the machine's. Defining it here would have made `cv-core` — which embeds the VM — depend
+// transitively on a text parser, which is exactly the dependency `cv-cvb` was placed below the core to
+// avoid.
+pub use cv_vm::ir::{Const, Instr, Program, Ty};
+pub use cv_vm::ops::Op;
 
 use cv_cvb::parse::Block;
 

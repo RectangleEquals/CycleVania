@@ -10,10 +10,10 @@
 //! every machine. Ties break by id — which is content-derived — so the emitted program is a property of
 //! the graph rather than of the hash order a set happened to have.
 
-use crate::ir::{Const, Instr, Program, Ty};
-use crate::ops::Op;
 use cv_cvb::parse::Block;
 use cv_cvb::value::Value;
+use cv_vm::ir::{Const, Instr, Program, Ty};
+use cv_vm::ops::Op;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 

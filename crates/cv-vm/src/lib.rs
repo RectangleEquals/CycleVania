@@ -19,7 +19,29 @@
 //! derived from it would read as *"a CVB file"*, a category that does not exist. Bytecode is not
 //! written in the notation and has no relationship to it.
 //!
-//! **M00: skeleton only.** The interpreter + api-dispatch land in M18 (after the compiler, M15–M17).
+//! # What lives here
+//!
+//! * [`ops`] — the op table: control flow, collections and literals, the part of the palette the
+//!   manifest cannot describe.
+//! * [`ir`] — the typed instruction set. ⚠ **The ISA belongs to the machine, not to the compiler** —
+//!   defining it in `cv-compile` would make `cv-core`, which embeds this crate, depend transitively on
+//!   a text parser.
+//! * [`memo`] — memoization keyed on **recorded** context reads.
+//! * [`exec`] — the interpreter, its context surface, and cancellation.
+//!
+//! ⚠ **Hooks are overrides, never callback fields.** The binding contract forbids closures and trait
+//! objects across the seam, so a hook is a graph a developer drew — compiled, and dispatched through a
+//! table this crate owns. That is what makes the same content run identically on native and WASM.
+
+pub mod exec;
+pub mod ir;
+pub mod memo;
+pub mod ops;
+
+pub use exec::{Cancel, Context, Outcome, TableContext, Trap, Val, Vm};
+pub use ir::{Const, Instr, Program, Ty};
+pub use memo::{Channel, Key, Memo, Miss, Read, Recording};
+pub use ops::Op;
 
 /// This crate's version.
 pub fn version() -> &'static str {
