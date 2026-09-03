@@ -200,7 +200,11 @@ version = "0.1.0"
 name = "cv-editor-backend"
 version = "0.1.0"
 dependencies = [
+ "cv-assets",
+ "cv-compile",
  "cv-core",
+ "cv-cvb",
+ "cv-determinism",
 ]
 
 [[package]]

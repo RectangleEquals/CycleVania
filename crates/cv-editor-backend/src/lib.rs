@@ -1,7 +1,29 @@
-//! cv-editor-backend — the WebSocket service that wraps cv-core + cv-script for the browser editor
-//! (the Tauri build links the core in-process and skips this). Native only.
+//! **The editor backend** — one service, one protocol, both deployment shapes.
 //!
-//! **M00: skeleton only.** The service, transport parity, and LAN remote/auth land in M22.
+//! ⚠ **One frontend, two shapes: a browser tab and a desktop-packaged build.** Both talk to *this*
+//! service over the same protocol, so every view is written once. The desktop shell does **not** get a
+//! private in-process path — it opens a loopback connection to the identical backend a tablet on the
+//! LAN reaches.
+//!
+//! That is a deliberate cost. A local call would be marginally faster; what it would buy is the outcome
+//! where *"works locally"* and *"works remotely"* are two code paths and only one of them is exercised
+//! daily.
+//!
+//! * [`protocol`] — the transport contract. ⚠ **Nothing in it names a deployment shape**, so there is
+//!   no branch anywhere that could behave differently.
+//! * [`auth`] — a pairing code, not an account. ⚠ **Loopback needs none**: a process that can reach
+//!   `127.0.0.1` can already read the project off disk.
+//! * [`service`] — the handler both shapes reach.
+
+#![forbid(unsafe_code)]
+
+pub mod auth;
+pub mod protocol;
+pub mod service;
+
+pub use auth::{Auth, AuthError, Origin, Session};
+pub use protocol::{Envelope, Request, Response, PROTOCOL_VERSION};
+pub use service::Service;
 
 /// This crate's version.
 pub fn version() -> &'static str {

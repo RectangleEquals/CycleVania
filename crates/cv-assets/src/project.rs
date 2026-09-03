@@ -1,8 +1,8 @@
 //! **Loading a project from disk** — the descriptor, the content root, and everything under it.
 //!
-//! ⚠ **Native Rust over the core, never through the TS bindings.** The CLI has to stay usable while the
-//! bindings are mid-change, because it is the tool used to *debug* them. A CLI that routed through the
-//! bindings could not diagnose the one thing it would most often be asked to.
+//! ⚠ **One loader, used by both the CLI and the editor backend.** A descriptor reader in each would be
+//! two implementations that must agree about where a project's content lives — and the day they
+//! disagreed, `cv check` and the editor would report different projects from the same folder.
 //!
 //! # Folders are configurable; the schematic root is not
 //!
@@ -10,7 +10,7 @@
 //! are developer-defined, so this reads them from the descriptor rather than assuming a layout — a tool
 //! that hardcoded `content/` would silently find nothing in a project that had moved it.
 
-use cv_assets::json::{parse, Json};
+use crate::json::{parse, Json};
 use std::fmt;
 use std::path::{Path, PathBuf};
 
@@ -44,7 +44,7 @@ impl Descriptor {
 
 /// Why a project did not load.
 #[derive(Clone, Debug, PartialEq)]
-pub enum LoadError {
+pub enum ProjectError {
     /// No file there.
     NotFound { path: String },
     /// The descriptor did not read as JSON.
@@ -58,28 +58,28 @@ pub enum LoadError {
     NoContentRoot { path: String },
 }
 
-impl fmt::Display for LoadError {
+impl fmt::Display for ProjectError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            LoadError::NotFound { path } => write!(f, "{path}: no such project descriptor"),
-            LoadError::Malformed { path, detail } => write!(f, "{path}: {detail}"),
-            LoadError::Missing { path, member } => write!(f, "{path}: no \"{member}\""),
-            LoadError::NoContentRoot { path } => {
+            ProjectError::NotFound { path } => write!(f, "{path}: no such project descriptor"),
+            ProjectError::Malformed { path, detail } => write!(f, "{path}: {detail}"),
+            ProjectError::Missing { path, member } => write!(f, "{path}: no \"{member}\""),
+            ProjectError::NoContentRoot { path } => {
                 write!(f, "{path}: the content root it names does not exist")
             }
         }
     }
 }
 
-impl std::error::Error for LoadError {}
+impl std::error::Error for ProjectError {}
 
 /// Read a `.cvproj`.
-pub fn load(path: &Path) -> Result<Descriptor, LoadError> {
+pub fn load(path: &Path) -> Result<Descriptor, ProjectError> {
     let shown = path.display().to_string();
-    let src = std::fs::read_to_string(path).map_err(|_| LoadError::NotFound {
+    let src = std::fs::read_to_string(path).map_err(|_| ProjectError::NotFound {
         path: shown.clone(),
     })?;
-    let doc = parse(&src).map_err(|e| LoadError::Malformed {
+    let doc = parse(&src).map_err(|e| ProjectError::Malformed {
         path: shown.clone(),
         detail: e.to_string(),
     })?;
@@ -87,7 +87,7 @@ pub fn load(path: &Path) -> Result<Descriptor, LoadError> {
     let cyclevania = doc
         .get("cyclevania")
         .and_then(Json::as_str)
-        .ok_or_else(|| LoadError::Missing {
+        .ok_or_else(|| ProjectError::Missing {
             path: shown.clone(),
             member: "cyclevania".into(),
         })?
@@ -112,7 +112,7 @@ pub fn load(path: &Path) -> Result<Descriptor, LoadError> {
         content_root,
     };
     if !descriptor.content_dir().is_dir() {
-        return Err(LoadError::NoContentRoot { path: shown });
+        return Err(ProjectError::NoContentRoot { path: shown });
     }
     Ok(descriptor)
 }
@@ -191,7 +191,7 @@ mod tests {
         let bad = write(&dir, "no-version.cvproj", r#"{"worldScale":1.0}"#);
         assert!(matches!(
             load(&bad),
-            Err(LoadError::Missing { member, .. }) if member == "cyclevania"
+            Err(ProjectError::Missing { member, .. }) if member == "cyclevania"
         ));
     }
 
@@ -218,7 +218,10 @@ mod tests {
             "game.cvproj",
             r#"{"cyclevania":"0.2.0","paths":{"contentRoot":"nowhere"}}"#,
         );
-        assert!(matches!(load(&proj), Err(LoadError::NoContentRoot { .. })));
+        assert!(matches!(
+            load(&proj),
+            Err(ProjectError::NoContentRoot { .. })
+        ));
     }
 
     #[test]
@@ -226,11 +229,11 @@ mod tests {
         let dir = scratch("bad");
         assert!(matches!(
             load(&dir.join("absent.cvproj")),
-            Err(LoadError::NotFound { .. })
+            Err(ProjectError::NotFound { .. })
         ));
         let broken = write(&dir, "broken.cvproj", "{ not json");
         let err = load(&broken).unwrap_err();
-        assert!(matches!(err, LoadError::Malformed { .. }));
+        assert!(matches!(err, ProjectError::Malformed { .. }));
         assert!(err.to_string().contains("broken.cvproj"));
     }
 

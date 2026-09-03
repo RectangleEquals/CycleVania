@@ -72,10 +72,18 @@ const BANNED: &[(&str, &str)] = &[
 
 /// Strip what a banned stem is allowed to hide inside.
 ///
-/// Two exemptions, both deliberate:
+/// Three exemptions, all deliberate:
 /// * `unreachable!` is a std macro, not our vocabulary.
 /// * everything from `//` onward is **prose**, which the naming rule explicitly leaves alone.
+/// * ⚠ **`session_token` is the third sense of the word**, alongside the progression one this lint
+///   bans and the lexer one its header already exempts. The design mandates it — *"LAN auth and session
+///   tokens"* — so a lint that refused it would reject the exact wording the design asks for, which is
+///   the failure this file's own header warns M03 made in the other direction. **Only the compound is
+///   exempt**: bare `token` stays banned, so every use site says which sense it means, which is worth
+///   more here than in a codebase where the progression sense had never existed.
 fn strip_allowed(line: &str) -> String {
+    let line = line.replace("session_token", "«session»");
+    let line = line.as_str();
     let code = match line.find("//") {
         Some(i) => &line[..i],
         None => line,

@@ -8,9 +8,11 @@
 
 pub mod json;
 pub mod mesh;
+pub mod project;
 pub mod resolve;
 pub mod tables;
 
 pub use mesh::{import, Bounds, Mesh, MeshError, MeshRef};
+pub use project::{files_under, Descriptor, ProjectError};
 pub use resolve::{digest_of, AssetId, AssetTable, ResolveError};
 pub use tables::{load_curves, load_unlocks, LoadError, LoadedCurves};

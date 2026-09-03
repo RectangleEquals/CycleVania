@@ -3,10 +3,14 @@ name = "cv-editor-backend"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-description = "WebSocket service wrapping cv-core for the browser editor (Tauri skips this)."
+description = "The editor backend: one transport contract, both deployment shapes, and LAN pairing."
 
 [lints]
 workspace = true
 
 [dependencies]
 cv-core = { workspace = true }
+cv-determinism = { workspace = true }
+cv-assets = { path = "../cv-assets" }
+cv-compile = { path = "../cv-compile" }
+cv-cvb = { path = "../cv-cvb" }

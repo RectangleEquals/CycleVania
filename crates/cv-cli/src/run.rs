@@ -19,7 +19,7 @@
 //! | `3` | generation failed on content that had validated |
 //! | `4` | ⚠ **a determinism divergence.** The most serious of the four |
 
-use crate::project::{self, Descriptor, LoadError};
+use cv_assets::project::{self, Descriptor, ProjectError};
 use cv_compile::{compile, Severity};
 use cv_cvb::parse::parse;
 use std::fmt;
@@ -146,7 +146,7 @@ impl Report {
     }
 }
 
-fn usage(command: &str, e: LoadError) -> Report {
+fn usage(command: &str, e: ProjectError) -> Report {
     let mut r = Report::new(command).with(Exit::Usage);
     r.findings.push(e.to_string());
     r

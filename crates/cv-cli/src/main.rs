@@ -16,7 +16,6 @@
 //!
 //! `--json` on any of them prints one machine-readable object instead of text.
 
-mod project;
 mod run;
 
 use clap::{Parser, Subcommand};
