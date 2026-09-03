@@ -1,5 +1,11 @@
 //! `crates/cv-bindings/index.d.ts` — the TypeScript surface.
 //!
+//! ⚠ **Two halves, and only one of them comes from the manifest.** The *API* surface — every class,
+//! member and enum a schematic can touch — is generated from `tier1.toml`, so a member added there
+//! appears here or the build fails. The **host** surface below it (`Project`, `Dials`, `DialMeta`) is
+//! not a manifest concept: it is the shape of the *binding*, and it is emitted here so that both live
+//! in one file a host reads, rather than in a hand-maintained companion that drifts.
+//!
 //! ⚠ Two mappings carry design weight and are worth stating rather than inferring:
 //!
 //! * **`ObjectId` becomes `string`**, never `number`. A JavaScript integer is exact only below 2^53,
@@ -28,6 +34,7 @@ pub fn emit(m: &Manifest) -> String {
             _ => emit_interface(&mut s, c),
         }
     }
+    s.push_str(HOST_SURFACE);
     s
 }
 
@@ -246,4 +253,111 @@ export type MetaValue =
   | MetaValue[]
   | Record<string, MetaValue>;
 
+"#;
+
+/// The host-facing binding surface: load, dials, generate.
+///
+/// ⚠ **Not manifest-derived, and marked as such where it matters.** A `DialKind` here must match
+/// `cv_bindings::DialKind`, and a test in `cv-bindings` asserts exactly that — otherwise the two
+/// spellings of the same enum drift, and the first anyone hears of it is a host reading `"CURVE"` and
+/// getting nothing.
+const HOST_SURFACE: &str = r#"
+// ── The host surface ───────────────────────────────────────────────────────────────────────────
+// Not generated from the manifest: this is the shape of the binding itself. `cv-bindings` asserts the
+// names below against its own Rust enums, so the two cannot drift apart silently.
+
+/** What kind of thing a dial is. */
+export type DialKind = "NUMBER" | "RANGE" | "ADAPTIVE" | "ENUM" | "CURVE" | "TABLE";
+
+/** Where a dial's effective value came from. */
+export type DialSource = "AUTHORED" | "HOST" | "SCOPED";
+
+/** A dial's value, in whichever of the six shapes it has. */
+export type DialValue =
+  | { kind: "NUMBER";   value: number }
+  | { kind: "RANGE";    lo: number; hi: number }
+  /** A **soft** pair — `softMin` is a preference and `hardMax` a ceiling. Not a `RANGE`. */
+  | { kind: "ADAPTIVE"; softMin: number; hardMax: number }
+  | { kind: "ENUM";     value: string }
+  | { kind: "CURVE";    asset: string; row: string }
+  | { kind: "TABLE";    asset: string; axis: string };
+
+/**
+ * What a widget may offer — **not** what the value must satisfy.
+ *
+ * A value outside its bounds is a warning, not a refusal: content may have authored a default outside a
+ * range it later narrowed, and hiding the dial would hide the mistake.
+ */
+export interface DialBounds {
+  min?: number;
+  max?: number;
+  softMin?: number;
+  hardMax?: number;
+  enumPath?: string;
+  enumValues?: string[];
+}
+
+/**
+ * Everything the editor's Dials panel and a shipped game both need.
+ *
+ * The panel and this API are one surface — the editor gets no private channel.
+ */
+export interface DialMeta {
+  /** `<ClassName>.<DialName>` — identity, and the only handle. */
+  id: string;
+  /** The class path, so a panel can group without parsing the id. */
+  owner: string;
+  name: string;
+  kind: DialKind;
+  doc: string;
+  bounds: DialBounds;
+  /** What the content authored. Present alongside `effective` so a panel can offer *reset*. */
+  default: DialValue;
+  /** What the next `generate` will actually use. */
+  effective: DialValue;
+  /** Where `effective` came from. */
+  source: DialSource;
+  /** The scope an override applies to, when `source` is `"SCOPED"`. */
+  scope: string | null;
+}
+
+/** The `project.dials` object. */
+export interface Dials {
+  list(): DialMeta[];
+  get(id: string): DialMeta;
+  set(id: string, value: DialValue, opts?: { scope?: string }): void;
+  /** Swap a constant for a curve. Separate from `set` because it changes the dial's `kind`. */
+  setSource(id: string, source: DialValue): void;
+  reset(id: string): void;
+  /** Moves whenever anything here changes — a changed dial is a different recipe. */
+  revision(): number;
+}
+
+export interface GenerateOptions {
+  /** Text, not a number, so a seed survives being written into a bug report and read back. */
+  seed: string;
+}
+
+export interface World {
+  /** The recipe. Dials are part of it; the seed is not. */
+  fingerprint: number;
+  seed: string;
+  scopes: number;
+}
+
+export interface Project {
+  readonly path: string;
+  /** True for a cooked build. Changes nothing about dials — they are inputs, not content. */
+  readonly cooked: boolean;
+  readonly dials: Dials;
+  validate(): void;
+  fingerprint(): number;
+  generate(options: GenerateOptions): World;
+}
+
+/** Open a content tree. */
+export function load(path: string): Project;
+
+/** Open a cooked build — the whole host-facing surface for a shipped game. */
+export function loadFromFile(path: string): Project;
 "#;

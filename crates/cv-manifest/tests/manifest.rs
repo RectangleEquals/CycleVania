@@ -504,7 +504,22 @@ doc = "d"
 ///
 /// ⚠ `09-format.md` §4: these are the declared set. Anything else claiming to be content is either a
 /// typo or a build product that has escaped `build/`.
-const CONTENT_EXTENSIONS: &[&str] = &[".cvs", ".cvspine", ".cvstate", ".cvcurve", ".cvunlock"];
+const CONTENT_EXTENSIONS: &[&str] = &[
+    ".cvs",
+    ".cvspine",
+    ".cvstate",
+    ".cvcurve",
+    ".cvunlock",
+    ".cvtags",
+];
+
+/// The **project descriptor**, which is neither content nor build output.
+///
+/// ⚠ **A third set, and the two-set model was wrong rather than incomplete.** `game.cvproj` is
+/// committed like content and sits *outside* the content root — it is the file that says where the
+/// content root **is**. Filing it under content would put it inside the thing it locates; filing it
+/// under build output would mean nobody commits the one file a project cannot be opened without.
+const PROJECT_EXTENSIONS: &[&str] = &[".cvproj"];
 
 /// What the toolchain **produces** and nobody commits.
 ///
@@ -515,14 +530,24 @@ const CONTENT_EXTENSIONS: &[&str] = &[".cvs", ".cvspine", ".cvstate", ".cvcurve"
 const BUILD_EXTENSIONS: &[&str] = &[".cvo", ".cvpak"];
 
 #[test]
-fn content_and_build_extensions_never_overlap() {
-    // ⚠ An overlap would put a build product under version control, into the asset globs, and into the
-    // cook's walk of authored roots — three failures from one misplaced file.
-    for b in BUILD_EXTENSIONS {
-        assert!(
-            !CONTENT_EXTENSIONS.contains(b),
-            "{b} is claimed as both content and build output"
-        );
+fn the_three_extension_sets_are_pairwise_disjoint() {
+    // ⚠ A content/build overlap would put a build product under version control, into the asset globs,
+    // and into the cook's walk of authored roots — three failures from one misplaced file. A
+    // content/project overlap would put the descriptor inside the root it locates.
+    let sets = [
+        ("content", CONTENT_EXTENSIONS),
+        ("build output", BUILD_EXTENSIONS),
+        ("project", PROJECT_EXTENSIONS),
+    ];
+    for (i, (a_name, a)) in sets.iter().enumerate() {
+        for (b_name, b) in sets.iter().skip(i + 1) {
+            for ext in *a {
+                assert!(
+                    !b.contains(ext),
+                    "{ext} is claimed as both {a_name} and {b_name}"
+                );
+            }
+        }
     }
 }
 
@@ -577,6 +602,7 @@ fn every_extension_named_in_the_workspace_is_declared() {
                 }
                 if CONTENT_EXTENSIONS.contains(&ext.as_str())
                     || BUILD_EXTENSIONS.contains(&ext.as_str())
+                    || PROJECT_EXTENSIONS.contains(&ext.as_str())
                 {
                     continue;
                 }
