@@ -379,7 +379,7 @@ fn all_three_worked_examples_generate() {
 // Degree: "at least X connected", and the dead end that has to *stay* one
 // ---------------------------------------------------------------------------------------------
 
-/// The shape a rest-treasury loop wants: a boss chamber with several ways in, one of which leads to a
+/// The shape a boss-reward loop wants: a boss chamber with several ways in, one of which leads to a
 /// treasury that is directly attached and goes nowhere else.
 fn treasury_loop() -> SpineTemplate {
     SpineTemplate::new(spine_id("treasury_loop"), NodeKind::Reach)

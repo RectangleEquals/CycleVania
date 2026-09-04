@@ -1,6 +1,6 @@
 //! The vocabulary lint.
 //!
-//! `.notes/Design/v0.2b` renamed three things the code had called by older names. A rename is only
+//! The v0.2b design renamed three things the code had called by older names. A rename is only
 //! worth doing once, so this test is the thing that keeps it done: it fails on the old stems rather
 //! than trusting everyone to remember.
 //!

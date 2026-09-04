@@ -1,6 +1,6 @@
 //! cv-determinism — the one legal source of randomness and math for the whole engine.
 //!
-//! Contract (Design/v0.1): *replayable-deterministic* — same seed + same build ⇒ same output; WASM is
+//! Contract: *replayable-deterministic* — same seed + same build ⇒ same output; WASM is
 //! the canonical cross-machine target. Owned forkable PRNG (`ctx.rng.fork(label)`), owned transcendental
 //! math (FMA/fast-math off), ordered iteration, no clock, no ambient RNG.
 //!

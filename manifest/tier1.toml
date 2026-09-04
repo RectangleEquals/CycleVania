@@ -4,7 +4,7 @@
 # the Rust trait skeletons, the TypeScript declarations, the editor's node palette, and the API
 # reference document itself. Editing any of those by hand is a bug.
 #
-# Schema (see .notes/Design/v0.2b/06-api/README.md):
+# Schema (see the design's API notes):
 #
 #   [[class]]                path · extends · kind · sealed · abstract · status · doc
 #     [[class.field]]        name · type · exposed · mutable · api · final · status · doc · default

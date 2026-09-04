@@ -1,4 +1,4 @@
-# Pinned for reproducible builds (Design/v0.1: 1.89.0 is adequate — bump only on concrete need).
+# Pinned for reproducible builds. 1.89.0 is adequate — bump only on concrete need.
 [toolchain]
 channel = "1.89.0"
 components = ["rust-analyzer", "rustfmt", "clippy"]

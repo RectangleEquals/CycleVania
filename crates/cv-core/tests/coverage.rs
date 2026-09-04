@@ -536,19 +536,18 @@ fn the_lists_name_only_things_the_manifest_declares() {
 /// *"has anyone taken responsibility?"*, and nothing more. Conformance is what the per-milestone tests
 /// are for.
 ///
-/// ⚠ **The ledger is gitignored, and so is this check.** Every row of it names a private design file
-/// and a line number, which makes the *projection* exactly as private as the notes it projects — the
-/// mistake was ever committing it. So the ratchet runs for whoever holds the design and is **inert
-/// elsewhere**: a clone without `.notes/` has no ledger to check, and a test that failed there would
-/// be demanding a file the repo deliberately does not carry.
+/// ⚠ **The ledger is not committed, and neither is the path to it.** Every row of it names a private
+/// design file and a line number, which makes the *projection* exactly as private as the notes it
+/// projects — the mistake was ever committing it. So the ratchet runs for whoever holds the design and
+/// is **inert elsewhere**: a clone has no ledger to check, and a test that failed there would be
+/// demanding a file the repo deliberately does not carry.
 #[test]
 fn the_undispositioned_backlog_does_not_grow() {
     /// Lower this as surfaces are dispositioned. Never raise it.
     const CEILING: usize = 0;
 
-    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../.notes/Implementation/v0.2b/design-ledger.md");
-    let Ok(src) = std::fs::read_to_string(&path) else {
+    let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let Some(src) = ledger_text(&root) else {
         // No ledger, no design: nothing to ratchet against, and that is the expected state for anyone
         // who is not holding the private notes.
         return;
@@ -610,9 +609,7 @@ fn the_core_writes_every_cv_key_the_design_promises() {
 #[test]
 fn every_tracked_name_has_a_ledger_row() {
     let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let Ok(ledger) =
-        std::fs::read_to_string(root.join(".notes/Implementation/v0.2b/design-ledger.md"))
-    else {
+    let Some(ledger) = ledger_text(&root) else {
         return;
     };
 
@@ -647,4 +644,25 @@ fn every_tracked_name_has_a_ledger_row() {
   "
         )
     );
+}
+
+/// Read the design ledger, if this checkout has one.
+///
+/// ⚠ **The path is not in this file, or in any committed file.** The notes are private, so naming
+/// where they live would publish their layout to everyone who clones. `.designpath` is uncommitted
+/// and supplies it; **its absence is the normal case**, and every caller here treats that as
+/// "nothing to ratchet against".
+///
+/// ▶ **The ledger's generator is not in this repository either** — it projects a private document and
+/// has no public consumer, so it lives with the notes. These two checks stay because their other half
+/// is the tracking tables *in this file*: they compare a public claim against a private artifact, and
+/// only the public side is theirs to own.
+fn ledger_text(root: &std::path::Path) -> Option<String> {
+    let config = std::fs::read_to_string(root.join(".designpath")).ok()?;
+    let plan = config.lines().find_map(|line| {
+        let line = line.split('#').next().unwrap_or_default().trim();
+        let (key, value) = line.split_once('=')?;
+        (key.trim() == "plan").then(|| value.trim().trim_matches('"').to_string())
+    })?;
+    std::fs::read_to_string(root.join(plan).join("design-ledger.md")).ok()
 }

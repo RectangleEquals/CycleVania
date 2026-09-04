@@ -74,7 +74,7 @@ fn declaration_counts() {
     assert_eq!(m.member_count(), 348, "fields + methods");
 }
 
-/// Spot-checks against `.notes/Design/v0.2b/06-api/reference.md`. Not exhaustive — the exhaustive
+/// Spot-checks against the design's API reference. Not exhaustive — the exhaustive
 /// check is the count above — but these are the members whose *shape* carries a design decision, so
 /// a silent change to one of them is a silent change to the design.
 #[test]

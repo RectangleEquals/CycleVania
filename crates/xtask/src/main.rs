@@ -22,7 +22,6 @@ mod emit_docs;
 mod emit_palette;
 mod emit_rust;
 mod emit_ts;
-mod ledger;
 
 use cv_manifest::{parse, validate, Manifest};
 use std::io::Write;
@@ -40,62 +39,9 @@ fn main() -> ExitCode {
     match mode.as_str() {
         "generate" => run(false),
         "check" => run(true),
-        "ledger" => write_ledger(false),
         other => {
-            eprintln!("unknown task `{other}`\n\nusage: cargo xtask <generate|check|ledger>");
+            eprintln!("unknown task `{other}`\n\nusage: cargo xtask <generate|check>");
             ExitCode::from(2)
-        }
-    }
-}
-
-/// Regenerate the design ledger from the design, or check it.
-///
-/// ⚠ It is written **inside the private notes** ([`ledger::LEDGER_PATH`]) rather than under `docs/`,
-/// because every row of it names a design file and a line number — see [`ledger`].
-///
-/// ⚠ **Silently skipped where the design is not checked out.** `.notes/**` is gitignored, so a clone
-/// without the notes has neither a design to project nor a ledger to check — and demanding either
-/// would make the build depend on files the repository deliberately does not carry.
-fn write_ledger(check_only: bool) -> ExitCode {
-    let root = repo_root();
-    let Some(body) = ledger::build(&root) else {
-        if !check_only {
-            eprintln!("the design is not checked out; nothing to regenerate");
-        }
-        return ExitCode::SUCCESS;
-    };
-    let path = root.join(ledger::LEDGER_PATH);
-    // ⚠ **The ledger is private, so its absence is normal, not stale.** Every row names a design file
-    // and a line number, which makes the projection as private as the notes it projects — so it lives
-    // under `.notes/**` and is never committed. `check` verifies a ledger that *exists*; it never
-    // demands one into being.
-    if check_only && !path.exists() {
-        return ExitCode::SUCCESS;
-    }
-    if std::fs::read_to_string(&path).ok().as_deref() == Some(body.as_str()) {
-        if !check_only {
-            println!("{} is current", ledger::LEDGER_PATH);
-        }
-        return ExitCode::SUCCESS;
-    }
-    if check_only {
-        eprintln!(
-            "{} is stale — run `cargo xtask ledger`",
-            ledger::LEDGER_PATH
-        );
-        return ExitCode::FAILURE;
-    }
-    if let Some(dir) = path.parent() {
-        let _ = std::fs::create_dir_all(dir);
-    }
-    match std::fs::write(&path, &body) {
-        Ok(()) => {
-            println!("wrote {}", ledger::LEDGER_PATH);
-            ExitCode::SUCCESS
-        }
-        Err(e) => {
-            eprintln!("cannot write {}: {e}", path.display());
-            ExitCode::FAILURE
         }
     }
 }
@@ -165,13 +111,6 @@ fn run(check_only: bool) -> ExitCode {
         eprintln!("\nrun `cargo xtask generate` and commit the result.");
         eprintln!("if you edited one of these by hand, that edit is about to be lost — put it in");
         eprintln!("manifest/tier1.toml instead, which is the only file that is authored.");
-        return ExitCode::FAILURE;
-    }
-
-    // ⚠ The ledger is checked in the same pass, because a design surface nobody dispositioned is the
-    // same class of failure as a stale artifact: something upstream changed and nothing downstream
-    // answered for it.
-    if check_only && write_ledger(true) == ExitCode::FAILURE {
         return ExitCode::FAILURE;
     }
 

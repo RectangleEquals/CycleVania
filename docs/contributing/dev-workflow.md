@@ -1,7 +1,7 @@
 # Dev workflow
 
 The **CLI is authoritative**; IDEs are conveniences. The project never depends on a single IDE's Rust
-support being current (Design/v0.1 toolchain decision).
+support being current.
 
 ## Toolchain
 
@@ -29,7 +29,7 @@ cargo run -p cv-cli -- --version # the `cv` CLI
 cargo run -p cv-cli -- build --dry
 
 # WASM: the pure library crates + the wasm-featured bindings
-cargo build -p cv-core -p cv-vm -p cv-script -p cv-determinism --target wasm32-unknown-unknown
+cargo build -p cv-core -p cv-vm -p cv-determinism --target wasm32-unknown-unknown
 cargo build -p cv-bindings --no-default-features --features wasm --target wasm32-unknown-unknown
 
 # Native Node addon round-trip

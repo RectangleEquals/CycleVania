@@ -391,7 +391,7 @@ impl<'a> Solver<'a> {
     /// `MinDistanceFrom` / `MaxDistanceFrom` constraints. ⚠ It is **not** restored as a dial: the design
     /// refuses one, because *"a dial exists for what only the generator can decide; a constraint for what
     /// content can state, and key-to-lock distance is stateable"*
-    /// ([`05-object-model.md`](../../../.notes/Design/v0.2b/05-object-model.md) §4.2). The pre-v0.1
+    /// (the v0.2b object model, §4.2). The pre-v0.1
     /// `progression_locality` dial that used to weight this was deleted at M04a.
     fn choose_location(
         &self,

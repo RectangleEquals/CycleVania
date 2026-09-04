@@ -2,7 +2,7 @@
 //!
 //! # Why this replaces the design's hand-written reference
 //!
-//! `.notes/Design/v0.2b/06-api/reference.md` describes itself as *"hand-maintained seed data for
+//! The design's own API reference describes itself as *"hand-maintained seed data for
 //! the manifest. Temporary."* M00 consumed it; from here the reference is an **output**, and the
 //! design document is history.
 //!

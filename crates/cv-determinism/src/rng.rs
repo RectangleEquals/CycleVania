@@ -1,6 +1,6 @@
 //! Owned, forkable, label-addressed pseudo-random generator — the **one legal source of randomness**.
 //!
-//! Design (Design/v0.1): each stream carries an immutable `key` (its identity) and a private `state`
+//! Each stream carries an immutable `key` (its identity) and a private `state`
 //! that advances as it is drawn. `fork(label)` derives a child stream's key from `(parent key,
 //! hash(label))` — depending only on the parent's *identity* and the label, never on how much the
 //! parent has been consumed or on the order siblings are forked. That makes **label-addressed

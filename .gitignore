@@ -8,8 +8,12 @@ dist/
 build/
 *.node
 
-# Private design & implementation notes — never committed
-/.notes/
+# Private working notes and local, machine-specific config.
+# Nothing at the repository root that begins with a dot is carried, so no ignore rule has to
+# name a private directory in order to exclude it — and a new one is covered the day it appears.
+/.*
+!/.gitignore
+!/.cargo/
 
 # OS / editor
 .DS_Store

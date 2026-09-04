@@ -1,6 +1,6 @@
 //! The binding contract, checked rather than remembered.
 //!
-//! `.notes/Design/v0.2b/11-host.md` §2 lists rules the TypeScript seam imposes on the core. Most of
+//! The v0.2b host design, §2, lists rules the TypeScript seam imposes on the core. Most of
 //! them are enforced by the manifest validator, because most of the seam is *generated* from the
 //! manifest. These are the ones that live in hand-written core code, where nothing else would catch
 //! a regression.

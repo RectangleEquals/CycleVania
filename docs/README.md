@@ -64,6 +64,6 @@ If a page genuinely serves two audiences, it still gets **one** home — the one
 most — plus a link from the other. If you cannot decide, it is usually a sign the page is really two
 pages.
 
-> **Note:** the private design notes under `.notes/Design/` and `.notes/Implementation/` are *not*
-> these docs. Those are working design records for the maintainers and are gitignored; these are the
-> public, reader-facing manual. Design decisions get *summarised* here, not copy-pasted.
+> **Note:** the maintainers' private design and implementation notes are *not* these docs, and are not
+> part of this repository. Those are working records; this is the public, reader-facing manual. Design
+> decisions get *summarised* here, not copy-pasted.
