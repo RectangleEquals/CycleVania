@@ -92,6 +92,13 @@ fn core_sources() -> Vec<PathBuf> {
 /// ▶ **`git ls-files` is the boundary, because "committed" is the actual question.** A directory
 /// walk would either miss a new top-level file or wander into the private notes beside the repo; the
 /// index knows exactly what is public.
+/// Is this a generated dependency lockfile?
+fn is_lockfile(p: &Path) -> bool {
+    p.file_name()
+        .and_then(|n| n.to_str())
+        .is_some_and(|n| n == "Cargo.lock" || n.ends_with("-lock.json") || n == "pnpm-lock.yaml")
+}
+
 fn committed_text() -> Vec<PathBuf> {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
     let out = std::process::Command::new("git")
@@ -104,8 +111,11 @@ fn committed_text() -> Vec<PathBuf> {
         .filter(|s| !s.is_empty())
         .map(|rel| root.join(rel))
         .filter(|p| {
-            // ⚠ `Cargo.lock` is generated and enormous; the rest are not text.
-            p.file_name().is_none_or(|n| n != "Cargo.lock")
+            // ⚠ **Lockfiles are skipped, and not because they are inconvenient.** They are generated
+            // dependency manifests full of base64 integrity hashes, so any short token appears in them
+            // by chance — `package-lock.json` produced two `L6` hits inside SHA-512 digests. There is
+            // no prose in a lockfile to be wrong about.
+            !is_lockfile(p)
                 && p.extension().is_some_and(|x| {
                     matches!(
                         x.to_str(),

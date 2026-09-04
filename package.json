@@ -2,7 +2,7 @@
   "name": "cyclevania",
   "private": true,
   "version": "0.1.0",
-  "description": "CycleVania SDK workspace — deterministic procedural metroidvania level generation (Rust core + napi addon + WASM).",
+  "description": "CycleVania SDK workspace \u2014 deterministic procedural metroidvania level generation (Rust core + napi addon + WASM).",
   "scripts": {
     "build:addon": "cargo build -p cv-bindings",
     "smoke:addon": "node scripts/smoke-addon.cjs",
@@ -12,6 +12,10 @@
     "generate": "cargo xtask generate",
     "verify:generated": "cargo xtask check",
     "verify:determinism": "cargo test -p cv-determinism -p cv-core && npm run verify:wasm-golden",
-    "verify": "npm run verify:generated && cargo test && npm run verify:wasm-golden && npm run verify:addon"
+    "verify": "npm run verify:generated && cargo test && npm run verify:wasm-golden && npm run verify:addon && npm run editor:check && npm run editor:test",
+    "editor:check": "npm --prefix editor run check",
+    "editor:test": "npm --prefix editor run test",
+    "editor:build": "npm --prefix editor run build",
+    "editor:serve": "npm --prefix editor run serve"
   }
 }

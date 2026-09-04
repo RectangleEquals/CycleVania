@@ -1,0 +1,20 @@
+{
+  "name": "@cyclevania/editor",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "The CycleVania editor — a self-contained TypeScript project over the bindings. Not part of the Rust workspace, and never shipped inside a host project.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "check": "tsc --noEmit",
+    "test": "vitest run",
+    "serve": "node --experimental-strip-types server/serve.ts"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.0",
+    "vite": "^8.2.0",
+    "vitest": "^3.2.0",
+    "@types/node": "^24.0.0"
+  }
+}
