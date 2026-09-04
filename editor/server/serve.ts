@@ -57,6 +57,8 @@ async function route(req: IncomingMessage, url: URL): Promise<{ status: number; 
       return api.dials();
     case "POST /api/generate":
       return api.generate(q("seed"));
+    case "POST /api/paste":
+      return api.paste(q("fragment"), q("into"));
     default:
       return { status: 404, body: { error: `no route ${req.method} ${url.pathname}` } };
   }

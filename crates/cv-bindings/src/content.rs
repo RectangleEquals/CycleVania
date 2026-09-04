@@ -48,6 +48,15 @@ pub enum ContentError {
         /// What the parser said.
         detail: String,
     },
+    /// A fragment parsed, and may not go where it was aimed.
+    ///
+    /// ⚠ **Distinct from `Malformed`, because it is a different fact.** The fragment is a perfectly
+    /// valid document; it is a valid document of the wrong format. Reporting *"did not parse"* would
+    /// send a developer to look for a syntax error that is not there.
+    CannotPaste {
+        /// What the core said, which names both formats.
+        detail: String,
+    },
     /// The write could not be completed.
     Io {
         /// The path as asked for.
@@ -67,6 +76,7 @@ impl fmt::Display for ContentError {
             ContentError::Malformed { rel, detail } => {
                 write!(f, "`{rel}` did not parse: {detail}")
             }
+            ContentError::CannotPaste { detail } => write!(f, "{detail}"),
             ContentError::Io { rel, detail } => write!(f, "`{rel}`: {detail}"),
         }
     }
@@ -145,6 +155,30 @@ pub fn write(descriptor: &Descriptor, rel: &str, src: &str) -> Result<String, Co
         detail: e.to_string(),
     })?;
     Ok(canonical)
+}
+
+/// May this fragment paste into a document of that format?
+///
+/// ⚠ **The format rule is the core's, not the editor's.** A connection rule runs while a wire
+/// follows the cursor, so it must be local; a paste is one deliberate action, and *"which formats may
+/// mix"* is a property of the notation. Re-deciding it in TypeScript would be a second answer to a
+/// question the core already answers.
+///
+/// ▶ **Both spellings parse**, which is what makes the check necessary rather than pedantic: a
+/// `core.` op inside a `Begin Fill` is a perfectly valid CVB document that means nothing.
+pub fn may_paste(fragment: &str, into: &str) -> Result<(), ContentError> {
+    let block = cv_cvb::parse(fragment).map_err(|e| ContentError::Malformed {
+        rel: "<fragment>".into(),
+        detail: e.to_string(),
+    })?;
+    let target =
+        cv_cvb::format::Format::from_name(into).ok_or_else(|| ContentError::Malformed {
+            rel: into.into(),
+            detail: format!("`{into}` is not a format"),
+        })?;
+    cv_cvb::format::may_paste(&block, target).map_err(|e| ContentError::CannotPaste {
+        detail: e.to_string(),
+    })
 }
 
 #[cfg(test)]

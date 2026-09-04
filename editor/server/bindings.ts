@@ -38,7 +38,7 @@ export interface ProjectHandle {
   validate(): void;
   /** Every dial id it declares, sorted. */
   dials(): string[];
-  /** One dial, tab-separated: id, owner, kind, default, effective, source. */
+  /** One dial, as JSON — every field `DialMeta` carries. */
   dial(id: string): string;
   /** The recipe, as hex. Dials are part of it; the seed is not. */
   fingerprint(): string;
@@ -48,6 +48,7 @@ export interface ProjectHandle {
 
 interface Addon {
   version(): string;
+  mayPaste(fragment: string, into: string): boolean;
   Project: {
     open(path: string): ProjectHandle;
     loadFromFile(path: string): ProjectHandle;
@@ -119,25 +120,39 @@ export interface Dial {
   id: string;
   owner: string;
   kind: string;
+  /** ⚠ The panel renders this, so the binding must carry it. */
+  doc: string;
   default: string;
   effective: string;
   source: string;
+  /** Whether something has changed it from the authored default. */
+  overridden: boolean;
+  /** ⚠ A **warning**, not an error — content may have authored a default outside a range it later narrowed. */
+  outOfBounds: boolean;
+  /** What a widget may offer — not what a value must satisfy. */
+  bounds: {
+    min: number | null;
+    max: number | null;
+    softMin: number | null;
+    hardMax: number | null;
+    enumPath: string | null;
+    enumValues: string[];
+  };
 }
 
 /**
- * Every dial, parsed from the tab-separated rows the binding returns.
+ * Every dial, as the binding reports them.
  *
- * ⚠ **Splitting a string is not computing a value.** The binding chose the fields and their order; this
- * turns its line into an object and adds nothing. If a field the panel needs is missing, the fix is in
- * `cv-bindings`, not here — see the note at the top of this file.
+ * ⚠ **Parsing JSON is not computing a value.** The binding chose the fields; this hands them over
+ * unchanged. If a field the panel needs is missing, the fix is in `cv-bindings`, not here — see the note
+ * at the top of this file.
+ *
+ * ▶ **It was a tab-separated line carrying six of eight fields**, dropping `doc` and `bounds` — two of
+ * the five the plan names as *"what the editor panel renders"* — and a doc containing a tab would have
+ * split the row into nonsense. The carrier was wrong twice.
  */
 export function dials(project: ProjectHandle): Dial[] {
-  return project.dials().map((id) => {
-    const [rowId = id, owner = "", kind = "", def = "", effective = "", source = ""] = project
-      .dial(id)
-      .split("\t");
-    return { id: rowId, owner, kind, default: def, effective, source };
-  });
+  return project.dials().map((id) => JSON.parse(project.dial(id)) as Dial);
 }
 
 /** What a generate produced. */
@@ -151,4 +166,17 @@ export interface World {
 export function generate(project: ProjectHandle, seed: string): World {
   const [fingerprint = "", rolled = seed, scopes = "0"] = project.generate(seed).split("\t");
   return { fingerprint, seed: rolled, scopes: Number(scopes) };
+}
+
+/**
+ * May a copied fragment paste into a document of that format?
+ *
+ * ⚠ **The format rule is the core's.** A connection rule runs while a wire follows the cursor, so it
+ * must be local; a paste is one deliberate action, and *"which formats may mix"* is a property of the
+ * notation. Re-deciding it here would be a second answer to a question the core already answers.
+ *
+ * ▶ Throws with the core's own reason, which names both formats.
+ */
+export function mayPaste(fragment: string, into: string): boolean {
+  return core().mayPaste(fragment, into);
 }

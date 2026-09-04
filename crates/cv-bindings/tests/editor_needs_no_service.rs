@@ -37,6 +37,10 @@ const THE_EDITOR_NEEDS: &[(&str, &str)] = &[
         "load_from_file",
         "the cooked-build entry point a host shares",
     ),
+    (
+        "may_paste",
+        "M18 P06 — whether a fragment may paste here; the format rule is the core's",
+    ),
 ];
 
 fn surface() -> String {
@@ -67,6 +71,8 @@ fn both_targets_carry_it_not_just_the_one_that_happened_to_be_built() {
     let napi = src.find("js_name = \"Project\"").expect("a napi handle");
     let wasm = src.rfind("js_name = \"Project\"").expect("a wasm handle");
     assert_ne!(napi, wasm, "only one target declares the handle");
+    // ⚠ Split at the WASM handle: everything before is the napi half, everything after the web half.
+    // A free function like `may_paste` is declared once per target too, so the same check covers it.
     let (native, web) = src.split_at(wasm);
     for (name, why) in THE_EDITOR_NEEDS {
         let decl = format!("pub fn {name}(");

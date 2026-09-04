@@ -139,6 +139,16 @@ export class Api {
     return attempt(() => core.generate(s.project, seed));
   }
 
+  /**
+   * May a copied fragment paste here?
+   *
+   * ⚠ **Checked before anything is open**, because a developer copies from one project and pastes
+   * into another — requiring a loaded project would make the common case the awkward one.
+   */
+  paste(fragment: string, into: string): Reply {
+    return attempt(() => ({ allowed: core.mayPaste(fragment, into) }));
+  }
+
   /** The node palette, grouped for the browser's tree. */
   palette(): Reply {
     return attempt(() => ({

@@ -62,13 +62,70 @@ fn dial_ids(project: &Project) -> Vec<String> {
 }
 
 /// One dial rendered as text, for a binding that has no struct conversion yet.
-fn dial_line(project: &Project, id: &str) -> String {
+/// JSON-escape a string.
+fn esc(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + 2);
+    for c in s.chars() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
+            c => out.push(c),
+        }
+    }
+    out
+}
+
+/// One dial, as JSON.
+///
+/// WARN **JSON, because one of the fields is prose.** This was tab-separated and carried six fields;
+/// `DialMeta` has eight, and the two it dropped were **`doc` and `bounds`** — which the plan names
+/// among the five *"the editor panel renders"*. A doc containing a tab or a newline would also have
+/// silently split a row into nonsense, so the carrier was wrong twice.
+///
+/// RARR **The panel and the host API are one surface.** A field the panel needs and the binding does not
+/// carry is the shape of a private channel, which [`11-host.md`] §9.1 forbids.
+fn dial_json(project: &Project, id: &str) -> String {
     match project.dials().get(id) {
-        Ok(d) => format!(
-            "{}\t{}\t{}\t{:?}\t{:?}\t{}",
-            d.id, d.owner, d.kind, d.default, d.effective, d.source
-        ),
-        Err(e) => format!("error\t{e}"),
+        Ok(d) => {
+            let b = &d.bounds;
+            let num = |v: Option<f64>| v.map_or("null".into(), |x| format!("{x}"));
+            let values: Vec<String> = b
+                .enum_values
+                .iter()
+                .map(|v| format!("\"{}\"", esc(v)))
+                .collect();
+            format!(
+                concat!(
+                    "{{\"id\":\"{}\",\"owner\":\"{}\",\"kind\":\"{}\",\"doc\":\"{}\",",
+                    "\"default\":\"{}\",\"effective\":\"{}\",\"source\":\"{}\",",
+                    "\"overridden\":{},\"outOfBounds\":{},",
+                    "\"bounds\":{{\"min\":{},\"max\":{},\"softMin\":{},\"hardMax\":{},",
+                    "\"enumPath\":{},\"enumValues\":[{}]}}}}"
+                ),
+                esc(&d.id),
+                esc(&d.owner),
+                d.kind,
+                esc(&d.doc),
+                esc(&format!("{:?}", d.default)),
+                esc(&format!("{:?}", d.effective)),
+                d.source,
+                d.is_overridden(),
+                d.is_out_of_bounds(),
+                num(b.min),
+                num(b.max),
+                num(b.soft_min),
+                num(b.hard_max),
+                b.enum_path
+                    .as_ref()
+                    .map_or("null".into(), |p| format!("\"{}\"", esc(p))),
+                values.join(","),
+            )
+        }
+        Err(e) => format!("{{\"error\":\"{}\"}}", esc(&e.to_string())),
     }
 }
 
@@ -93,11 +150,11 @@ pub fn list_dials(path: String, cooked: bool) -> Vec<String> {
     dial_ids(&open(path, cooked))
 }
 
-/// One dial, as a tab-separated line: id, owner, kind, default, effective, source.
+/// One dial, as JSON — every field `DialMeta` carries, including its **doc** and **bounds**.
 #[cfg(all(feature = "napi-addon", not(target_arch = "wasm32")))]
 #[napi]
 pub fn describe_dial(path: String, cooked: bool, id: String) -> String {
-    dial_line(&open(path, cooked), &id)
+    dial_json(&open(path, cooked), &id)
 }
 
 /// **The project handle.**
@@ -174,10 +231,10 @@ impl JsProject {
         dial_ids(&self.inner)
     }
 
-    /// One dial, as a tab-separated line.
+    /// One dial, as JSON.
     #[napi]
     pub fn dial(&self, id: String) -> String {
-        dial_line(&self.inner, &id)
+        dial_json(&self.inner, &id)
     }
 
     /// The recipe. ⚠ **Dials are part of it and the seed is not.**
@@ -204,6 +261,20 @@ fn to_napi(e: project::ProjectError) -> napi::Error {
     napi::Error::from_reason(e.to_string())
 }
 
+/// May a copied fragment paste into a document of that format?
+///
+/// ⚠ **A free function, not a method on the handle.** A paste is checked before anything is open —
+/// a developer copies from one project and pastes into another — so requiring a `Project` would make
+/// the common case the awkward one.
+#[cfg(all(feature = "napi-addon", not(target_arch = "wasm32")))]
+#[napi]
+pub fn may_paste(fragment: String, into: String) -> napi::Result<bool> {
+    match content::may_paste(&fragment, &into) {
+        Ok(()) => Ok(true),
+        Err(e) => Err(napi::Error::from_reason(e.to_string())),
+    }
+}
+
 // --- WASM module (wasm-bindgen) ---
 #[cfg(all(feature = "wasm", target_arch = "wasm32"))]
 use wasm_bindgen::prelude::wasm_bindgen;
@@ -223,11 +294,11 @@ pub fn list_dials(path: String, cooked: bool) -> Vec<String> {
     dial_ids(&open(path, cooked))
 }
 
-/// One dial, as a tab-separated line.
+/// One dial, as JSON.
 #[cfg(all(feature = "wasm", target_arch = "wasm32"))]
 #[wasm_bindgen]
 pub fn describe_dial(path: String, cooked: bool, id: String) -> String {
-    dial_line(&open(path, cooked), &id)
+    dial_json(&open(path, cooked), &id)
 }
 
 /// **The project handle**, the WASM half.
@@ -294,9 +365,9 @@ impl JsProject {
         dial_ids(&self.inner)
     }
 
-    /// One dial, as a tab-separated line.
+    /// One dial, as JSON.
     pub fn dial(&self, id: String) -> String {
-        dial_line(&self.inner, &id)
+        dial_json(&self.inner, &id)
     }
 
     /// The recipe.
@@ -316,6 +387,15 @@ impl JsProject {
 #[cfg(all(feature = "wasm", target_arch = "wasm32"))]
 fn to_js(e: project::ProjectError) -> JsValue {
     JsValue::from_str(&e.to_string())
+}
+
+/// May a copied fragment paste into a document of that format?
+#[cfg(all(feature = "wasm", target_arch = "wasm32"))]
+#[wasm_bindgen]
+pub fn may_paste(fragment: String, into: String) -> Result<bool, JsValue> {
+    content::may_paste(&fragment, &into)
+        .map(|()| true)
+        .map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
 #[cfg(test)]
@@ -344,9 +424,13 @@ mod tests {
         assert!(open("./game.cvproj".into(), false).cooked.eq(&false));
         assert!(open("./build/game.cvpak".into(), true).cooked);
 
-        let line = dial_line(&p, "Hookshot.length");
+        let line = dial_json(&p, "Hookshot.length");
         assert!(line.contains("NUMBER"));
         assert!(line.contains("AUTHORED"));
-        assert!(dial_line(&p, "ghost.x").starts_with("error\t"));
+        // ⚠ The error is a JSON object now, not an `error	` prefix — a caller that
+        // string-matched the old shape would silently stop noticing failures.
+        assert!(dial_json(&p, "ghost.x").contains("\"error\""));
+        // And the two fields the tab-separated line used to drop.
+        assert!(line.contains("\"doc\"") && line.contains("\"bounds\""));
     }
 }
