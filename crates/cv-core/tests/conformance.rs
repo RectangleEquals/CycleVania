@@ -78,32 +78,47 @@ fn core_sources() -> Vec<PathBuf> {
     out
 }
 
-/// Every Rust source in the workspace, not just this crate's.
+/// Every **committed text file**, not just this crate's, and not just Rust.
 ///
-/// ⚠ **Scanning one crate is how `cv-vm` and `cv-determinism` drifted unchecked.** Both carried claims
-/// about a text scripting language and a shipped bytecode artifact, neither of which exists, and no
-/// lint looked at them because the lint lived next to the crate it was written for.
-fn workspace_sources() -> Vec<PathBuf> {
-    fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
-        let Ok(entries) = fs::read_dir(dir) else {
-            return;
-        };
-        for e in entries.flatten() {
-            let p = e.path();
-            if p.is_dir() {
-                if p.file_name().is_some_and(|n| n == "target") {
-                    continue;
-                }
-                walk(&p, out);
-            } else if p.extension().is_some_and(|x| x == "rs") {
-                out.push(p);
-            }
-        }
-    }
+/// ⚠ **Scanning one crate is how `cv-vm` and `cv-determinism` drifted unchecked.** Both carried
+/// claims about a text scripting language and a shipped bytecode artifact, neither of which exists, and
+/// no lint looked at them because the lint lived next to the crate it was written for.
+///
+/// ⚠ **Scanning only Rust is how `README.md` did the same, for longer.** It advertised an `L0-L6`
+/// pipeline for nineteen milestones — and so did `cv-core`'s crates.io `description`, which is
+/// *published metadata* — while a lint banning that exact string ran green two directories away. A
+/// checker that reads one file type teaches everyone that the other file types are not checked.
+///
+/// ▶ **`git ls-files` is the boundary, because "committed" is the actual question.** A directory
+/// walk would either miss a new top-level file or wander into the private notes beside the repo; the
+/// index knows exactly what is public.
+fn committed_text() -> Vec<PathBuf> {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let mut out = Vec::new();
-    walk(&root.join("crates"), &mut out);
-    out
+    let out = std::process::Command::new("git")
+        .args(["ls-files", "-z"])
+        .current_dir(&root)
+        .output()
+        .expect("git is required to know what is committed");
+    let listed: Vec<PathBuf> = String::from_utf8_lossy(&out.stdout)
+        .split('\0')
+        .filter(|s| !s.is_empty())
+        .map(|rel| root.join(rel))
+        .filter(|p| {
+            // ⚠ `Cargo.lock` is generated and enormous; the rest are not text.
+            p.file_name().is_none_or(|n| n != "Cargo.lock")
+                && p.extension().is_some_and(|x| {
+                    matches!(
+                        x.to_str(),
+                        Some("rs" | "toml" | "md" | "json" | "ts" | "js" | "yml" | "yaml")
+                    )
+                })
+        })
+        .collect();
+    assert!(
+        !listed.is_empty(),
+        "listed no committed files — a lint that checks nothing passes every time"
+    );
+    listed
 }
 
 /// A concept that v0.2 or v0.2b **superseded**, and what it is now.
@@ -133,9 +148,9 @@ const SUPERSEDED: &[(&str, &str)] = &[
 ];
 
 #[test]
-fn no_superseded_concept_survives_in_a_comment() {
+fn no_superseded_concept_survives_anywhere_committed() {
     let mut offenders = Vec::new();
-    for path in workspace_sources() {
+    for path in committed_text() {
         let Ok(src) = fs::read_to_string(&path) else {
             continue;
         };
@@ -144,9 +159,16 @@ fn no_superseded_concept_survives_in_a_comment() {
         if name == "conformance.rs" {
             continue;
         }
-        for (i, line) in src.lines().enumerate() {
+        // ⚠ **In Rust, only comments; everywhere else, every line.** A `.md` or a `.toml` has no
+        // comment syntax to hide behind — the whole file is the claim. Restricting the scan to `//` in
+        // prose would reproduce the exact blind spot this test was widened to close.
+        let rust = path.extension().is_some_and(|x| x == "rs");
+        // ⚠ Collected once. `nth()` per line is O(n²), and `cv-api/src/lib.rs` is 6,200 lines
+        // — enough to turn a lint into something people notice and then start skipping.
+        let lines: Vec<&str> = src.lines().collect();
+        for (i, line) in lines.iter().enumerate() {
             let t = line.trim();
-            if !(t.starts_with("//") || t.starts_with("///") || t.starts_with("//!")) {
+            if rust && !(t.starts_with("//") || t.starts_with("///") || t.starts_with("//!")) {
                 continue;
             }
             // ⚠ **A denial is not a use, and neither is a history.** *"There is no scheduling
@@ -175,8 +197,17 @@ fn no_superseded_concept_survives_in_a_comment() {
             ];
             // ⚠ Compared with emphasis stripped and case folded. Chasing `**Deliberately not**` versus
             // `deliberately **not**` is a game the lint loses: a marker that depends on where an author
-            // put an asterisk is a marker that fails on correct prose.
-            let plain = line.replace(['*', '_', '`'], "").to_lowercase();
+            // ⚠ **Compared with emphasis stripped and case folded.** Chasing `**Deliberately not**`
+            // versus `deliberately **not**` is a game the lint loses: a marker that depends on where an
+            // author put an asterisk is a marker that fails on correct prose.
+            //
+            // ⚠ **And with the previous line, because prose wraps.** `README.md` said *"There is no"* at
+            // the end of one line and *"scheduling layer"* at the start of the next — a denial the
+            // line-based check could not see, on the very sentence that documents the rule. A lint that
+            // flags correct writing for where the author's editor broke the line is a lint people
+            // silence.
+            let context = format!("{} {line}", i.checked_sub(1).map_or("", |q| lines[q]));
+            let plain = context.replace(['*', '_', '`'], "").to_lowercase();
             if HISTORICAL.iter().any(|d| plain.contains(d)) {
                 continue;
             }
@@ -189,7 +220,7 @@ fn no_superseded_concept_survives_in_a_comment() {
     }
     assert!(
         offenders.is_empty(),
-        "comments describe concepts v0.2+ superseded:
+        "committed files describe concepts v0.2+ superseded:
   {}",
         offenders.join(
             "
