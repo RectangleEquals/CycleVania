@@ -677,3 +677,97 @@ mod tests {
         );
     }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+// Elevation bands
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+
+/// One elevation band — a physical storey, across every room in the scope.
+///
+/// ⚠ **Banded by elevation, not by per-room floor index.** Rooms have different floor counts, so a
+/// global *"floor 2"* would mean a different physical height in every room — and a layer-isolation
+/// control that means something different per room is a control nobody can reason with.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Band {
+    /// Its index from the bottom, `0` upward.
+    pub index: usize,
+    /// The lowest surface in it.
+    pub low: f64,
+    /// The highest.
+    pub high: f64,
+    /// Which surfaces fell in it, by owner.
+    pub members: Vec<ObjectId>,
+}
+
+impl Band {
+    /// Does an elevation fall in this band?
+    pub fn contains(&self, elevation: f64) -> bool {
+        elevation >= self.low && elevation <= self.high
+    }
+
+    /// How tall the band is.
+    pub fn span(&self) -> f64 {
+        self.high - self.low
+    }
+}
+
+/// Group floor surfaces into elevation bands.
+///
+/// ⚠ **The tolerance is `standing_height`, and that is not a magic number.** Two surfaces a player
+/// cannot stand between are the same physical level with a step in it; two they can stand between are
+/// different storeys. It is a quantity the project already declares, so it scales with `world_scale`
+/// and needs no dial of its own.
+///
+/// ▶ **Too tight and every room gets its own band; too loose and a mezzanine merges with a ground
+/// floor.** Anchoring to the one length the player's body already defines is what stops the parameter
+/// being a taste.
+///
+/// # Chaining is the failure mode, and it is bounded
+///
+/// ⚠ **Gap-based clustering chains.** Surfaces at `0, 1.8, 3.6, 5.4` are each within a tolerance of
+/// the last, so a naive pass merges three storeys into one band — the exact mistake that makes a
+/// layer-isolation control useless in the buildings it matters most for.
+///
+/// ▶ **So a band also closes when its span would exceed twice the tolerance.** A band is at most two
+/// standing heights tall; beyond that it is not one level however smooth the gradient into it was.
+pub fn bands(surfaces: &[FloorSurface], standing_height: f64) -> Vec<Band> {
+    let tolerance = standing_height.max(f64::EPSILON);
+    let mut sorted: Vec<(f64, ObjectId)> =
+        surfaces.iter().map(|f| (f.patch.min.y, f.owner)).collect();
+    // ⚠ **Sorted deterministically, by elevation then owner.** Two surfaces at the same height must
+    // land in the same order on every machine, or the band a room belongs to depends on a hash.
+    sorted.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+
+    let mut out: Vec<Band> = Vec::new();
+    for (elevation, owner) in sorted {
+        match out.last_mut() {
+            Some(band)
+                if elevation - band.high <= tolerance
+                    && elevation - band.low <= tolerance * 2.0 =>
+            {
+                band.high = elevation;
+                if !band.members.contains(&owner) {
+                    band.members.push(owner);
+                }
+            }
+            _ => out.push(Band {
+                index: out.len(),
+                low: elevation,
+                high: elevation,
+                members: vec![owner],
+            }),
+        }
+    }
+    out
+}
+
+/// Which band an elevation falls in, if any.
+///
+/// ▶ **`None` is a real answer**, not a failure: a surface above the top band or below the bottom
+/// one is off-band, and the view *dims* it rather than hiding it, so spatial context survives.
+pub fn band_of(bands: &[Band], elevation: f64) -> Option<usize> {
+    bands
+        .iter()
+        .find(|b| b.contains(elevation))
+        .map(|b| b.index)
+}
