@@ -149,6 +149,24 @@ export class Api {
     return attempt(() => ({ allowed: core.mayPaste(fragment, into) }));
   }
 
+  /** Check a state graph, by document text or by a file in the open project. */
+  state(rel: string, text?: string): Reply {
+    if (text) return attempt(() => core.checkStateGraph(text));
+    const s = this.#session;
+    if (!s) return fail(409, "no project is open");
+    return attempt(() => core.checkStateGraph(s.project.read(rel)));
+  }
+
+  /** Read a `.cvcurve` for the curve editor. */
+  curves(path: string, text: string): Reply {
+    return attempt(() => core.readCurves(path, text));
+  }
+
+  /** Read a `.cvunlock` for the table view. */
+  unlocks(text: string): Reply {
+    return attempt(() => core.readUnlocks(text));
+  }
+
   /** The node palette, grouped for the browser's tree. */
   palette(): Reply {
     return attempt(() => ({

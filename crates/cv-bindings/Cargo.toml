@@ -31,3 +31,6 @@ wasm-bindgen = { workspace = true, optional = true }
 
 [build-dependencies]
 napi-build = { workspace = true }
+
+[dev-dependencies]
+cv-assets = { workspace = true }

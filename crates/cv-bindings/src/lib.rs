@@ -16,6 +16,8 @@
 pub mod content;
 pub mod dials;
 pub mod project;
+pub mod stategraph;
+pub mod tables;
 
 pub use dials::{DialBounds, DialError, DialKind, DialMeta, DialSource, DialValue, Dials};
 pub use project::{GenerateOptions, Project, ProjectError};
@@ -275,6 +277,33 @@ pub fn may_paste(fragment: String, into: String) -> napi::Result<bool> {
     }
 }
 
+/// Check a `.cvstate` document — the graph, its positions and its findings, as JSON.
+///
+/// ⚠ **The editor draws this and computes none of it.** The un-softlockable check over a state graph
+/// is the solver's own analysis; a check is not a view.
+#[cfg(all(feature = "napi-addon", not(target_arch = "wasm32")))]
+#[napi]
+pub fn check_state_graph(text: String) -> napi::Result<String> {
+    stategraph::check(&text).map_err(|e| napi::Error::from_reason(e.to_string()))
+}
+
+/// Read a `.cvcurve` and sample every row for drawing.
+#[cfg(all(feature = "napi-addon", not(target_arch = "wasm32")))]
+#[napi]
+pub fn read_curves(path: String, text: String) -> napi::Result<String> {
+    tables::curves(&path, &text).map_err(|e| napi::Error::from_reason(e.to_string()))
+}
+
+/// Read a `.cvunlock` for the table view — rows, and whatever stops them building.
+///
+/// ⚠ **The rows come back even when the table will not build**, so a `supersedes` cycle is shown
+/// *in the table* rather than deferred to a build error.
+#[cfg(all(feature = "napi-addon", not(target_arch = "wasm32")))]
+#[napi]
+pub fn read_unlocks(text: String) -> napi::Result<String> {
+    tables::unlocks(&text).map_err(|e| napi::Error::from_reason(e.to_string()))
+}
+
 // --- WASM module (wasm-bindgen) ---
 #[cfg(all(feature = "wasm", target_arch = "wasm32"))]
 use wasm_bindgen::prelude::wasm_bindgen;
@@ -396,6 +425,27 @@ pub fn may_paste(fragment: String, into: String) -> Result<bool, JsValue> {
     content::may_paste(&fragment, &into)
         .map(|()| true)
         .map_err(|e| JsValue::from_str(&e.to_string()))
+}
+
+/// Check a `.cvstate` document — the graph, its positions and its findings, as JSON.
+#[cfg(all(feature = "wasm", target_arch = "wasm32"))]
+#[wasm_bindgen]
+pub fn check_state_graph(text: String) -> Result<String, JsValue> {
+    stategraph::check(&text).map_err(|e| JsValue::from_str(&e.to_string()))
+}
+
+/// Read a `.cvcurve` and sample every row for drawing.
+#[cfg(all(feature = "wasm", target_arch = "wasm32"))]
+#[wasm_bindgen]
+pub fn read_curves(path: String, text: String) -> Result<String, JsValue> {
+    tables::curves(&path, &text).map_err(|e| JsValue::from_str(&e.to_string()))
+}
+
+/// Read a `.cvunlock` for the table view.
+#[cfg(all(feature = "wasm", target_arch = "wasm32"))]
+#[wasm_bindgen]
+pub fn read_unlocks(text: String) -> Result<String, JsValue> {
+    tables::unlocks(&text).map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
 #[cfg(test)]

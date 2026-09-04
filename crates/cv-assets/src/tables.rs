@@ -230,6 +230,21 @@ fn interpolation_of(written: &str) -> Result<Interpolation, LoadError> {
 /// load rather than produce a table whose closure is wrong: the closure is taken once and everything
 /// downstream trusts it.
 pub fn load_unlocks(src: &str) -> Result<UnlockTable, LoadError> {
+    // WARN **The ordering rules are the core's, and this loader does not restate them.**
+    // `UnlockTable::build` refuses a duplicate id, a dangling `supersedes` and a cycle.
+    UnlockTable::build(unlock_rows(src)?).map_err(LoadError::from)
+}
+
+/// The rows of a `.cvunlock`, **without enforcing the lattice**.
+///
+/// WARN **Separated because a view and an engine want different things from the same file.** The
+/// engine must refuse a cycle before building — the closure is taken once and everything downstream
+/// trusts it. A *table view* must show the developer the cycle, on the rows that form it, which it
+/// cannot do if the read refused.
+///
+/// RARR **One parser, two callers.** A second reader here would be two places that must agree about
+/// what a `.cvunlock` is.
+fn unlock_rows(src: &str) -> Result<Vec<Unlock>, LoadError> {
     let doc = parse(src).map_err(|e| LoadError::Malformed {
         detail: e.to_string(),
     })?;
@@ -272,11 +287,30 @@ pub fn load_unlocks(src: &str) -> Result<UnlockTable, LoadError> {
         });
     }
 
-    // ⚠ **The ordering rules are the core's, and this loader does not restate them.**
-    // `UnlockTable::build` already refuses a duplicate id, a dangling `supersedes` and a cycle — a
-    // second implementation here would be two places that must agree about what a build error is, and
-    // the day they disagreed the file would load into a table the solver would not accept.
-    UnlockTable::build(parsed).map_err(LoadError::from)
+    Ok(parsed)
+}
+
+/// What a `.cvunlock` holds, and what is wrong with it.
+///
+/// ⚠ **Rows *and* a fault, not one or the other.** A table view that received only an error could
+/// show a message and no table — leaving the developer to find the cycle in a file by reading it,
+/// which is what the view exists to replace.
+pub struct InspectedUnlocks {
+    /// Every row, in file order.
+    pub rows: Vec<Unlock>,
+    /// What stops this table building, if anything.
+    pub fault: Option<TableError>,
+}
+
+/// Read a `.cvunlock` **for a view**: the rows, plus whatever stops them building.
+///
+/// ▶ **The fault names its rows.** `Cycle` carries the ids in it, `UnknownSupersedes` the row and
+/// the id it could not find — enough to mark the offending rows in a table rather than print a
+/// sentence beside it.
+pub fn inspect_unlocks(src: &str) -> Result<InspectedUnlocks, LoadError> {
+    let rows = unlock_rows(src)?;
+    let fault = UnlockTable::build(rows.clone()).err();
+    Ok(InspectedUnlocks { rows, fault })
 }
 
 impl From<TableError> for LoadError {

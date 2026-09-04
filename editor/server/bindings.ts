@@ -49,6 +49,9 @@ export interface ProjectHandle {
 interface Addon {
   version(): string;
   mayPaste(fragment: string, into: string): boolean;
+  checkStateGraph(text: string): string;
+  readCurves(path: string, text: string): string;
+  readUnlocks(text: string): string;
   Project: {
     open(path: string): ProjectHandle;
     loadFromFile(path: string): ProjectHandle;
@@ -179,4 +182,32 @@ export function generate(project: ProjectHandle, seed: string): World {
  */
 export function mayPaste(fragment: string, into: string): boolean {
   return core().mayPaste(fragment, into);
+}
+
+/**
+ * Check a `.cvstate` document — the graph, its positions and its findings.
+ *
+ * ⚠ **The editor draws this and computes none of it.** The un-softlockable check over a state graph
+ * is the solver's own analysis, and *a check is not a view*.
+ *
+ * ▶ **One call, not two.** Fetching the graph and then the findings could draw a graph the findings
+ * do not describe.
+ */
+export function checkStateGraph(text: string): unknown {
+  return JSON.parse(core().checkStateGraph(text));
+}
+
+/** Read a `.cvcurve` and sample every row for drawing. */
+export function readCurves(path: string, text: string): unknown {
+  return JSON.parse(core().readCurves(path, text));
+}
+
+/**
+ * Read a `.cvunlock` for the table view.
+ *
+ * ⚠ **The rows come back even when the table will not build**, so a `supersedes` cycle is shown in
+ * the table rather than deferred to a build error.
+ */
+export function readUnlocks(text: string): unknown {
+  return JSON.parse(core().readUnlocks(text));
 }

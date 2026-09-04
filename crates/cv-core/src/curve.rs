@@ -192,6 +192,22 @@ impl CurveTable {
         &self.domain
     }
 
+    /// The x range a row's keys actually span.
+    ///
+    /// ⚠ **Sampling a curve over an assumed `0..1` draws the wrong picture.** `Row::sample` clamps
+    /// outside the keyed range, so a curve keyed over `0..12` previewed across `0..1` renders as a
+    /// flat line at its first value — and flat is exactly what a broken curve looks like.
+    ///
+    /// ▶ **A convenience over [`CurveTable::get`]**, which already reaches the row. It exists so a
+    /// caller asking *"where does this span"* does not have to walk into `Row.curve.points()` and take
+    /// the first and last itself — three chances to get it subtly wrong, in every caller.
+    pub fn extent(&self, row: &str) -> Option<(f64, f64)> {
+        let points = self.rows.get(row)?.curve.points();
+        let first = points.first()?;
+        let last = points.last()?;
+        Some((first.0, last.0))
+    }
+
     /// Every row name, in order.
     ///
     /// ⚠ **What the editor's row dropdown is generated from**, which is what makes a mistyped row
