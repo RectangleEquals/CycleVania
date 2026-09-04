@@ -53,11 +53,11 @@ const PAD = 56;
 
 /** ⚠ **Blocking faults and warnings look different**, because one is a mistake and one is a decision. */
 const FAULT_COLOUR: Record<Fault["kind"], string> = {
-  inaccessible: "#b4341f",
-  "dead-end": "#b4341f",
-  "unknown-state": "#b4341f",
-  "initial-unclear": "#b4341f",
-  "exit-gated": "#b8860b",
+  inaccessible: "var(--cv-err)",
+  "dead-end": "var(--cv-err)",
+  "unknown-state": "var(--cv-err)",
+  "initial-unclear": "var(--cv-err)",
+  "exit-gated": "var(--cv-warn)",
 };
 
 function esc(s: string): string {
@@ -100,9 +100,9 @@ export function drawStateGraph(view: StateGraphView): string {
   );
   parts.push(
     `<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" ` +
-      `markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#555"/></marker>` +
+      `markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--cv-muted)"/></marker>` +
       `<marker id="arrow-gated" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" ` +
-      `markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#b8860b"/></marker></defs>`,
+      `markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--cv-warn)"/></marker></defs>`,
   );
 
   // --- transitions first, so boxes sit on top -------------------------------------------
@@ -140,7 +140,7 @@ export function drawStateGraph(view: StateGraphView): string {
 
     parts.push(
       `<line x1="${sx.toFixed(1)}" y1="${sy.toFixed(1)}" x2="${ex.toFixed(1)}" y2="${ey.toFixed(1)}" ` +
-        `stroke="${gated ? "#b8860b" : "#555"}" stroke-width="1.6" ` +
+        `stroke="${gated ? "var(--cv-warn)" : "var(--cv-muted)"}" stroke-width="1.6" ` +
         `${gated ? 'stroke-dasharray="6 4" ' : ""}marker-end="url(#${gated ? "arrow-gated" : "arrow"})"/>`,
     );
     if (gated) {
@@ -156,7 +156,7 @@ export function drawStateGraph(view: StateGraphView): string {
       const ly = (y1 + y2) / 2 + (ny / mag) * clear + 4;
       parts.push(
         `<text x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" text-anchor="middle" font-size="11" ` +
-          `fill="#8a6508">${esc(t.requires.join(", "))}</text>`,
+          `fill="var(--cv-warn)">${esc(t.requires.join(", "))}</text>`,
       );
     }
   }
@@ -164,8 +164,8 @@ export function drawStateGraph(view: StateGraphView): string {
   // --- states ----------------------------------------------------------------------------
   for (const s of view.states) {
     const fault = worst.get(s.name);
-    const stroke = fault ? FAULT_COLOUR[fault.kind] : "#444";
-    const fill = fault ? (fault.blocks ? "#fdf0ee" : "#fdf7e8") : "#ffffff";
+    const stroke = fault ? FAULT_COLOUR[fault.kind] : "var(--cv-line)";
+    const fill = fault ? (fault.blocks ? "color-mix(in srgb, var(--cv-err) 18%, transparent)" : "color-mix(in srgb, var(--cv-warn) 18%, transparent)") : "var(--cv-raised)";
     const x = s.x - BOX_W / 2;
     const y = s.y - BOX_H / 2;
     parts.push(
@@ -173,12 +173,12 @@ export function drawStateGraph(view: StateGraphView): string {
         `stroke="${stroke}" stroke-width="${fault?.blocks ? 2.2 : 1.4}"/>`,
     );
     parts.push(
-      `<text x="${s.x}" y="${s.y + 1}" text-anchor="middle" font-size="14" fill="#222">${esc(s.name)}</text>`,
+      `<text x="${s.x}" y="${s.y + 1}" text-anchor="middle" font-size="14" fill="var(--cv-text)">${esc(s.name)}</text>`,
     );
     if (s.initial) {
       // ⚠ Where the variable starts, marked on the box rather than stated in prose beside it.
       parts.push(
-        `<text x="${s.x}" y="${s.y + 15}" text-anchor="middle" font-size="10" fill="#666">initial</text>`,
+        `<text x="${s.x}" y="${s.y + 15}" text-anchor="middle" font-size="10" fill="var(--cv-muted)">initial</text>`,
       );
     }
     if (fault) {

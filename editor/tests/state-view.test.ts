@@ -118,7 +118,11 @@ describe("faults are drawn on the box they are about", () => {
   it("marks the state a finding names", () => {
     // ⚠ Telling a developer "nobody can get here" when the truth is "nobody can leave" sends them to
     // the wrong end of the graph, so the badge goes on the right box.
-    expect(drawStateGraph(WATER)).toContain("#b8860b");
+    //
+    // ⚠ **Asserted as a token, not a hex.** These read `#b8860b` until the theme landed, and a test
+    // that names a literal colour is a second palette — it goes stale the moment the first one moves,
+    // and it fails on output that got *more* correct.
+    expect(drawStateGraph(WATER)).toContain("var(--cv-warn)");
   });
 
   it("shows a blocking fault differently from a warning", () => {
@@ -130,9 +134,9 @@ describe("faults are drawn on the box they are about", () => {
     // ⚠ **Assert on the box, not the whole document.** A first draft checked that amber was absent
     // entirely — but the gated *wire* is legitimately amber, so the test failed on correct output.
     const boxes = (svg: string) => svg.match(/<rect [^>]*>/g) ?? [];
-    expect(boxes(drawStateGraph(blocking)).some((r) => r.includes("#b4341f"))).toBe(true);
-    expect(boxes(drawStateGraph(WATER)).some((r) => r.includes("#b8860b"))).toBe(true);
-    expect(boxes(drawStateGraph(WATER)).some((r) => r.includes("#b4341f"))).toBe(false);
+    expect(boxes(drawStateGraph(blocking)).some((r) => r.includes("var(--cv-err)"))).toBe(true);
+    expect(boxes(drawStateGraph(WATER)).some((r) => r.includes("var(--cv-warn)"))).toBe(true);
+    expect(boxes(drawStateGraph(WATER)).some((r) => r.includes("var(--cv-err)"))).toBe(false);
   });
 
   it("marks the initial state on the box rather than in prose beside it", () => {

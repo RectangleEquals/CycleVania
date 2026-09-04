@@ -65,9 +65,37 @@ pub fn curves(path: &str, src: &str) -> Result<String, ContentError> {
                     format!("[{x:.4},{y:.4}]")
                 })
                 .collect();
+            // ⚠ **The authored keys, not only the samples.** A polyline is a *preview*; the editor
+            // Unreal ships lets a developer select a key and drag its tangent handles, and per-key
+            // interpolation is already in our format — an editor that only draws the result cannot
+            // author what the file can hold.
+            let row = table.get(name);
+            let keys: Vec<String> = row
+                .map(|r| {
+                    r.curve
+                        .points()
+                        .iter()
+                        .map(|(x, y)| format!("[{x:.4},{y:.4}]"))
+                        .collect()
+                })
+                .unwrap_or_default();
+            // ⚠ **The file's vocabulary, not the enum's.** `CUBIC` in a `.cvcurve` is
+            // `Interpolation::Smooth` in the core — the loader says so in as many words — so emitting
+            // the Debug name taught the editor a second word for one thing, and showed `SMOOTH` for a
+            // row a developer wrote `CUBIC` on. ▶ **The error they would hit names `CUBIC` too**, so
+            // the authored spelling is the one that crosses.
+            let interpolation = row
+                .map(|r| match r.interpolation {
+                    cv_core::curve::Interpolation::Linear => "LINEAR",
+                    cv_core::curve::Interpolation::Step => "STEP",
+                    cv_core::curve::Interpolation::Smooth => "CUBIC",
+                })
+                .unwrap_or("LINEAR");
             format!(
-                "{{\"name\":\"{}\",\"from\":{x0},\"to\":{x1},\"points\":[{}]}}",
+                "{{\"name\":\"{}\",\"from\":{x0},\"to\":{x1},\"interpolation\":\"{}\",\"keys\":[{}],\"points\":[{}]}}",
                 esc(name),
+                interpolation,
+                keys.join(","),
                 points.join(",")
             )
         })

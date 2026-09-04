@@ -85,3 +85,22 @@ fn the_strict_loader_still_refuses_what_the_view_shows() {
 fn a_malformed_table_is_refused_rather_than_half_drawn() {
     assert!(unlocks("{ not json").is_err());
 }
+
+#[test]
+fn a_curve_reports_the_spelling_the_file_used() {
+    // ⚠ **`CUBIC` in the file is `Interpolation::Smooth` in the core**, and the loader says so
+    // outright. Emitting the enum's Debug name showed `SMOOTH` for a row a developer wrote `CUBIC` on
+    // — a second word for one thing, on the side that has to match the error message they would hit,
+    // which also names `CUBIC`.
+    let json = curves("/Content/Curves/reach.cvcurve", CURVE).expect("reads");
+    assert!(json.contains("\"interpolation\":\"LINEAR\""), "{json}");
+    assert!(
+        !json.contains("SMOOTH"),
+        "the core's name must not cross the seam: {json}"
+    );
+
+    let cubic = CURVE.replace("LINEAR", "CUBIC");
+    let json = curves("/Content/Curves/reach.cvcurve", &cubic).expect("reads");
+    assert!(json.contains("\"interpolation\":\"CUBIC\""), "{json}");
+    assert!(!json.contains("SMOOTH"), "{json}");
+}

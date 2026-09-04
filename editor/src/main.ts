@@ -1,11 +1,16 @@
 /**
  * The editor's browser half.
  *
- * ⚠ **Views, not a layout.** Each panel below draws what `10-editor.md` §2 says must be visible. Where
- * they sit — docking, navigation between the nine — is §10's mockups, which have not happened, so this
- * stacks them and says so rather than inventing an arrangement nobody reviewed.
+ * ⚠ **A shell, not a docking system.** `10-editor.md` §10 still owes panel arrangement and how nine
+ * views share one window; those want mockups. ▶ A fixed topbar-navigator-stage-inspector arrangement
+ * that looks like an editor beats a white page while mockups are pending, and commits to nothing a
+ * docking system would have to undo.
+ *
+ * ⚠ **Every colour comes from the four theme parameters.** Nothing here picks a hex.
  */
 
+import { install } from "./theme.ts";
+import { drawContent, navigator, shellStyles, topbar, type ContentFilter, type NavGroup } from "./shell.ts";
 import { checkLine, drawStateGraph, type StateGraphView } from "./state-view.ts";
 import {
   FloorSlider,
@@ -61,6 +66,18 @@ const UNLOCKS = `{
   ]
 }`;
 
+/** Stand-in content, until a project is open. ⚠ Shaped like a real content root, not invented. */
+const SAMPLE_CONTENT = [
+  "schematics/Hookshot.cvs",
+  "schematics/Plaque.cvs",
+  "schematics/doors/IronDoor.cvs",
+  "spines/reach.cvspine",
+  "states/WaterLevel.cvstate",
+  "curves/progression.cvcurve",
+  "progression/unlocks.cvunlock",
+  "tags/surfaces.cvtags",
+];
+
 async function post<T>(route: string, payload: unknown): Promise<T> {
   const res = await fetch(route, {
     method: "POST",
@@ -70,141 +87,132 @@ async function post<T>(route: string, payload: unknown): Promise<T> {
   return (await res.json()) as T;
 }
 
-function panel(title: string, note: string): HTMLElement {
-  const el = document.createElement("section");
-  el.style.cssText = "margin:0 0 30px";
-  el.innerHTML =
-    `<h2 style="font:600 12px ui-sans-serif,system-ui;letter-spacing:.06em;text-transform:uppercase;` +
-    `color:#555;margin:0 0 2px">${title}</h2>` +
-    `<p style="font:12px ui-sans-serif,system-ui;color:#8a8a8a;margin:0 0 10px;max-width:62ch">${note}</p>`;
-  return el;
-}
-
-function boxed(html: string): HTMLElement {
-  const d = document.createElement("div");
-  d.style.cssText = "border:1px solid #e6e6e6;border-radius:8px;padding:10px;background:#fff";
-  d.innerHTML = html;
-  return d;
+function card(title: string, note: string, body: string): string {
+  return `<div class="cv-card"><h3>${title}</h3><p class="cv-note">${note}</p>${body}</div>`;
 }
 
 async function main(): Promise<void> {
-  const app = document.querySelector("#app");
+  const app = document.querySelector<HTMLElement>("#app");
   if (!app) return;
-  app.textContent = "";
-  Object.assign((app as HTMLElement).style, {
-    font: "14px ui-sans-serif, system-ui, sans-serif",
-    color: "#222",
-    padding: "24px 28px",
-    maxWidth: "820px",
-  });
+  install();
 
-  const version = document.createElement("p");
-  version.style.cssText = "font:12px ui-monospace,monospace;color:#999;margin:0 0 4px";
-  app.appendChild(version);
+  const style = document.createElement("style");
+  style.textContent = shellStyles();
+  document.head.appendChild(style);
 
-  const caveat = document.createElement("p");
-  caveat.style.cssText = "font:12px ui-sans-serif,system-ui;color:#b8860b;margin:0 0 24px";
-  caveat.textContent =
-    "Views, stacked. Panel arrangement and navigation are still waiting on mockups (10-editor §10).";
-  app.appendChild(caveat);
-
+  let version = "";
   try {
-    version.textContent = (await (await fetch("/api/version")).json()).version;
+    version = (await (await fetch("/api/version")).json()).version;
   } catch {
-    version.textContent = "the editor service is not running — `npm run serve`";
+    app.innerHTML = `<div class="cv-empty">the editor service is not running — \`npm run serve\`</div>`;
     return;
   }
 
-  // --- State graph ------------------------------------------------------------------------
-  const state = panel(
-    "State graph",
-    "Nodes are settings of a variable; edges are transitions with what they cost. The check is the core's.",
-  );
-  const view = await post<StateGraphView>("/api/state", { rel: "", text: WATER });
-  state.appendChild(boxed(drawStateGraph(view)));
-  const line = document.createElement("pre");
-  line.style.cssText = `font:12px ui-monospace,monospace;white-space:pre-wrap;margin:10px 0 0;color:${
-    view.satisfiesP15 ? "#2f6f3e" : "#b4341f"
-  }`;
-  line.textContent = checkLine(view);
-  state.appendChild(line);
-  app.appendChild(state);
-
-  // --- Curve editor -----------------------------------------------------------------------
-  const curves = panel(
-    "Curve editor",
-    "Rows are sampled by the core, each scaled to its own extent — a shared scale would flatten a small row beside a large one, and flat is what a broken curve looks like.",
-  );
-  const table = await post<CurveTableView>("/api/curves", {
+  const state = await post<StateGraphView>("/api/state", { rel: "", text: WATER });
+  const curves = await post<CurveTableView>("/api/curves", {
     path: "/Content/Curves/progression.cvcurve",
     text: CURVES,
   });
-  curves.appendChild(boxed(drawCurveTable(table)));
-  const thumbs = document.createElement("div");
-  thumbs.style.cssText = "display:flex;gap:14px;align-items:center;margin-top:10px";
-  thumbs.innerHTML = table.rows
-    .map(
-      (r) =>
-        `<span style="display:flex;align-items:center;gap:6px;font:11px ui-sans-serif,system-ui;color:#666">` +
-        `${curveThumbnail(r)}${r.name}</span>`,
-    )
-    .join("");
-  curves.appendChild(thumbs);
-  app.appendChild(curves);
+  const unlocks = await post<UnlockTableView>("/api/unlocks", { text: UNLOCKS });
 
-  // --- Unlock table -----------------------------------------------------------------------
-  const unlocks = panel(
-    "Unlock table",
-    "id is a read-only column, not a per-row rule. A supersedes cycle is shown here, on the rows that form it — not deferred to a build error.",
-  );
-  unlocks.appendChild(boxed(drawUnlockTable(await post<UnlockTableView>("/api/unlocks", { text: UNLOCKS }))));
-  app.appendChild(unlocks);
+  // ⚠ **"No project open" is not "no dials"** — the API distinguishes them with a 409 and the view
+  // must not collapse that back.
+  const dialsRes = await fetch("/api/dials");
+  const dials: DialRowView[] = dialsRes.status === 409 ? [] : ((await dialsRes.json()).dials ?? []);
+  const noProject = dialsRes.status === 409;
 
-  // --- Dials ------------------------------------------------------------------------------
-  const dials = panel(
-    "Dials",
-    "project.dials, with no state of its own — the same list/get/set a host calls. default and effective both, because neither is derivable from the other.",
-  );
-  // ⚠ **"No project open" and "an open project with no dials" are different states**, and the API
-  // says so with a 409. A first draft caught that and returned `[]`, which put *"this project declares
-  // no dials"* on screen when no project was open — flattening the distinction the binding took care
-  // to make, and logging a console error on every load for good measure.
-  const res = await fetch("/api/dials");
-  if (res.status === 409) {
-    dials.appendChild(
-      boxed(
-        `<p style="font:13px ui-sans-serif,system-ui;color:#8a8a8a;margin:0">` +
-          `No project is open, so there are no dials to turn. Open one to see them.</p>`,
-      ),
-    );
-  } else {
-    const shown: DialRowView[] = (await res.json()).dials ?? [];
-    dials.appendChild(boxed(drawDials(shown)));
-  }
-  app.appendChild(dials);
+  const groups: NavGroup[] = [
+    {
+      title: "Views",
+      items: [
+        { id: "content", label: "Content", hint: `${SAMPLE_CONTENT.length}` },
+        { id: "state", label: "State graph", hint: state.variable },
+        { id: "curves", label: "Curve editor", hint: `${curves.rows.length}` },
+        { id: "unlocks", label: "Unlock table", hint: `${unlocks.rows.length}` },
+        { id: "dials", label: "Dials", hint: noProject ? "—" : `${dials.length}` },
+      ],
+    },
+    {
+      title: "Not yet built",
+      items: [
+        { id: "schematic", label: "Schematic editor", hint: "M16" },
+        { id: "mission", label: "Mission graph", hint: "M24" },
+        { id: "skeleton", label: "Skeleton", hint: "M26" },
+        { id: "trace", label: "Trace", hint: "M21" },
+      ],
+    },
+  ];
 
-  // --- Floor slider -----------------------------------------------------------------------
+  const filter: ContentFilter = { kinds: [], folder: "", search: "" };
   const floor = new FloorSlider();
-  const fp = panel(
-    "Floor",
-    "Shared state from the start, because M20 links it to the skeleton. Lifting it later would mean finding every place that read a private copy.",
-  );
-  const readout = document.createElement("span");
-  readout.style.cssText = "font:12px ui-monospace,monospace;color:#555;margin-left:10px";
-  floor.onChange((f) => (readout.textContent = `floor ${f}`));
-  const input = document.createElement("input");
-  input.type = "range";
-  input.min = "0";
-  input.max = "6";
-  input.value = "0";
-  input.addEventListener("input", () => floor.set(Number(input.value)));
   floor.set(2);
-  input.value = "2";
-  const row = document.createElement("div");
-  row.style.cssText = "display:flex;align-items:center";
-  row.append(input, readout);
-  fp.appendChild(boxed(row.outerHTML));
-  app.appendChild(fp);
+
+  app.innerHTML =
+    topbar(version, ["Editor", "Play"], "Editor") +
+    `<div class="cv-body">` +
+    `<div class="cv-nav">${navigator(groups, "state")}</div>` +
+    `<div class="cv-stage">` +
+    card(
+      "State graph",
+      "Nodes are settings of a variable; edges are transitions with what they cost. The check is the core's.",
+      drawStateGraph(state) +
+        `<pre class="cv-mono ${state.satisfiesP15 ? "cv-ok" : "cv-err"}" ` +
+        `style="white-space:pre-wrap;margin:10px 0 0">${checkLine(state)}</pre>`,
+    ) +
+    card(
+      "Curve editor",
+      "Keys are objects, not samples — select one to see its tangent handles. Per-row interpolation is in the format.",
+      drawCurveTable(curves, 460, 190, { row: "complexity", key: 1 }) +
+        `<div style="display:flex;gap:14px;align-items:center;margin-top:10px">` +
+        curves.rows
+          .map(
+            (r) =>
+              `<span style="display:flex;align-items:center;gap:6px;font-size:11px" class="cv-dim">` +
+              `${curveThumbnail(r)}${r.name}</span>`,
+          )
+          .join("") +
+        `</div>`,
+    ) +
+    card(
+      "Unlock table",
+      "id is a read-only column. A supersedes cycle is shown on the rows that form it, not deferred to a build error.",
+      drawUnlockTable(unlocks),
+    ) +
+    card(
+      "Dials",
+      "project.dials, with no state of its own — the same list/get/set a host calls.",
+      noProject
+        ? `<p class="cv-empty">No project is open, so there are no dials to turn. Open one to see them.</p>`
+        : drawDials(dials),
+    ) +
+    `</div>` +
+    `<div class="cv-inspector">` +
+    `<div class="cv-h">Content</div>` +
+    drawContent(SAMPLE_CONTENT, filter) +
+    `<div class="cv-h" style="margin-top:14px">Floor</div>` +
+    `<input id="cv-floor" class="cv-search" type="range" min="0" max="6" value="${floor.floor}" style="padding:0"/>` +
+    `<div id="cv-floor-read" class="cv-dim" style="font:11px ui-monospace,monospace;margin-top:4px">band ${floor.floor}</div>` +
+    `</div></div>`;
+
+  // ⚠ Interaction, so the states are real rather than drawn: the navigator selects, filters stack.
+  app.querySelectorAll<HTMLElement>(".cv-nav .cv-row").forEach((row) =>
+    row.addEventListener("click", () => {
+      app.querySelectorAll(".cv-nav .cv-row").forEach((r) => r.classList.remove("is-selected"));
+      row.classList.add("is-selected");
+    }),
+  );
+  app.querySelectorAll<HTMLElement>(".cv-chip").forEach((chip) =>
+    chip.addEventListener("click", () => chip.classList.toggle("is-on")),
+  );
+
+  // ⚠ **The readout was rendered once and never moved.** The slider sat at 2 while the label said
+  // 0 — a control that disagrees with its own value is worse than no readout, because it is believed.
+  const slider = app.querySelector<HTMLInputElement>("#cv-floor");
+  const readout = app.querySelector<HTMLElement>("#cv-floor-read");
+  floor.onChange((f) => {
+    if (readout) readout.textContent = `band ${f}`;
+  });
+  slider?.addEventListener("input", () => floor.set(Number(slider.value)));
 }
 
 void main();

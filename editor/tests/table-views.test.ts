@@ -13,6 +13,7 @@ import {
   drawCurveTable,
   drawDials,
   drawUnlockTable,
+  type CurveRow,
   type CurveTableView,
   type DialRowView,
   type UnlockTableView,
@@ -24,14 +25,31 @@ const sample = (from: number, to: number, f: (x: number) => number, n = 24) =>
     return [x, f(x)] as [number, number];
   });
 
+/** A row, with the keys and interpolation the format carries. */
+const row = (
+  name: string,
+  from: number,
+  to: number,
+  f: (x: number) => number,
+  interpolation = "LINEAR",
+): CurveRow => ({
+  name,
+  from,
+  to,
+  interpolation,
+  keys: [
+    [from, f(from)],
+    [(from + to) / 2, f((from + to) / 2)],
+    [to, f(to)],
+  ],
+  points: sample(from, to, f),
+});
+
 const CURVES: CurveTableView = {
   path: "/Content/Curves/progression.cvcurve",
   domain: "depth",
   yLabel: "multiplier",
-  rows: [
-    { name: "big", from: 0, to: 12, points: sample(0, 12, (x) => x * 10) },
-    { name: "small", from: 0, to: 12, points: sample(0, 12, (x) => x * 0.01) },
-  ],
+  rows: [row("big", 0, 12, (x) => x * 10), row("small", 0, 12, (x) => x * 0.01, "CUBIC")],
 };
 
 describe("P03 — the Curve editor", () => {
@@ -47,7 +65,7 @@ describe("P03 — the Curve editor", () => {
   it("draws over the row's own x range, not an assumed 0..1", () => {
     const shifted: CurveTableView = {
       ...CURVES,
-      rows: [{ name: "late", from: 100, to: 200, points: sample(100, 200, (x) => x) }],
+      rows: [row("late", 100, 200, (x) => x)],
     };
     const points = /points="([^"]+)"/.exec(curveThumbnail(shifted.rows[0]!))?.[1] ?? "";
     const xs = points.split(" ").map((p) => Number(p.split(",")[0]));
@@ -61,9 +79,29 @@ describe("P03 — the Curve editor", () => {
   });
 
   it("gives each row its own colour so a legend means something", () => {
+    // ⚠ **Series colours stay literal on purpose.** They are data identity, not chrome — Unreal's
+    // graphs fix them per series too — so they are the one thing here that is not a theme token.
     const svg = drawCurveTable(CURVES);
-    expect(svg).toContain("#3a6ea5");
-    expect(svg).toContain("#b8860b");
+    expect(svg).toContain("#5aab55");
+    expect(svg).toContain("#e0a33a");
+  });
+
+  it("draws the authored keys, not only the sampled line", () => {
+    // ⚠ A polyline is a *preview*; a key is a thing a developer selects and moves.
+    const svg = drawCurveTable(CURVES);
+    expect((svg.match(/<rect [^>]*data-row=/g) ?? []).length).toBe(6);
+  });
+
+  it("shows tangent handles on a selected CUBIC key, and none on a LINEAR one", () => {
+    // ⚠ A LINEAR row has no tangent to edit; an inert handle invites a drag that cannot move.
+    const cubic = drawCurveTable(CURVES, 460, 190, { row: "small", key: 1 });
+    const linear = drawCurveTable(CURVES, 460, 190, { row: "big", key: 1 });
+    expect(cubic).toContain("#e8e8e8");
+    expect(linear).not.toContain("#e8e8e8");
+  });
+
+  it("names each row's interpolation, because the format carries it per row", () => {
+    expect(drawCurveTable(CURVES)).toContain("CUBIC");
   });
 });
 
@@ -86,19 +124,22 @@ describe("P03a — the Unlock table", () => {
     // eye, which is the work this replaces.
     const html = drawUnlockTable(CYCLE);
     const rows = html.split("<tr").slice(1);
-    const marked = rows.filter((r) => r.includes("#fdf0ee"));
+    // ⚠ **Count the marked rows, not mentions of the token.** `--cv-err` also appears in the
+    // supersedes *text* of a faulted row, so counting the token counts some rows twice and the
+    // assertion drifts from what it claims to check.
+    const marked = rows.filter((r) => r.includes("is-faulted"));
     expect(marked).toHaveLength(2);
     expect(marked.every((r) => r.includes("u_a") || r.includes("u_b"))).toBe(true);
   });
 
   it("does not mark the innocent row", () => {
-    expect(drawUnlockTable(CYCLE).split("<tr").find((r) => r.includes("u_c"))).not.toContain("#fdf0ee");
+    expect(drawUnlockTable(CYCLE).split("<tr").find((r) => r.includes("u_c"))).not.toContain("is-faulted");
   });
 
   it("dedupes a cycle path so a row is not marked twice", () => {
     // ⚠ The fault carries `a → b → a`; a naive pass marks `u_a` for arriving and again for closing.
     const html = drawUnlockTable(CYCLE);
-    expect(html.split("#fdf0ee").length - 1).toBe(2);
+    expect(html.split("is-faulted").length - 1).toBe(2);
   });
 
   it("marks id read-only as a column, not per row", () => {
@@ -150,7 +191,7 @@ describe("P04 — the Dials view", () => {
   it("marks an out-of-bounds value as a warning rather than hiding it", () => {
     // ⚠ Content may have authored a default outside a range it later narrowed — hiding the dial would
     // hide the mistake.
-    expect(drawDials(DIALS)).toContain("#b8860b");
+    expect(drawDials(DIALS)).toContain("--cv-warn");
   });
 
   it("says where a changed value came from", () => {
