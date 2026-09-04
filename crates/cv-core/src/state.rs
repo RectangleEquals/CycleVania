@@ -1,20 +1,32 @@
-//! **The state-graph view** — nodes are settings of a variable, edges are transitions.
+//! **State graphs, and the un-softlockable check over them.**
 //!
-//! ⚠ **P15 becomes a property of a picture the developer is looking at**, rather than a paragraph in a
-//! report. *"`high` is accessible but `low` is not accessible from it without Iron Boots"* is drawn on
-//! the graph that caused it, at the moment it is caused.
+//! A bounded state machine: nodes are settings of one variable, edges are transitions with what they
+//! cost. ⚠ **One graph, two problems** — it is the authoring surface for a multi-element puzzle *and*
+//! for the world-state axis of the solve.
 //!
-//! # The hard case shows up as a cycle that does not close
+//! # Why this is core rather than the editor's
 //!
-//! ⚠ **A control that is itself state-gated** is the case nobody catches by reading — the transition
-//! back exists, and it needs something only the far state grants. On a drawing it is a one-way arrow
-//! with no return, which is the shape an eye finds instantly and a report buries in prose.
+//! ⚠ **A host has every reason to ask it.** *"Can this world strand a player?"* is the same question
+//! [`crate::softlock`] answers over the mission graph; this answers it over the other graph. The editor
+//! **draws the result** and owns none of it — a check is not a view.
+//!
+//! ▶ **It was in the editor for three milestones**, because the editor was the first caller. Being
+//! the first caller does not make you the owner.
 //!
 //! # Re-enterability, not reachability
 //!
-//! ⚠ **The question is not *"can I get to `open`"* but *"having got there, can I get back"*.** A state
-//! machine where every state is reachable from the initial one can still strand a player the moment they
-//! enter the wrong one, and that is exactly the softlock this check exists to find.
+//! ⚠ **The question is not *"can I get to `open`"* but *"having got there, can I get back"*.** A
+//! state machine where every state is reachable from the initial one can still strand a player the
+//! moment they enter the wrong one, and that is exactly the softlock this finds.
+//!
+//! ⚠ **Unlocks are monotone and states are not.** That is the whole reason this analysis exists
+//! separately: [`crate::softlock`] may assume progress never reverses, and here *"being too slow undoes
+//! progress"* is an ordinary edge.
+//!
+//! # The hard case is a cycle that does not close
+//!
+//! ⚠ **A control that is itself state-gated** is the case nobody catches by reading — the transition
+//! back exists, and it needs something only the far state grants.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
@@ -47,7 +59,7 @@ pub struct Transition {
     pub via: String,
 }
 
-/// What the view found, drawn on the graph.
+/// What the check found.
 ///
 /// ⚠ **A finding names states, not indices.** The developer is looking at a picture with names on it,
 /// and a message about `state[2]` would make them count.
@@ -63,7 +75,7 @@ pub enum Finding {
     DeadEnd { state: String },
     /// A state that can only be left by holding something.
     ///
-    /// ⚠ **The scenario's own warning line.** Not an error, because gating a way back is a legitimate
+    /// ⚠ **A warning, not an error.** Not an error, because gating a way back is a legitimate
     /// design — it is a *potential* softlock, and how many paths it affects is what tells a developer
     /// whether to care.
     ExitGated {
@@ -122,7 +134,7 @@ impl fmt::Display for Finding {
     }
 }
 
-/// A `.cvstate` as the view holds it.
+/// A `.cvstate` graph.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct StateGraph {
     /// What the graph settles.
@@ -172,11 +184,11 @@ impl StateGraph {
         }
     }
 
-    /// **The P15 check, drawn.**
+    /// **The P15 check.**
     ///
-    /// ⚠ **Run on every edit rather than on demand.** A check a developer has to ask for is a check
-    /// they ask for after the mistake, and the whole value here is that it is visible while the graph is
-    /// being drawn.
+    /// ⚠ **Cheap enough to run on every edit.** A check a developer has to ask for is a check they
+    /// ask for after the mistake; the editor runs this while the graph is being drawn, which is only
+    /// possible because it costs a couple of graph walks.
     pub fn check(&self) -> Vec<Finding> {
         let mut out = Vec::new();
         let names: BTreeSet<&str> = self.states.iter().map(|s| s.name.as_str()).collect();
@@ -296,24 +308,10 @@ impl StateGraph {
         !self.check().iter().any(Finding::blocks)
     }
 
-    /// The line the view draws under the graph.
+    /// How many transitions leave each state.
     ///
-    /// ⚠ **A sentence, not a count.** *"3 findings"* tells a developer to go looking; the sentence is
-    /// the thing they act on.
-    pub fn check_line(&self) -> String {
-        let findings = self.check();
-        if findings.is_empty() {
-            return "✓ every state re-enterable. No dead state. P15 satisfied on this graph."
-                .to_string();
-        }
-        findings
-            .iter()
-            .map(|f| format!("⚠ {f}"))
-            .collect::<Vec<_>>()
-            .join("\n")
-    }
-
-    /// How many transitions leave each state, for the drawing.
+    /// ⚠ **A property of the graph, not of any view of it.** The editor draws it; a host that
+    /// wants to know how constrained a state is reads the same number.
     pub fn out_degree(&self) -> BTreeMap<&str, usize> {
         let mut out: BTreeMap<&str, usize> =
             self.states.iter().map(|s| (s.name.as_str(), 0)).collect();
@@ -356,7 +354,10 @@ mod tests {
         let g = door_latch();
         assert!(g.check().is_empty(), "{:?}", g.check());
         assert!(g.satisfies_p15());
-        assert!(g.check_line().starts_with("✓ every state re-enterable"));
+        assert!(
+            g.check().is_empty(),
+            "nothing to report is the passing shape"
+        );
     }
 
     #[test]
@@ -375,7 +376,7 @@ mod tests {
             }]
         );
         assert!(!broken.satisfies_p15());
-        assert!(broken.check_line().contains("strands the variable"));
+        assert!(findings[0].to_string().contains("strands the variable"));
     }
 
     #[test]
@@ -390,7 +391,7 @@ mod tests {
                 paths_affected: 1,
             }]
         );
-        let line = water_level().check_line();
+        let line = findings[0].to_string();
         assert!(line.contains("Iron Boots"));
         assert!(line.contains("potential softlock"));
         assert!(line.contains("1 path(s) affected"));

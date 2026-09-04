@@ -83,6 +83,7 @@ pub mod shape;
 pub mod softlock;
 pub mod solver;
 pub mod spine;
+pub mod state;
 pub mod surface;
 pub mod tag;
 pub mod trivalent;

@@ -197,20 +197,6 @@ name = "cv-determinism"
 version = "0.1.0"
 
 [[package]]
-name = "cv-editor-backend"
-version = "0.1.0"
-dependencies = [
- "cv-api",
- "cv-assets",
- "cv-bindings",
- "cv-compile",
- "cv-core",
- "cv-cvb",
- "cv-determinism",
- "cv-vm",
-]
-
-[[package]]
 name = "cv-manifest"
 version = "0.1.0"
 
