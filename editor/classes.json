@@ -1,0 +1,2103 @@
+{
+  "generated": " GENERATED — do not edit.   Source: manifest/tier1.toml  Regenerate: cargo xtask generate   Every edit here is lost on the next run. Change the manifest instead — it is the  only file in this system that is authored by hand.",
+  "classes": [
+    {
+      "path": "/Core/Object",
+      "name": "Object",
+      "kind": "object",
+      "ancestry": [],
+      "doc": "The root of everything with identity. Has metadata, has a rationale, can be asked what it is.",
+      "fields": [
+        { "name": "id", "type": "ObjectId", "exposed": false, "mutable": false, "api": true, "doc": "Opaque identity. A string or opaque handle — NEVER a u64, because TS integers alias past 2^53." },
+        { "name": "type_path", "type": "String", "exposed": false, "mutable": false, "api": true, "doc": "The mount-pointed class path this object was instantiated from." },
+        { "name": "rationale", "type": "Ref<Rationale>", "exposed": false, "mutable": false, "api": true, "doc": "Why the core did what it did with this object. Core-written." },
+        { "name": "meta_keys", "type": "Array<String>", "exposed": false, "mutable": false, "api": true, "doc": "Every metadata key currently set." }
+      ],
+      "methods": [
+        { "name": "is_a", "hook": false, "api": true, "returns": "bool", "doc": "Class-membership test against a picked class path." },
+        { "name": "equals", "hook": false, "api": true, "returns": "bool", "doc": "Identity comparison. Never a float comparison." },
+        { "name": "format", "hook": false, "api": true, "returns": "String", "doc": "Short display form.", "default": "TypeName#id" },
+        { "name": "explain", "hook": false, "api": true, "returns": "String", "doc": "Prose a developer reads in the trace.", "default": "format()" },
+        { "name": "meta", "hook": false, "api": true, "returns": "MetaValue", "doc": "Read one metadata value." },
+        { "name": "set_meta", "hook": false, "api": true, "returns": "void", "doc": "Write one metadata value. The CV_ prefix is reserved for the core and rejected here." },
+        { "name": "has_meta", "hook": false, "api": true, "returns": "bool", "doc": "Is this key set?" },
+        { "name": "remove_meta", "hook": false, "api": true, "returns": "void", "doc": "Clear one metadata value." },
+        { "name": "_configure", "hook": true, "api": true, "returns": "void", "doc": "Setup phase 1. Own configuration only; other content may not exist yet." },
+        { "name": "_resolve", "hook": true, "api": true, "returns": "void", "doc": "Setup phase 2. Every registered content class now exists and may be referenced." }
+      ]
+    },
+    {
+      "path": "/Core/Actor",
+      "name": "Actor",
+      "kind": "object",
+      "extends": "/Core/Object",
+      "ancestry": ["/Core/Object"],
+      "doc": "Something placeable in a world. The only thing the core places, and the sole point of contact between content and generation.",
+      "fields": [
+        { "name": "components", "type": "Array<Ref<Component>>", "exposed": false, "mutable": false, "api": true, "doc": "Attached components, in attach order — which is the order every aggregating hook walks." },
+        { "name": "parent", "type": "Ref<Actor>", "exposed": false, "mutable": false, "api": true, "doc": "The actor this one is mounted on, if any." },
+        { "name": "children", "type": "Array<Ref<Actor>>", "exposed": false, "mutable": false, "api": true, "doc": "Actors mounted on this one." },
+        { "name": "transform", "type": "Transform", "exposed": true, "mutable": true, "api": true, "doc": "Local transform relative to the parent." },
+        { "name": "skip_policy", "type": "SkipPolicy", "exposed": true, "mutable": true, "api": true, "doc": "Whether alternative routes past this actor's gate are tolerated, reported, or actively forbidden. Inert unless gate() is non-trivial.", "default": "TOLERATED" },
+        { "name": "discoverability", "type": "float", "exposed": true, "mutable": true, "api": true, "doc": "The declared likelihood a player finds this gate's solution unprompted. Declared because it is not derivable; above the threshold the solver treats the gate as open, conservatively, and names it in the trace.", "default": "1.0" }
+      ],
+      "methods": [
+        { "name": "component", "hook": false, "api": true, "returns": "Ref<Component>", "doc": "First attached component of that kind." },
+        { "name": "components_of", "hook": false, "api": true, "returns": "Array<Ref<Component>>", "doc": "Every attached component of that kind." },
+        { "name": "add_component", "hook": false, "api": true, "returns": "void", "doc": "Attach a component." },
+        { "name": "remove_component", "hook": false, "api": true, "returns": "void", "doc": "Detach a component." },
+        { "name": "attach_to", "hook": false, "api": true, "returns": "void", "doc": "Mount this actor onto another at a named socket." },
+        { "name": "world_transform", "hook": false, "api": true, "returns": "Transform", "doc": "Absolute transform. Walks the parent chain, so it is not free." },
+        { "name": "pivot", "hook": true, "api": true, "returns": "Vec3", "doc": "The point this actor rotates and mounts about.", "default": "Vec3.ZERO" },
+        { "name": "bounds", "hook": true, "api": true, "returns": "Aabb", "doc": "Axis-aligned extent.", "default": "union of component bounds" },
+        { "name": "footprint", "hook": true, "api": true, "returns": "Ref<CollisionBody>", "doc": "The space this reserves during skeleton layout.", "default": "union of component collision" },
+        { "name": "clearance", "hook": true, "api": true, "returns": "Ref<CollisionBody>", "doc": "Space that must stay empty around this actor. Called per candidate position, so it must stay cheap.", "default": "empty" },
+        { "name": "collision", "hook": true, "api": true, "returns": "Ref<CollisionBody>", "doc": "What this actor physically blocks.", "default": "union of component collision" },
+        { "name": "mount_faces", "hook": true, "api": true, "returns": "Array<Face>", "doc": "Which faces this may be mounted against. Floor, wall or ceiling is what distinguishes a chest from a sconce from a chandelier.", "default": "[ POS_Y ]" },
+        { "name": "up_axis", "hook": true, "api": true, "returns": "Vec3", "doc": "Which direction is up for this actor.", "default": "Vec3.UP" },
+        { "name": "yaw_snap", "hook": true, "api": true, "returns": "int", "doc": "Rotational quantisation about the up axis. 0 = free, 4 = 90 degrees.", "default": "4" },
+        { "name": "allow_pitch", "hook": true, "api": true, "returns": "bool", "doc": "May the solver tilt this out of the up axis?", "default": "false" },
+        { "name": "allow_roll", "hook": true, "api": true, "returns": "bool", "doc": "May the solver roll this about its forward axis?", "default": "false" },
+        { "name": "scalable", "hook": true, "api": true, "returns": "Span", "doc": "Permitted uniform scale range. A lever a fixed-template system cannot have; convexity is affine-invariant, so the collision cache survives it.", "default": "Span(1, 1)" },
+        { "name": "uniform_scale_only", "hook": true, "api": true, "returns": "bool", "doc": "Forbid non-uniform scaling.", "default": "true" },
+        { "name": "embed_depth", "hook": true, "api": true, "returns": "Span", "doc": "How far this may sink into the surface it mounts on.", "default": "Span(0, 0)" },
+        { "name": "constraints", "hook": true, "api": true, "returns": "Array<Ref<Constraint>>", "doc": "Hard placement constraints. A door names its own unlock here, which is where key-to-lock distance is written.", "default": "[]" },
+        { "name": "preferences", "hook": true, "api": true, "returns": "Array<Ref<Preference>>", "doc": "Soft placement biases. Relaxable, and reported when relaxed.", "default": "[]" },
+        { "name": "eligible_roles", "hook": true, "api": true, "returns": "Array<Role>", "doc": "Which roles this actor may be assigned. Role is an output; this only narrows the candidate set.", "default": "all roles" },
+        { "name": "schedule", "hook": true, "api": true, "returns": "Array<Ref<ScheduleRule>>", "doc": "Ordering rules relative to other content.", "default": "[]" },
+        { "name": "quota", "hook": true, "api": true, "returns": "Quota", "doc": "How many of this may exist, per scope." },
+        { "name": "weight", "hook": true, "api": true, "returns": "float", "doc": "Selection bias among eligible candidates.", "default": "1.0" },
+        { "name": "repulsion", "hook": true, "api": true, "returns": "float", "doc": "How strongly instances of this push away from each other. A pressure, never an obligation.", "default": "0.0" },
+        { "name": "enables", "hook": true, "api": true, "returns": "Array<Ref<Interaction>>", "doc": "What can be done here.", "default": "aggregate enabled components in attach order" },
+        { "name": "requires", "hook": true, "api": true, "returns": "Array<Ref<PlacementNeed>>", "doc": "What must exist near me for my mechanic to work. This is the hook that makes the generator place enabling content.", "default": "aggregate enabled components in attach order" },
+        { "name": "forbids", "hook": true, "api": true, "returns": "Array<Ref<Exclusion>>", "doc": "What must NOT be near me. The negative half of an obligation.", "default": "aggregate enabled components in attach order" },
+        { "name": "judge", "hook": true, "api": true, "returns": "Ref<Verdict>", "doc": "Is this proposal good, and how wrong is it? The magnitude is the point: a boolean turns the placement search into a reroll.", "default": "AcceptedVerdict" },
+        { "name": "gate", "hook": true, "api": true, "returns": "Ref<Rule>", "doc": "What the occupant must hold to pass.", "default": "AlwaysRule" },
+        { "name": "harm", "hook": true, "api": true, "returns": "Harm", "doc": "Is this dangerous, how much, and is it avoidable?", "default": "Harm.NONE" },
+        { "name": "grants", "hook": true, "api": true, "returns": "Array<Unlock>", "doc": "Unlocks the occupant keeps after reaching this. ROWS of an UnlockTableResource, never classes — the lattice is over identities and a row id already is one. An unlock carries NO behaviour: every mechanical consequence belongs to a Component.", "default": "aggregate enabled components in attach order" },
+        { "name": "on_proposed", "hook": true, "api": true, "returns": "void", "doc": "Event: the solver is considering this position." },
+        { "name": "on_placed", "hook": true, "api": true, "returns": "void", "doc": "Event: this actor was committed to a position." },
+        { "name": "on_rejected", "hook": true, "api": true, "returns": "void", "doc": "Event: a candidate position was refused, with the verdict that refused it." },
+        { "name": "on_obtained", "hook": true, "api": true, "returns": "void", "doc": "Event: an occupant reached this and took what it grants." },
+        { "name": "on_component_changed", "hook": true, "api": true, "returns": "void", "doc": "Event: an attached component invalidated itself." },
+        { "name": "on_finalized", "hook": true, "api": true, "returns": "void", "doc": "Event: generation is complete and this actor is realized." },
+        { "name": "reset", "hook": true, "api": true, "returns": "void", "doc": "Event: the solver is backtracking past this actor. Lets a rewind be clean." }
+      ]
+    },
+    {
+      "path": "/Core/Item",
+      "name": "Item",
+      "kind": "object",
+      "extends": "/Core/Actor",
+      "ancestry": ["/Core/Actor", "/Core/Object"],
+      "doc": "An obtainable actor. The thing that hands out unlocks, as distinct from the unlocks themselves.",
+      "fields": [
+      ],
+      "methods": [
+        { "name": "classification", "hook": true, "api": true, "returns": "ItemClass", "doc": "What kind of reward this is. An INPUT the developer declares, never an output — and it defaults to the conservative answer.", "default": "PROGRESSION" },
+        { "name": "quantity", "hook": true, "api": true, "returns": "Quantity", "doc": "How many, and whether taking it consumes it.", "default": "Quantity(1, 1, false)" },
+        { "name": "replenishes", "hook": true, "api": true, "returns": "Replenish", "doc": "Whether and how this comes back.", "default": "NEVER" }
+      ]
+    },
+    {
+      "path": "/Core/Component",
+      "name": "Component",
+      "kind": "object",
+      "extends": "/Core/Object",
+      "ancestry": ["/Core/Object"],
+      "doc": "An attachable behaviour with its own transform. The seven hooks have the same signatures as Actor, and this is where a mechanic is written.",
+      "fields": [
+        { "name": "owner", "type": "Ref<Actor>", "exposed": false, "mutable": false, "api": true, "doc": "The actor this is attached to." },
+        { "name": "enabled", "type": "bool", "exposed": true, "mutable": true, "api": true, "doc": "Disabled components are skipped by every aggregating hook.", "default": "true" },
+        { "name": "transform", "type": "Transform", "exposed": true, "mutable": true, "api": true, "doc": "Local transform relative to the owner.", "default": "identity" }
+      ],
+      "methods": [
+        { "name": "world_transform", "hook": false, "api": true, "returns": "Transform", "doc": "Absolute transform. Walks the parent chain, so it is not free." },
+        { "name": "invalidate", "hook": false, "api": true, "returns": "void", "doc": "Signal that this component changed; the owner receives on_component_changed." },
+        { "name": "on_attached", "hook": true, "api": true, "returns": "void", "doc": "Event: attached to an actor." },
+        { "name": "on_detached", "hook": true, "api": true, "returns": "void", "doc": "Event: detached from an actor." },
+        { "name": "validate", "hook": true, "api": true, "returns": "Array<Diagnostic>", "doc": "Editor-time self-check. Never blocks generation.", "default": "[]" },
+        { "name": "replenishes", "hook": true, "api": true, "returns": "Replenish", "doc": "Whether this component's supply comes back. Not only Items: a dispenser and an environmental source are not Items.", "default": "NEVER" }
+      ]
+    },
+    {
+      "path": "/Core/MeshComponent",
+      "name": "MeshComponent",
+      "kind": "object",
+      "extends": "/Core/Component",
+      "ancestry": ["/Core/Component", "/Core/Object"],
+      "doc": "Imported geometry, and the material-name to Surface mapping that gives it meaning.",
+      "fields": [
+        { "name": "asset", "type": "Resource<MeshResource>", "exposed": true, "mutable": true, "api": true, "doc": "The mesh file this draws and derives collision from." },
+        { "name": "surfaces", "type": "Map<String, Kind<Surface>>", "exposed": true, "mutable": true, "api": true, "doc": "Submesh or material name to Surface class. This is how imported art acquires generation meaning." },
+        { "name": "collision_mode", "type": "CollisionMode", "exposed": true, "mutable": true, "api": true, "doc": "How collision is derived from the mesh." },
+        { "name": "visible", "type": "bool", "exposed": true, "mutable": true, "api": true, "doc": "Visible is not the same as collidable.", "default": "true" }
+      ],
+      "methods": [
+        { "name": "collision", "hook": false, "api": true, "returns": "Ref<CollisionBody>", "doc": "The derived collision body." }
+      ]
+    },
+    {
+      "path": "/Core/ShapeComponent",
+      "name": "ShapeComponent",
+      "kind": "object",
+      "extends": "/Core/Component",
+      "ancestry": ["/Core/Component", "/Core/Object"],
+      "doc": "A parametric shape. Collision is computed analytically from its parameters, never from tessellation.",
+      "fields": [
+        { "name": "shape", "type": "Shape", "exposed": true, "mutable": true, "api": true, "doc": "The parametric primitive." },
+        { "name": "surface", "type": "Kind<Surface>", "exposed": true, "mutable": true, "api": true, "doc": "The Surface class this shape presents." },
+        { "name": "collision_mode", "type": "CollisionMode", "exposed": true, "mutable": true, "api": true, "doc": "How collision is derived." },
+        { "name": "visible", "type": "bool", "exposed": true, "mutable": true, "api": true, "doc": "Visible is not the same as collidable.", "default": "true" }
+      ],
+      "methods": [
+        { "name": "collision", "hook": false, "api": true, "returns": "Ref<CollisionBody>", "doc": "The analytically derived collision body." }
+      ]
+    },
+    {
+      "path": "/Core/MountComponent",
+      "name": "MountComponent",
+      "kind": "object",
+      "extends": "/Core/Component",
+      "ancestry": ["/Core/Component", "/Core/Object"],
+      "doc": "An attachment socket. What may mount here is a tag query, not a hand-maintained class list.",
+      "fields": [
+        { "name": "name", "type": "String", "exposed": true, "mutable": true, "api": true, "doc": "A label for a developer reading the viewport. Deliberately not a lookup key." },
+        { "name": "accepts", "type": "TagQuery", "exposed": true, "mutable": true, "api": true, "doc": "Which content may mount here." },
+        { "name": "faces", "type": "Array<Face>", "exposed": true, "mutable": true, "api": true, "doc": "Which faces of the mounted thing may meet this socket." },
+        { "name": "clearance", "type": "Ref<CollisionBody>", "exposed": true, "mutable": true, "api": true, "doc": "Space that must stay empty around whatever mounts here." }
+      ],
+      "methods": [
+        { "name": "admits", "hook": true, "api": true, "returns": "Ref<Rule>", "doc": "Whether a specific candidate may mount, beyond the tag query.", "default": "AlwaysRule" }
+      ]
+    },
+    {
+      "path": "/Core/TraversalComponent",
+      "name": "TraversalComponent",
+      "kind": "object",
+      "extends": "/Core/Component",
+      "ancestry": ["/Core/Component", "/Core/Object"],
+      "doc": "Turns a spatial delta into a directed graph edge. The thing that makes a staircase a route rather than scenery.",
+      "fields": [
+      ],
+      "methods": [
+        { "name": "run", "hook": true, "api": true, "returns": "Span", "doc": "Horizontal distance this move covers." },
+        { "name": "rise", "hook": true, "api": true, "returns": "Span", "doc": "Vertical delta this move covers. Negative is downward." },
+        { "name": "direction", "hook": true, "api": true, "returns": "DirectionCone", "doc": "Permitted directions as a cone, so 'up, level or diagonally up, never down' is expressible." },
+        { "name": "admits", "hook": true, "api": true, "returns": "Ref<Rule>", "doc": "What the occupant must hold to make this move, IN THIS DIRECTION — so one edge can be open one way and gated the other.", "default": "AlwaysRule" },
+        { "name": "cost", "hook": true, "api": true, "returns": "float", "doc": "What traversing this spends against a route budget.", "default": "1.0" },
+        { "name": "approach", "hook": true, "api": true, "returns": "Approach", "doc": "What the occupant needs at the near end before the move is possible." }
+      ]
+    },
+    {
+      "path": "/Core/CheckpointComponent",
+      "name": "CheckpointComponent",
+      "kind": "object",
+      "extends": "/Core/Component",
+      "ancestry": ["/Core/Component", "/Core/Object"],
+      "doc": "A place that returns the world to a known-good state. P15's second satisfaction route, and what lets the solver take an attractive one-way transition instead of refusing every irreversible edge.",
+      "fields": [
+        { "name": "restores", "type": "Array<Kind<Object>>", "exposed": true, "mutable": true, "api": true, "doc": "Which CLASSES OF PLACED CONTENT respawn here -- consumables, destructibles, enemies. NOT unlocks: an unlock is monotone and can never be lost, so restoring one has no meaning." },
+        { "name": "restores_occupant", "type": "bool", "exposed": true, "mutable": true, "api": true, "doc": "Whether the occupant also returns here — which is what makes this a respawn point as well.", "default": "false" },
+        { "name": "scope", "type": "InstanceScope", "exposed": true, "mutable": true, "api": true, "doc": "How far this checkpoint's effect reaches." }
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/FastTravelComponent",
+      "name": "FastTravelComponent",
+      "kind": "object",
+      "extends": "/Core/Component",
+      "ancestry": ["/Core/Component", "/Core/Object"],
+      "doc": "A node in a travel network. Not cosmetic: a network collapses traversal cost across the whole World, and difficulty here IS slack spent against a budget.",
+      "fields": [
+        { "name": "network", "type": "String", "exposed": true, "mutable": true, "api": true, "doc": "Nodes sharing a network name connect to each other." },
+        { "name": "cost", "type": "BudgetRef", "exposed": true, "mutable": true, "api": true, "doc": "What one hop spends — in the same currency as the routes it competes with." },
+        { "name": "unlocked_by", "type": "Ref<Rule>", "exposed": true, "mutable": true, "api": true, "doc": "What the occupant must hold before this node joins its network.", "default": "AlwaysRule" }
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/StateSetterComponent",
+      "name": "StateSetterComponent",
+      "kind": "object",
+      "extends": "/Core/Component",
+      "ancestry": ["/Core/Component", "/Core/Object"],
+      "doc": "Writes a world-state variable. The authoring surface for the non-monotone axis.",
+      "fields": [
+        { "name": "variable", "type": "String", "exposed": true, "mutable": true, "api": true, "doc": "Which declared state variable this writes." },
+        { "name": "to_value", "type": "String", "exposed": true, "mutable": true, "api": true, "doc": "The value it writes." },
+        { "name": "while_occupied_by", "type": "Kind<Component>", "exposed": true, "mutable": true, "api": true, "doc": "If set, the value holds only WHILE something carrying this component is present — which is what makes dwell an ordinary reading rather than a trigger kind." }
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/BlocksTraversalComponent",
+      "name": "BlocksTraversalComponent",
+      "kind": "object",
+      "extends": "/Core/Component",
+      "ancestry": ["/Core/Component", "/Core/Object"],
+      "doc": "Place me on an edge of this kind, and close it. Without this a barrier can only be authored as geometry, which violates gate-never-delete by construction.",
+      "fields": [
+        { "name": "matching", "type": "Kind<TraversalComponent>", "exposed": true, "mutable": true, "api": true, "doc": "Which kind of traversal edge this may be placed on." },
+        { "name": "route", "type": "Ref<Route>", "exposed": true, "mutable": true, "api": true, "doc": "The route this blocker obliges or forbids." }
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/Surface",
+      "name": "Surface",
+      "kind": "object",
+      "extends": "/Core/Object",
+      "ancestry": ["/Core/Object"],
+      "doc": "What a piece of geometry means to a mechanic. Answers who may be here and what works here.",
+      "fields": [
+        { "name": "name", "type": "String", "exposed": true, "mutable": true, "api": true, "doc": "Display name." },
+        { "name": "tags", "type": "Array<Tag>", "exposed": true, "mutable": true, "api": true, "doc": "Why an eligible-surface list is a TagQuery rather than a hand-maintained class list. The editor must show these on selected geometry." }
+      ],
+      "methods": [
+        { "name": "supports", "hook": true, "api": true, "returns": "Array<Support>", "doc": "Can something BE here? A state you are in, evaluated per occupant and per sphere.", "default": "[ Support(AlwaysRule) ]" },
+        { "name": "affords", "hook": true, "api": true, "returns": "Ref<Rule>", "doc": "Does an ACTION work here? Covers transit THROUGH as well as action UPON, which is how one pane of glass blocks ballistics and walking while passing a laser and a sightline.", "default": "AlwaysRule" },
+        { "name": "friction", "hook": true, "api": true, "returns": "float", "doc": "Traversal resistance.", "default": "1.0" },
+        { "name": "harm", "hook": true, "api": true, "returns": "Harm", "doc": "Is standing here dangerous?", "default": "Harm.NONE" },
+        { "name": "admits_mount", "hook": true, "api": true, "returns": "Ref<Rule>", "doc": "May something mount against this surface?", "default": "AlwaysRule" }
+      ]
+    },
+    {
+      "path": "/Core/Rule",
+      "name": "Rule",
+      "kind": "object",
+      "extends": "/Core/Object",
+      "ancestry": ["/Core/Object"],
+      "doc": "Sealed on purpose: the solver walks this tree as the analysable half of a gate, so a developer-defined rule would make the dependency walk impossible.",
+      "fields": [
+      ],
+      "methods": [
+        { "name": "is_open", "hook": false, "api": true, "returns": "bool", "doc": "Does this rule currently hold?" },
+        { "name": "referenced", "hook": false, "api": true, "returns": "Array<Unlock>", "doc": "Every unlock this rule mentions. The solver's dependency walk, and what lets requires() plant a source." },
+        { "name": "explain", "hook": false, "api": true, "returns": "String", "doc": "Prose for a lock badge and the trace." }
+      ]
+    },
+    {
+      "path": "/Core/AlwaysRule",
+      "name": "AlwaysRule",
+      "kind": "object",
+      "extends": "/Core/Rule",
+      "ancestry": ["/Core/Rule", "/Core/Object"],
+      "doc": "Trivially satisfied. The identity of AllOfRule.",
+      "fields": [
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/NeverRule",
+      "name": "NeverRule",
+      "kind": "object",
+      "extends": "/Core/Rule",
+      "ancestry": ["/Core/Rule", "/Core/Object"],
+      "doc": "Never satisfied. The identity of AnyOfRule. On a sole route this is an authoring error and is reported with the numbers, not silently accepted.",
+      "fields": [
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/HoldsRule",
+      "name": "HoldsRule",
+      "kind": "object",
+      "extends": "/Core/Rule",
+      "ancestry": ["/Core/Rule", "/Core/Object"],
+      "doc": "The occupant holds this unlock, or anything that supersedes it.",
+      "fields": [
+        { "name": "unlock", "type": "Unlock", "exposed": true, "mutable": true, "api": true, "doc": "The unlock required. Satisfied by this row, or by any held unlock whose supersedes closure contains it." },
+        { "name": "count", "type": "int", "exposed": true, "mutable": true, "api": true, "doc": "How many. Quantity lives here, not in a number of instances.", "default": "1" }
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/HasComponentRule",
+      "name": "HasComponentRule",
+      "kind": "object",
+      "extends": "/Core/Rule",
+      "ancestry": ["/Core/Rule", "/Core/Object"],
+      "doc": "The occupant holds something CARRYING a matching component. A DIFFERENT question from HoldsRule: this asks about the things held, that asks about the lattice.",
+      "fields": [
+        { "name": "kind", "type": "Kind<Component>", "exposed": true, "mutable": true, "api": true, "doc": "The component class required." }
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/AllOfRule",
+      "name": "AllOfRule",
+      "kind": "object",
+      "extends": "/Core/Rule",
+      "ancestry": ["/Core/Rule", "/Core/Object"],
+      "doc": "Every child holds.",
+      "fields": [
+        { "name": "children", "type": "Array<Ref<Rule>>", "exposed": true, "mutable": true, "api": true, "doc": "The conjuncts." }
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/AnyOfRule",
+      "name": "AnyOfRule",
+      "kind": "object",
+      "extends": "/Core/Rule",
+      "ancestry": ["/Core/Rule", "/Core/Object"],
+      "doc": "At least one child holds. This is what proves genuine alternate routes rather than one route the solver happened to pick.",
+      "fields": [
+        { "name": "children", "type": "Array<Ref<Rule>>", "exposed": true, "mutable": true, "api": true, "doc": "The disjuncts." }
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/NegateRule",
+      "name": "NegateRule",
+      "kind": "object",
+      "extends": "/Core/Rule",
+      "ancestry": ["/Core/Rule", "/Core/Object"],
+      "doc": "The inner rule does NOT hold. Non-monotonic, so it is accepted and reported rather than refused.",
+      "fields": [
+        { "name": "inner", "type": "Ref<Rule>", "exposed": true, "mutable": true, "api": true, "doc": "The negated rule." }
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/NearbyRule",
+      "name": "NearbyRule",
+      "kind": "object",
+      "extends": "/Core/Rule",
+      "ancestry": ["/Core/Rule", "/Core/Object"],
+      "doc": "Something matching is accessible within range of this gate. The contextual half: a gate may depend on the WORLD rather than only the occupant, and because the dependency walk sees it, requires() can plant the source.",
+      "fields": [
+        { "name": "kind", "type": "Kind<Object>", "exposed": true, "mutable": true, "api": true, "doc": "What must be nearby." },
+        { "name": "within", "type": "BudgetRef", "exposed": true, "mutable": true, "api": true, "doc": "How near, in whatever currency the budget names." },
+        { "name": "scope", "type": "InstanceScope", "exposed": true, "mutable": true, "api": true, "doc": "The scope searched." }
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/Verdict",
+      "name": "Verdict",
+      "kind": "object",
+      "extends": "/Core/Object",
+      "ancestry": ["/Core/Object"],
+      "doc": "What judge() returns. A boolean would tell the solver nothing and turn the placement search into a reroll.",
+      "fields": [
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/AcceptedVerdict",
+      "name": "AcceptedVerdict",
+      "kind": "object",
+      "extends": "/Core/Verdict",
+      "ancestry": ["/Core/Verdict", "/Core/Object"],
+      "doc": "It fits. The slack says how comfortably, which feeds difficulty.",
+      "fields": [
+        { "name": "slack", "type": "float", "exposed": true, "mutable": true, "api": true, "doc": "Budget remaining after this placement." }
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/OverBudgetVerdict",
+      "name": "OverBudgetVerdict",
+      "kind": "object",
+      "extends": "/Core/Verdict",
+      "ancestry": ["/Core/Verdict", "/Core/Object"],
+      "doc": "Too far. Move the target closer by roughly this much — a direction the solver can act on.",
+      "fields": [
+        { "name": "excess", "type": "float", "exposed": true, "mutable": true, "api": true, "doc": "How much over budget." },
+        { "name": "against", "type": "Ref<Budget>", "exposed": true, "mutable": true, "api": true, "doc": "Which budget it was measured against. 'Over budget by 6.2' leaves a developer guessing; 'over budget by 6.2 against grapple reach' names the lever to pull. Null only where the comparison was against a bare number." }
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/BlockedVerdict",
+      "name": "BlockedVerdict",
+      "kind": "object",
+      "extends": "/Core/Verdict",
+      "ancestry": ["/Core/Verdict", "/Core/Object"],
+      "doc": "Something is in the way. Remove or reposition that, or route around it.",
+      "fields": [
+        { "name": "by", "type": "Ref<Object>", "exposed": true, "mutable": true, "api": true, "doc": "What blocked it." }
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/UnsuitableVerdict",
+      "name": "UnsuitableVerdict",
+      "kind": "object",
+      "extends": "/Core/Verdict",
+      "ancestry": ["/Core/Verdict", "/Core/Object"],
+      "doc": "Wrong kind of thing. Do not retry this candidate.",
+      "fields": [
+        { "name": "reason", "type": "String", "exposed": true, "mutable": true, "api": true, "doc": "Prose for the trace." }
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/Interaction",
+      "name": "Interaction",
+      "kind": "object",
+      "extends": "/Core/Object",
+      "ancestry": ["/Core/Object"],
+      "doc": "Something an occupant attempts. Subclassed by what relocates, which is what lets one surface answer four mechanics differently.",
+      "fields": [
+        { "name": "range", "type": "Span", "exposed": true, "mutable": true, "api": true, "doc": "How far this reaches. NOT named 'reach' — Reach is a scope." },
+        { "name": "line_of_sight", "type": "bool", "exposed": true, "mutable": true, "api": true, "doc": "Whether an unobstructed line is required.", "default": "false" },
+        { "name": "from_standing", "type": "bool", "exposed": true, "mutable": true, "api": true, "doc": "Whether the occupant must be supported to attempt this.", "default": "true" }
+      ],
+      "methods": [
+        { "name": "consumes", "hook": true, "api": true, "returns": "Array<Cost>", "doc": "What performing this spends. What consumes a resource is the consumer, not the consumable.", "default": "[]" },
+        { "name": "gate", "hook": true, "api": true, "returns": "Ref<Rule>", "doc": "What the occupant must hold to perform this. Deliberately the same name and meaning as Actor.gate, and deliberately NOT 'requires', which on an Actor means something unrelated.", "default": "AlwaysRule" },
+        { "name": "explain", "hook": false, "api": true, "returns": "String", "doc": "Prose for the trace." }
+      ]
+    },
+    {
+      "path": "/Core/Movement",
+      "name": "Movement",
+      "kind": "object",
+      "extends": "/Core/Interaction",
+      "ancestry": ["/Core/Interaction", "/Core/Object"],
+      "doc": "THE PLAYER relocates, so this is a directed graph edge.",
+      "fields": [
+        { "name": "rise", "type": "Span", "exposed": true, "mutable": true, "api": true, "doc": "Vertical delta." },
+        { "name": "direction", "type": "DirectionCone", "exposed": true, "mutable": true, "api": true, "doc": "Permitted directions." }
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/Displace",
+      "name": "Displace",
+      "kind": "object",
+      "extends": "/Core/Interaction",
+      "ancestry": ["/Core/Interaction", "/Core/Object"],
+      "doc": "AN OBJECT relocates, not the player. Push, carry and throw are authored subclasses of this.",
+      "fields": [
+        { "name": "subject", "type": "Ref<Object>", "exposed": true, "mutable": true, "api": true, "doc": "What moves." }
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/RemoteUse",
+      "name": "RemoteUse",
+      "kind": "object",
+      "extends": "/Core/Interaction",
+      "ancestry": ["/Core/Interaction", "/Core/Object"],
+      "doc": "NOTHING relocates — it acts at range. Sightlines, beams and ballistics are authored subclasses, which is how transit through a surface is expressed without a core enum.",
+      "fields": [
+        { "name": "target", "type": "Kind<Object>", "exposed": true, "mutable": true, "api": true, "doc": "What it acts upon." }
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/Shape",
+      "name": "Shape",
+      "kind": "variant",
+      "ancestry": [],
+      "doc": "A parametric primitive. Collision is computed from parameters, never from tessellation — otherwise a visual LOD change silently alters generation.",
+      "fields": [
+      ],
+      "methods": [
+        { "name": "bounds", "hook": false, "api": true, "returns": "Aabb", "doc": "Axis-aligned extent." },
+        { "name": "volume", "hook": false, "api": true, "returns": "float", "doc": "Enclosed volume." },
+        { "name": "is_convex", "hook": false, "api": true, "returns": "bool", "doc": "Convexity, which decides whether the collision cache survives scaling." },
+        { "name": "contains", "hook": false, "api": true, "returns": "bool", "doc": "Point containment." },
+        { "name": "closest_point", "hook": false, "api": true, "returns": "Vec3", "doc": "Nearest surface point." },
+        { "name": "decompose", "hook": false, "api": true, "returns": "Array<Shape>", "doc": "Convex decomposition." },
+        { "name": "tessellate", "hook": false, "api": true, "returns": "Ref<MeshResource>", "doc": "Render geometry. Deliberately NOT the source of collision." }
+      ]
+    },
+    {
+      "path": "/Core/SolidShape",
+      "name": "SolidShape",
+      "kind": "variant",
+      "extends": "/Core/Shape",
+      "ancestry": ["/Core/Shape"],
+      "doc": "A shape with an inside. Supports booleans and a signed distance field.",
+      "fields": [
+      ],
+      "methods": [
+        { "name": "sdf", "hook": false, "api": true, "returns": "float", "doc": "Signed distance to the surface." }
+      ]
+    },
+    {
+      "path": "/Core/SurfaceShape",
+      "name": "SurfaceShape",
+      "kind": "variant",
+      "extends": "/Core/Shape",
+      "ancestry": ["/Core/Shape"],
+      "doc": "Zero thickness — no inside, so no sdf and no booleans.",
+      "fields": [
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/CubeShape",
+      "name": "CubeShape",
+      "kind": "variant",
+      "extends": "/Core/SolidShape",
+      "ancestry": ["/Core/SolidShape", "/Core/Shape"],
+      "doc": "A box.",
+      "fields": [
+        { "name": "extents", "type": "Vec3", "exposed": true, "mutable": true, "api": true, "doc": "Half-extents." },
+        { "name": "bevel", "type": "float", "exposed": true, "mutable": true, "api": true, "doc": "Edge bevel.", "default": "0.0" },
+        { "name": "segments", "type": "Vec3", "exposed": true, "mutable": true, "api": true, "doc": "Tessellation density per axis. Render only." }
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/SphereShape",
+      "name": "SphereShape",
+      "kind": "variant",
+      "extends": "/Core/SolidShape",
+      "ancestry": ["/Core/SolidShape", "/Core/Shape"],
+      "doc": "A sphere.",
+      "fields": [
+        { "name": "radius", "type": "float", "exposed": true, "mutable": true, "api": true, "doc": "Radius." },
+        { "name": "segments", "type": "Vec2", "exposed": true, "mutable": true, "api": true, "doc": "Tessellation density." }
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/HemisphereShape",
+      "name": "HemisphereShape",
+      "kind": "variant",
+      "extends": "/Core/SolidShape",
+      "ancestry": ["/Core/SolidShape", "/Core/Shape"],
+      "doc": "Half a sphere.",
+      "fields": [
+        { "name": "radius", "type": "float", "exposed": true, "mutable": true, "api": true, "doc": "Radius." },
+        { "name": "segments", "type": "Vec2", "exposed": true, "mutable": true, "api": true, "doc": "Tessellation density." },
+        { "name": "capped", "type": "bool", "exposed": true, "mutable": true, "api": true, "doc": "Whether the flat face is closed.", "default": "true" }
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/ConeShape",
+      "name": "ConeShape",
+      "kind": "variant",
+      "extends": "/Core/SolidShape",
+      "ancestry": ["/Core/SolidShape", "/Core/Shape"],
+      "doc": "A cone.",
+      "fields": [
+        { "name": "radius", "type": "float", "exposed": true, "mutable": true, "api": true, "doc": "Base radius." },
+        { "name": "height", "type": "float", "exposed": true, "mutable": true, "api": true, "doc": "Height." },
+        { "name": "segments", "type": "int", "exposed": true, "mutable": true, "api": true, "doc": "Radial tessellation." },
+        { "name": "capped", "type": "bool", "exposed": true, "mutable": true, "api": true, "doc": "Whether the base is closed.", "default": "true" }
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/CapsuleShape",
+      "name": "CapsuleShape",
+      "kind": "variant",
+      "extends": "/Core/SolidShape",
+      "ancestry": ["/Core/SolidShape", "/Core/Shape"],
+      "doc": "A capsule — the usual occupant proxy.",
+      "fields": [
+        { "name": "radius", "type": "float", "exposed": true, "mutable": true, "api": true, "doc": "Radius." },
+        { "name": "height", "type": "float", "exposed": true, "mutable": true, "api": true, "doc": "Height of the cylindrical section." },
+        { "name": "segments", "type": "Vec2", "exposed": true, "mutable": true, "api": true, "doc": "Tessellation density." }
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/CylinderShape",
+      "name": "CylinderShape",
+      "kind": "variant",
+      "extends": "/Core/SolidShape",
+      "ancestry": ["/Core/SolidShape", "/Core/Shape"],
+      "doc": "A cylinder, or a truncated cone when the radii differ.",
+      "fields": [
+        { "name": "radius_top", "type": "float", "exposed": true, "mutable": true, "api": true, "doc": "Top radius." },
+        { "name": "radius_bottom", "type": "float", "exposed": true, "mutable": true, "api": true, "doc": "Bottom radius." },
+        { "name": "height", "type": "float", "exposed": true, "mutable": true, "api": true, "doc": "Height." },
+        { "name": "segments", "type": "int", "exposed": true, "mutable": true, "api": true, "doc": "Radial tessellation." },
+        { "name": "capped", "type": "bool", "exposed": true, "mutable": true, "api": true, "doc": "Whether the ends are closed.", "default": "true" }
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/PrismShape",
+      "name": "PrismShape",
+      "kind": "variant",
+      "extends": "/Core/SolidShape",
+      "ancestry": ["/Core/SolidShape", "/Core/Shape"],
+      "doc": "An n-sided prism.",
+      "fields": [
+        { "name": "sides", "type": "int", "exposed": true, "mutable": true, "api": true, "doc": "Number of sides." },
+        { "name": "radius", "type": "float", "exposed": true, "mutable": true, "api": true, "doc": "Circumradius." },
+        { "name": "height", "type": "float", "exposed": true, "mutable": true, "api": true, "doc": "Height." },
+        { "name": "twist", "type": "float", "exposed": true, "mutable": true, "api": true, "doc": "Rotation applied across the height.", "default": "0.0" }
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/TorusShape",
+      "name": "TorusShape",
+      "kind": "variant",
+      "extends": "/Core/SolidShape",
+      "ancestry": ["/Core/SolidShape", "/Core/Shape"],
+      "doc": "A torus, optionally a partial arc.",
+      "fields": [
+        { "name": "major_radius", "type": "float", "exposed": true, "mutable": true, "api": true, "doc": "Ring radius." },
+        { "name": "minor_radius", "type": "float", "exposed": true, "mutable": true, "api": true, "doc": "Tube radius." },
+        { "name": "segments", "type": "Vec2", "exposed": true, "mutable": true, "api": true, "doc": "Tessellation density." },
+        { "name": "arc_sweep", "type": "float", "exposed": true, "mutable": true, "api": true, "doc": "Swept angle. A full torus sweeps the whole circle." }
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/PipeShape",
+      "name": "PipeShape",
+      "kind": "variant",
+      "extends": "/Core/SolidShape",
+      "ancestry": ["/Core/SolidShape", "/Core/Shape"],
+      "doc": "A hollow cylinder.",
+      "fields": [
+        { "name": "inner_radius", "type": "float", "exposed": true, "mutable": true, "api": true, "doc": "Bore radius." },
+        { "name": "outer_radius", "type": "float", "exposed": true, "mutable": true, "api": true, "doc": "Outer radius." },
+        { "name": "height", "type": "float", "exposed": true, "mutable": true, "api": true, "doc": "Height." },
+        { "name": "segments", "type": "int", "exposed": true, "mutable": true, "api": true, "doc": "Radial tessellation." }
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/ArchShape",
+      "name": "ArchShape",
+      "kind": "variant",
+      "extends": "/Core/SolidShape",
+      "ancestry": ["/Core/SolidShape", "/Core/Shape"],
+      "doc": "An arched opening — a doorway primitive.",
+      "fields": [
+        { "name": "width", "type": "float", "exposed": true, "mutable": true, "api": true, "doc": "Opening width." },
+        { "name": "height", "type": "float", "exposed": true, "mutable": true, "api": true, "doc": "Total height." },
+        { "name": "depth", "type": "float", "exposed": true, "mutable": true, "api": true, "doc": "Wall thickness." },
+        { "name": "arch_radius", "type": "float", "exposed": true, "mutable": true, "api": true, "doc": "Radius of the arch crown." },
+        { "name": "segments", "type": "int", "exposed": true, "mutable": true, "api": true, "doc": "Arc tessellation." }
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/RampShape",
+      "name": "RampShape",
+      "kind": "variant",
+      "extends": "/Core/SolidShape",
+      "ancestry": ["/Core/SolidShape", "/Core/Shape"],
+      "doc": "An inclined plane with thickness. A traversal primitive as much as a visual one.",
+      "fields": [
+        { "name": "width", "type": "float", "exposed": true, "mutable": true, "api": true, "doc": "Width." },
+        { "name": "run", "type": "float", "exposed": true, "mutable": true, "api": true, "doc": "Horizontal distance covered." },
+        { "name": "rise", "type": "float", "exposed": true, "mutable": true, "api": true, "doc": "Vertical distance covered. With run, this is what max_floor_slope is tested against." },
+        { "name": "thickness", "type": "float", "exposed": true, "mutable": true, "api": true, "doc": "Slab thickness." },
+        { "name": "side_walls", "type": "bool", "exposed": true, "mutable": true, "api": true, "doc": "Whether the sides are enclosed.", "default": "false" }
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/StairsShape",
+      "name": "StairsShape",
+      "kind": "variant",
+      "extends": "/Core/SolidShape",
+      "ancestry": ["/Core/SolidShape", "/Core/Shape"],
+      "doc": "A straight flight. The canonical intra-Space traversal edge.",
+      "fields": [
+        { "name": "width", "type": "float", "exposed": true, "mutable": true, "api": true, "doc": "Width." },
+        { "name": "steps", "type": "int", "exposed": true, "mutable": true, "api": true, "doc": "Step count." },
+        { "name": "step_rise", "type": "float", "exposed": true, "mutable": true, "api": true, "doc": "Height of one step." },
+        { "name": "step_run", "type": "float", "exposed": true, "mutable": true, "api": true, "doc": "Depth of one step." },
+        { "name": "risers", "type": "bool", "exposed": true, "mutable": true, "api": true, "doc": "Whether the vertical faces are closed.", "default": "true" },
+        { "name": "landing_at", "type": "int", "exposed": true, "mutable": true, "api": true, "doc": "Step index a landing interrupts at. 0 = none.", "default": "0" },
+        { "name": "landing_run", "type": "float", "exposed": true, "mutable": true, "api": true, "doc": "Depth of that landing.", "default": "0.0" }
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/SpiralStairsShape",
+      "name": "SpiralStairsShape",
+      "kind": "variant",
+      "extends": "/Core/SolidShape",
+      "ancestry": ["/Core/SolidShape", "/Core/Shape"],
+      "doc": "A helical flight. The primitive that proves the library: it is the canonical multi-floor traversal AND the canonical is-this-a-ramp-or-steps collision question.",
+      "fields": [
+        { "name": "inner_radius", "type": "float", "exposed": true, "mutable": true, "api": true, "doc": "Inner radius." },
+        { "name": "outer_radius", "type": "float", "exposed": true, "mutable": true, "api": true, "doc": "Outer radius." },
+        { "name": "total_rise", "type": "float", "exposed": true, "mutable": true, "api": true, "doc": "Total height climbed." },
+        { "name": "steps", "type": "int", "exposed": true, "mutable": true, "api": true, "doc": "Step count." },
+        { "name": "sweep", "type": "float", "exposed": true, "mutable": true, "api": true, "doc": "Total swept angle." },
+        { "name": "clockwise", "type": "bool", "exposed": true, "mutable": true, "api": true, "doc": "Handedness.", "default": "true" },
+        { "name": "center_post", "type": "bool", "exposed": true, "mutable": true, "api": true, "doc": "Whether a central column is present.", "default": "true" }
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/CompositeShape",
+      "name": "CompositeShape",
+      "kind": "variant",
+      "extends": "/Core/SolidShape",
+      "ancestry": ["/Core/SolidShape", "/Core/Shape"],
+      "doc": "A boolean combination of solid shapes.",
+      "fields": [
+        { "name": "operations", "type": "Array<BooleanOp>", "exposed": true, "mutable": true, "api": true, "doc": "The ordered operation list." }
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/QuadShape",
+      "name": "QuadShape",
+      "kind": "variant",
+      "extends": "/Core/SurfaceShape",
+      "ancestry": ["/Core/SurfaceShape", "/Core/Shape"],
+      "doc": "A flat rectangle.",
+      "fields": [
+        { "name": "extents", "type": "Vec2", "exposed": true, "mutable": true, "api": true, "doc": "Half-extents." },
+        { "name": "segments", "type": "Vec2", "exposed": true, "mutable": true, "api": true, "doc": "Tessellation density." }
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/TriangleShape",
+      "name": "TriangleShape",
+      "kind": "variant",
+      "extends": "/Core/SurfaceShape",
+      "ancestry": ["/Core/SurfaceShape", "/Core/Shape"],
+      "doc": "A single triangle.",
+      "fields": [
+        { "name": "a", "type": "Vec3", "exposed": true, "mutable": true, "api": true, "doc": "First vertex." },
+        { "name": "b", "type": "Vec3", "exposed": true, "mutable": true, "api": true, "doc": "Second vertex." },
+        { "name": "c", "type": "Vec3", "exposed": true, "mutable": true, "api": true, "doc": "Third vertex." }
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/DiscShape",
+      "name": "DiscShape",
+      "kind": "variant",
+      "extends": "/Core/SurfaceShape",
+      "ancestry": ["/Core/SurfaceShape", "/Core/Shape"],
+      "doc": "A flat disc, optionally a sector.",
+      "fields": [
+        { "name": "radius", "type": "float", "exposed": true, "mutable": true, "api": true, "doc": "Radius." },
+        { "name": "segments", "type": "int", "exposed": true, "mutable": true, "api": true, "doc": "Radial tessellation." },
+        { "name": "arc_start", "type": "float", "exposed": true, "mutable": true, "api": true, "doc": "Start angle.", "default": "0.0" },
+        { "name": "arc_sweep", "type": "float", "exposed": true, "mutable": true, "api": true, "doc": "Swept angle." }
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/EllipseShape",
+      "name": "EllipseShape",
+      "kind": "variant",
+      "extends": "/Core/SurfaceShape",
+      "ancestry": ["/Core/SurfaceShape", "/Core/Shape"],
+      "doc": "A flat ellipse.",
+      "fields": [
+        { "name": "radius", "type": "Vec2", "exposed": true, "mutable": true, "api": true, "doc": "Semi-axes." },
+        { "name": "segments", "type": "int", "exposed": true, "mutable": true, "api": true, "doc": "Tessellation density." }
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/CollisionBody",
+      "name": "CollisionBody",
+      "kind": "object",
+      "extends": "/Core/Object",
+      "ancestry": ["/Core/Object"],
+      "doc": "A set of collision islands. What actually blocks, as distinct from what is drawn.",
+      "fields": [
+      ],
+      "methods": [
+        { "name": "islands", "hook": false, "api": true, "returns": "Array<CollisionData>", "doc": "The disjoint pieces." },
+        { "name": "add", "hook": false, "api": true, "returns": "void", "doc": "Add an island." },
+        { "name": "remove", "hook": false, "api": true, "returns": "void", "doc": "Remove an island." },
+        { "name": "bounds", "hook": false, "api": true, "returns": "Aabb", "doc": "Combined extent." },
+        { "name": "is_convex", "hook": false, "api": true, "returns": "bool", "doc": "Whether the whole body is convex." },
+        { "name": "fit_error", "hook": false, "api": true, "returns": "float", "doc": "How far this body diverges from the source geometry. Heat-mapped in the editor to catch a ramp collider left on a spiral staircase." }
+      ]
+    },
+    {
+      "path": "/Core/Resource",
+      "name": "Resource",
+      "kind": "object",
+      "extends": "/Core/Object",
+      "ancestry": ["/Core/Object"],
+      "doc": "Bytes on disk, content-hashed. Referenced from a schematic as a class plus an asset path, never inlined.",
+      "fields": [
+        { "name": "path", "type": "String", "exposed": false, "mutable": false, "api": true, "doc": "The asset path." },
+        { "name": "hash", "type": "String", "exposed": false, "mutable": false, "api": true, "doc": "Content hash. Part of the fingerprint, which is what makes an asset swap change the recipe." },
+        { "name": "is_loaded", "type": "bool", "exposed": false, "mutable": false, "api": true, "doc": "Whether the bytes are resident. A resource may be REFERENCED during the solve without being loaded." }
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/MeshResource",
+      "name": "MeshResource",
+      "kind": "object",
+      "extends": "/Core/Resource",
+      "ancestry": ["/Core/Resource", "/Core/Object"],
+      "doc": "Imported geometry. In a cooked build this is a hash and a bounds with no triangles behind it.",
+      "fields": [
+        { "name": "bounds", "type": "Aabb", "exposed": false, "mutable": false, "api": true, "doc": "Extent, available even when cooked." },
+        { "name": "triangle_count", "type": "int", "exposed": false, "mutable": false, "api": true, "doc": "Triangle count." },
+        { "name": "submesh_names", "type": "Array<String>", "exposed": false, "mutable": false, "api": true, "doc": "Material or submesh names, which MeshComponent maps to Surfaces." }
+      ],
+      "methods": [
+        { "name": "derive_collision", "hook": false, "api": true, "returns": "Ref<CollisionBody>", "doc": "Derive collision. In a cooked build this returns the baked body or ERRORS LOUDLY — never a silent empty body, which would turn a shipping bug into a world with no collision." },
+        { "name": "export", "hook": false, "api": true, "returns": "void", "doc": "Write the mesh out." }
+      ]
+    },
+    {
+      "path": "/Core/UnlockTableResource",
+      "name": "UnlockTableResource",
+      "kind": "object",
+      "extends": "/Core/Resource",
+      "ancestry": ["/Core/Resource", "/Core/Object"],
+      "doc": "The project's progression vocabulary -- named rows, each one atom of the lattice. JSON, not the block notation, because it has no nodes to notate. A project may hold any number of these files anywhere under /Content; THE FILE IS THE UNIT OF SHARING, so copying it carries the vocabulary with it.",
+      "fields": [
+        { "name": "rows", "type": "Array<String>", "exposed": false, "mutable": false, "api": true, "doc": "The row names, in file order." }
+      ],
+      "methods": [
+        { "name": "row", "hook": false, "api": true, "returns": "Unlock", "doc": "One row by display name. Convenience for authoring; by_id is the identity lookup." },
+        { "name": "by_id", "hook": false, "api": true, "returns": "Unlock", "doc": "One row by its stable id. IDENTITY IS THE ID, never the name -- renaming a row must rewrite zero references." }
+      ]
+    },
+    {
+      "path": "/Core/CurveTableResource",
+      "name": "CurveTableResource",
+      "kind": "object",
+      "extends": "/Core/Resource",
+      "ancestry": ["/Core/Resource", "/Core/Object"],
+      "doc": "One or more NAMED CURVES over one NAMED DOMAIN AXIS. One resource type where UE has four: a vector curve is three rows, a colour curve is four. JSON, not the block notation, because it has no nodes to notate.",
+      "fields": [
+        { "name": "domain", "type": "String", "exposed": false, "mutable": false, "api": true, "doc": "The axis rows are read over. Bound BY NAME to whichever ProgressionAxis carries it." },
+        { "name": "y_label", "type": "String", "exposed": false, "mutable": false, "api": true, "doc": "Editor-only, so the vertical axis has a name." },
+        { "name": "rows", "type": "Array<String>", "exposed": false, "mutable": false, "api": true, "doc": "Named curves." }
+      ],
+      "methods": [
+        { "name": "row", "hook": false, "api": true, "returns": "Curve", "doc": "One row as a Curve struct." },
+        { "name": "sample", "hook": false, "api": true, "returns": "float", "doc": "Read a row at a domain value." }
+      ]
+    },
+    {
+      "path": "/Core/ProgressionAxis",
+      "name": "ProgressionAxis",
+      "kind": "object",
+      "extends": "/Core/Object",
+      "ancestry": ["/Core/Object"],
+      "doc": "Supplies the x a curve row is sampled at. Built-ins cover depth, space count, unlock count and sphere; a developer subclasses it for anything else, which is the only way to say 'complexity gains weight each time a boss is placed'.",
+      "fields": [
+        { "name": "name", "type": "String", "exposed": false, "mutable": false, "api": true, "doc": "What a CurveTable's domain matches against." }
+      ],
+      "methods": [
+        { "name": "value", "hook": true, "api": true, "returns": "float", "doc": "The current position along this axis. No default — a subclass must answer." }
+      ]
+    },
+    {
+      "path": "/Core/Depth",
+      "name": "Depth",
+      "kind": "object",
+      "extends": "/Core/ProgressionAxis",
+      "ancestry": ["/Core/ProgressionAxis", "/Core/Object"],
+      "doc": "Reach index divided by Reach count.",
+      "fields": [
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/SpaceCount",
+      "name": "SpaceCount",
+      "kind": "object",
+      "extends": "/Core/ProgressionAxis",
+      "ancestry": ["/Core/ProgressionAxis", "/Core/Object"],
+      "doc": "How many Spaces exist so far.",
+      "fields": [
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/UnlockCount",
+      "name": "UnlockCount",
+      "kind": "object",
+      "extends": "/Core/ProgressionAxis",
+      "ancestry": ["/Core/ProgressionAxis", "/Core/Object"],
+      "doc": "How many progression unlocks are held.",
+      "fields": [
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/Sphere",
+      "name": "Sphere",
+      "kind": "object",
+      "extends": "/Core/ProgressionAxis",
+      "ancestry": ["/Core/ProgressionAxis", "/Core/Object"],
+      "doc": "The current accessibility sphere.",
+      "fields": [
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/Route",
+      "name": "Route",
+      "kind": "object",
+      "extends": "/Core/Object",
+      "ancestry": ["/Core/Object"],
+      "doc": "A REQUIRED OR FORBIDDEN path with a budget, an occupant and predicates. The sign is in the primitive: a Span DECLARES a range, a Route OBLIGES one.",
+      "fields": [
+        { "name": "from", "type": "Ref<Object>", "exposed": true, "mutable": true, "api": true, "doc": "Origin. Null means unbound and resolved by the solver." },
+        { "name": "to", "type": "Ref<Object>", "exposed": true, "mutable": true, "api": true, "doc": "Destination. Null means unbound." },
+        { "name": "budget", "type": "BudgetRef", "exposed": true, "mutable": true, "api": true, "doc": "What traversing it may spend." },
+        { "name": "occupant", "type": "Occupant", "exposed": true, "mutable": true, "api": true, "doc": "Who traverses. Null means the player." },
+        { "name": "party", "type": "Array<Occupant>", "exposed": true, "mutable": true, "api": true, "doc": "Every listed occupant must traverse — an escort, not a simultaneous hold." },
+        { "name": "cohesion", "type": "float", "exposed": true, "mutable": true, "api": true, "doc": "Maximum separation in metres. 0 = unconstrained.", "default": "0.0" },
+        { "name": "line_of_sight", "type": "bool", "exposed": true, "mutable": true, "api": true, "doc": "Whether an unobstructed line is obliged. An OBLIGATION, not an observation — which is what makes L4 keep it.", "default": "false" },
+        { "name": "from_standing", "type": "bool", "exposed": true, "mutable": true, "api": true, "doc": "Whether the origin must be supported.", "default": "true" },
+        { "name": "forbidden", "type": "Array<Kind<Object>>", "exposed": true, "mutable": true, "api": true, "doc": "Content this route must not pass. The negative half." }
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/Budget",
+      "name": "Budget",
+      "kind": "object",
+      "extends": "/Core/Object",
+      "ancestry": ["/Core/Object"],
+      "doc": "A NAMED limit — a row of the project's BudgetBook, referenced rather than copied. 'Carry range' is a concept a project tunes, not a number retyped at each of the five sites that mention it.",
+      "fields": [
+        { "name": "name", "type": "String", "exposed": true, "mutable": false, "api": true, "doc": "What a developer called it. Surfaces in the verdict, which is how a rejection says WHICH limit was missed." },
+        { "name": "cost", "type": "Cost", "exposed": true, "mutable": false, "api": true, "doc": "The kind and the limit. Retuning this is the one edit that moves every site naming this budget." }
+      ],
+      "methods": [
+        { "name": "remaining", "hook": false, "api": true, "returns": "float", "doc": "Unspent amount." },
+        { "name": "spend", "hook": false, "api": true, "returns": "void", "doc": "Consume from the budget. The argument is always a DISTANCE, whatever the budget measures — a caller that had to know whether to pass metres or seconds would re-derive the conversion at every call site and one of them would get it wrong." },
+        { "name": "judge", "hook": false, "api": true, "returns": "Ref<Verdict>", "doc": "Judge a distance against what is left, naming this budget in the verdict." }
+      ]
+    },
+    {
+      "path": "/Core/BudgetBook",
+      "name": "BudgetBook",
+      "kind": "object",
+      "extends": "/Core/Object",
+      "ancestry": ["/Core/Object"],
+      "doc": "The project's named budgets — the one place 'carry range' is a number. NOTHING spends against a row here: open() hands out a working copy, because spending against the shared row would make two unrelated routes drain each other and the symptom would point nowhere near the cause.",
+      "fields": [
+      ],
+      "methods": [
+        { "name": "declare", "hook": false, "api": true, "returns": "Ref<Budget>", "doc": "Register a named budget." },
+        { "name": "retune", "hook": false, "api": true, "returns": "void", "doc": "Change what it costs. Every site naming it moves at once, which is the point; a site that inlined the number does not, which is also the point." },
+        { "name": "by_name", "hook": false, "api": true, "returns": "Ref<Budget>", "doc": "Look one up by the name a developer typed." },
+        { "name": "open", "hook": false, "api": true, "returns": "Ref<Budget>", "doc": "A working copy to spend against. Null for a reference the book does not hold — a dangling budget is a load-time diagnostic, never a default limit quietly standing in." }
+      ]
+    },
+    {
+      "path": "/Core/DistanceCost",
+      "name": "DistanceCost",
+      "kind": "variant",
+      "extends": "/Core/Cost",
+      "ancestry": ["/Core/Cost"],
+      "doc": "Metres.",
+      "fields": [
+        { "name": "limit", "type": "float", "exposed": true, "mutable": true, "api": true, "doc": "World units." }
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/TimeCost",
+      "name": "TimeCost",
+      "kind": "variant",
+      "extends": "/Core/Cost",
+      "ancestry": ["/Core/Cost"],
+      "doc": "Seconds. Every TimeCost is a distance divided by player_profile.speed, which is why that setting is not optional.",
+      "fields": [
+        { "name": "limit", "type": "float", "exposed": true, "mutable": true, "api": true, "doc": "Seconds." },
+        { "name": "speed", "type": "float", "exposed": true, "mutable": true, "api": true, "doc": "World units per second. Without it there is no way to turn seconds into a reachable distance." }
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/PoolCost",
+      "name": "PoolCost",
+      "kind": "variant",
+      "extends": "/Core/Cost",
+      "ancestry": ["/Core/Cost"],
+      "doc": "Draw against a named resource pool at a rate. How a soft gate is a magnitude rather than a rule — the solver can trade it off instead of treating it as impassable.",
+      "fields": [
+        { "name": "pool", "type": "String", "exposed": true, "mutable": true, "api": true, "doc": "Which declared resource." },
+        { "name": "limit", "type": "float", "exposed": true, "mutable": true, "api": true, "doc": "How much of the pool may be drawn." },
+        { "name": "rate", "type": "float", "exposed": true, "mutable": true, "api": true, "doc": "Draw per world unit travelled." }
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/NamedBudget",
+      "name": "NamedBudget",
+      "kind": "variant",
+      "extends": "/Core/BudgetRef",
+      "ancestry": ["/Core/BudgetRef"],
+      "doc": "A row of the project's BudgetBook — retune it in one place and every site naming it moves.",
+      "fields": [
+        { "name": "budget", "type": "Ref<Budget>", "exposed": true, "mutable": true, "api": true, "doc": "Which named budget." }
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/InlineBudget",
+      "name": "InlineBudget",
+      "kind": "variant",
+      "extends": "/Core/BudgetRef",
+      "ancestry": ["/Core/BudgetRef"],
+      "doc": "A cost authored at this site. Right for a one-off; a magic number if it repeats — and because inline and named are told apart, a tool can notice when it has.",
+      "fields": [
+        { "name": "cost", "type": "Cost", "exposed": true, "mutable": true, "api": true, "doc": "What it costs, here." }
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/Path",
+      "name": "Path",
+      "kind": "object",
+      "extends": "/Core/Object",
+      "ancestry": ["/Core/Object"],
+      "doc": "A realised route. What a Route becomes once the generator has produced it — and the reason there is no spline resource.",
+      "fields": [
+      ],
+      "methods": [
+        { "name": "steps", "hook": false, "api": true, "returns": "Array<PathStep>", "doc": "The ordered steps." },
+        { "name": "length", "hook": false, "api": true, "returns": "float", "doc": "Total distance." },
+        { "name": "rise", "hook": false, "api": true, "returns": "float", "doc": "Net vertical change." },
+        { "name": "origin", "hook": false, "api": true, "returns": "Vec3", "doc": "Start point." },
+        { "name": "target", "hook": false, "api": true, "returns": "Vec3", "doc": "End point." }
+      ]
+    },
+    {
+      "path": "/Core/PathStep",
+      "name": "PathStep",
+      "kind": "object",
+      "extends": "/Core/Object",
+      "ancestry": ["/Core/Object"],
+      "doc": "One leg of a path.",
+      "fields": [
+      ],
+      "methods": [
+        { "name": "position", "hook": false, "api": true, "returns": "Vec3", "doc": "Where this leg starts." },
+        { "name": "length", "hook": false, "api": true, "returns": "float", "doc": "Leg distance." },
+        { "name": "surface", "hook": false, "api": true, "returns": "Kind<Surface>", "doc": "What is underfoot." },
+        { "name": "floor", "hook": false, "api": true, "returns": "ScopeHandle", "doc": "Which Floor this leg is on." },
+        { "name": "via", "hook": false, "api": true, "returns": "Ref<Object>", "doc": "What made this leg possible." }
+      ]
+    },
+    {
+      "path": "/Core/PlacementNeed",
+      "name": "PlacementNeed",
+      "kind": "object",
+      "extends": "/Core/Object",
+      "ancestry": ["/Core/Object"],
+      "doc": "What requires() returns. The channel that makes the generator place enabling content.",
+      "fields": [
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/NeedsActor",
+      "name": "NeedsActor",
+      "kind": "object",
+      "extends": "/Core/PlacementNeed",
+      "ancestry": ["/Core/PlacementNeed", "/Core/Object"],
+      "doc": "Something carrying this component must exist, accessible by this route.",
+      "fields": [
+        { "name": "having", "type": "Kind<Component>", "exposed": true, "mutable": true, "api": true, "doc": "The component the needed actor must carry. A CLASS reference — nothing is constructed." },
+        { "name": "route", "type": "Ref<Route>", "exposed": true, "mutable": true, "api": true, "doc": "How it must be accessible." }
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/NeedsClearance",
+      "name": "NeedsClearance",
+      "kind": "object",
+      "extends": "/Core/PlacementNeed",
+      "ancestry": ["/Core/PlacementNeed", "/Core/Object"],
+      "doc": "This volume must stay empty.",
+      "fields": [
+        { "name": "volume", "type": "Ref<CollisionBody>", "exposed": true, "mutable": true, "api": true, "doc": "The volume." }
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/BlocksTraversal",
+      "name": "BlocksTraversal",
+      "kind": "object",
+      "extends": "/Core/PlacementNeed",
+      "ancestry": ["/Core/PlacementNeed", "/Core/Object"],
+      "doc": "Place me ON an edge of this kind and close it.",
+      "fields": [
+        { "name": "matching", "type": "Kind<TraversalComponent>", "exposed": true, "mutable": true, "api": true, "doc": "Which edges qualify." }
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/Constraint",
+      "name": "Constraint",
+      "kind": "object",
+      "extends": "/Core/Object",
+      "ancestry": ["/Core/Object"],
+      "doc": "A hard placement rule. Constraints express what CONTENT can state; dials express what only the generator can decide.",
+      "fields": [
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/AloneInScope",
+      "name": "AloneInScope",
+      "kind": "object",
+      "extends": "/Core/Constraint",
+      "ancestry": ["/Core/Constraint", "/Core/Object"],
+      "doc": "No sibling of this kind in the same scope.",
+      "fields": [
+        { "name": "scope", "type": "InstanceScope", "exposed": true, "mutable": true, "api": true, "doc": "Which scope must be exclusive." }
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/MinDistanceFrom",
+      "name": "MinDistanceFrom",
+      "kind": "object",
+      "extends": "/Core/Constraint",
+      "ancestry": ["/Core/Constraint", "/Core/Object"],
+      "doc": "At least this far from a named kind. A door writes key-to-lock distance here, because the door names its own unlock and the key does not know its lock.",
+      "fields": [
+        { "name": "kind", "type": "Kind<Object>", "exposed": true, "mutable": true, "api": true, "doc": "What to stay away from." },
+        { "name": "budget", "type": "BudgetRef", "exposed": true, "mutable": true, "api": true, "doc": "The minimum separation." }
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/MaxDistanceFrom",
+      "name": "MaxDistanceFrom",
+      "kind": "object",
+      "extends": "/Core/Constraint",
+      "ancestry": ["/Core/Constraint", "/Core/Object"],
+      "doc": "At most this far from a named kind.",
+      "fields": [
+        { "name": "kind", "type": "Kind<Object>", "exposed": true, "mutable": true, "api": true, "doc": "What to stay near." },
+        { "name": "budget", "type": "BudgetRef", "exposed": true, "mutable": true, "api": true, "doc": "The maximum separation." }
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/MountedOn",
+      "name": "MountedOn",
+      "kind": "object",
+      "extends": "/Core/Constraint",
+      "ancestry": ["/Core/Constraint", "/Core/Object"],
+      "doc": "Must be mounted on a matching socket.",
+      "fields": [
+        { "name": "accepts", "type": "TagQuery", "exposed": true, "mutable": true, "api": true, "doc": "Which sockets qualify." }
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/WithinScope",
+      "name": "WithinScope",
+      "kind": "object",
+      "extends": "/Core/Constraint",
+      "ancestry": ["/Core/Constraint", "/Core/Object"],
+      "doc": "Must be inside this scope.",
+      "fields": [
+        { "name": "scope", "type": "InstanceScope", "exposed": true, "mutable": true, "api": true, "doc": "The scope." }
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/NotWithinScope",
+      "name": "NotWithinScope",
+      "kind": "object",
+      "extends": "/Core/Constraint",
+      "ancestry": ["/Core/Constraint", "/Core/Object"],
+      "doc": "Must not be inside this scope.",
+      "fields": [
+        { "name": "scope", "type": "InstanceScope", "exposed": true, "mutable": true, "api": true, "doc": "The scope." }
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/Cohort",
+      "name": "Cohort",
+      "kind": "object",
+      "extends": "/Core/Constraint",
+      "ancestry": ["/Core/Constraint", "/Core/Object"],
+      "doc": "These instances belong together. Prefer co-locating as components of ONE Actor where that applies — a landmark with two sockets is one Actor, unambiguous by construction. Reach for Cohort only when the members are genuinely separate placeables.",
+      "fields": [
+        { "name": "members", "type": "Array<Kind<Actor>>", "exposed": true, "mutable": true, "api": true, "doc": "The grouped classes." },
+        { "name": "scope", "type": "InstanceScope", "exposed": true, "mutable": true, "api": true, "doc": "How tightly grouped." },
+        { "name": "all_or_nothing", "type": "bool", "exposed": true, "mutable": true, "api": true, "doc": "Whether a partial placement is acceptable.", "default": "true" },
+        { "name": "ordered", "type": "bool", "exposed": true, "mutable": true, "api": true, "doc": "Whether the order must be learnable.", "default": "false" }
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/Preference",
+      "name": "Preference",
+      "kind": "object",
+      "extends": "/Core/Object",
+      "ancestry": ["/Core/Object"],
+      "doc": "A soft placement bias. Relaxable, and REPORTED when relaxed — nothing is loose by accident.",
+      "fields": [
+        { "name": "strictness", "type": "Strictness", "exposed": true, "mutable": true, "api": true, "doc": "How hard the solver tries.", "default": "PREFERRED" },
+        { "name": "weight", "type": "float", "exposed": true, "mutable": true, "api": true, "doc": "Relative pull.", "default": "1.0" }
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/Exclusion",
+      "name": "Exclusion",
+      "kind": "object",
+      "extends": "/Core/Object",
+      "ancestry": ["/Core/Object"],
+      "doc": "What forbids() returns: a volume nothing may occupy, with declared escapes.",
+      "fields": [
+        { "name": "volume", "type": "Ref<CollisionBody>", "exposed": true, "mutable": true, "api": true, "doc": "The excluded volume." },
+        { "name": "unless", "type": "Array<Kind<Object>>", "exposed": true, "mutable": true, "api": true, "doc": "Content permitted anyway." },
+        { "name": "reason", "type": "String", "exposed": true, "mutable": true, "api": true, "doc": "Prose for the trace." }
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/ScheduleRule",
+      "name": "ScheduleRule",
+      "kind": "object",
+      "extends": "/Core/Object",
+      "ancestry": ["/Core/Object"],
+      "doc": "Ordering relative to other content.",
+      "fields": [
+        { "name": "relaxable", "type": "bool", "exposed": true, "mutable": true, "api": true, "doc": "Whether the solver may break this when infeasible — and report it.", "default": "true" }
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/PlacedAfter",
+      "name": "PlacedAfter",
+      "kind": "object",
+      "extends": "/Core/ScheduleRule",
+      "ancestry": ["/Core/ScheduleRule", "/Core/Object"],
+      "doc": "Place me after this target, with a gap.",
+      "fields": [
+        { "name": "target", "type": "Kind<Object>", "exposed": true, "mutable": true, "api": true, "doc": "What must come first." },
+        { "name": "gap", "type": "Span", "exposed": true, "mutable": true, "api": true, "doc": "How far after, in spheres." }
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/ExclusiveWith",
+      "name": "ExclusiveWith",
+      "kind": "object",
+      "extends": "/Core/ScheduleRule",
+      "ancestry": ["/Core/ScheduleRule", "/Core/Object"],
+      "doc": "Prefer not to appear alongside this.",
+      "fields": [
+        { "name": "other", "type": "Kind<Object>", "exposed": true, "mutable": true, "api": true, "doc": "The other content." },
+        { "name": "weight", "type": "float", "exposed": true, "mutable": true, "api": true, "doc": "How strongly." }
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/Supersedes",
+      "name": "Supersedes",
+      "kind": "object",
+      "extends": "/Core/ScheduleRule",
+      "ancestry": ["/Core/ScheduleRule", "/Core/Object"],
+      "doc": "This replaces a base once available — the upgrade relationship.",
+      "fields": [
+        { "name": "base", "type": "Kind<Object>", "exposed": true, "mutable": true, "api": true, "doc": "What this supersedes." }
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/SpherePin",
+      "name": "SpherePin",
+      "kind": "object",
+      "extends": "/Core/ScheduleRule",
+      "ancestry": ["/Core/ScheduleRule", "/Core/Object"],
+      "doc": "Pin to a sphere range. The first constraint about PACING rather than topology, and the one developers reach for soonest.",
+      "fields": [
+        { "name": "range", "type": "Span", "exposed": true, "mutable": true, "api": true, "doc": "Permitted spheres." }
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/Rationale",
+      "name": "Rationale",
+      "kind": "object",
+      "extends": "/Core/Object",
+      "ancestry": ["/Core/Object"],
+      "doc": "Why the core did what it did. The trace is built from these.",
+      "fields": [
+      ],
+      "methods": [
+        { "name": "subject", "hook": false, "api": true, "returns": "Ref<Object>", "doc": "What this explains." },
+        { "name": "layer", "hook": false, "api": true, "returns": "int", "doc": "Which pipeline layer decided." },
+        { "name": "inputs", "hook": false, "api": true, "returns": "Array<Ref<Object>>", "doc": "What the decision read." },
+        { "name": "explain", "hook": false, "api": true, "returns": "String", "doc": "Prose." },
+        { "name": "because", "hook": false, "api": true, "returns": "Array<Ref<Rationale>>", "doc": "The upstream reasons, so a developer can walk back to the root cause." }
+      ]
+    },
+    {
+      "path": "/Core/Context",
+      "name": "Context",
+      "kind": "object",
+      "extends": "/Core/Object",
+      "ancestry": ["/Core/Object"],
+      "doc": "The lens handed into every hook. Scope reads are FIELDS because they are free; queries are METHODS because they are not.",
+      "fields": [
+        { "name": "world", "type": "ScopeHandle", "exposed": false, "mutable": false, "api": true, "doc": "The World scope." },
+        { "name": "reach", "type": "ScopeHandle", "exposed": false, "mutable": false, "api": true, "doc": "The enclosing Reach. The ONLY legal use of the reach stem — everywhere else the noun is range and the verb is accessible." },
+        { "name": "area", "type": "ScopeHandle", "exposed": false, "mutable": false, "api": true, "doc": "The enclosing Area." },
+        { "name": "space", "type": "ScopeHandle", "exposed": false, "mutable": false, "api": true, "doc": "The enclosing Space, which is what bounds geometry queries." },
+        { "name": "floor", "type": "ScopeHandle", "exposed": false, "mutable": false, "api": true, "doc": "The enclosing Floor, which is what partitions accessibility." },
+        { "name": "spatial", "type": "Ref<Actor>", "exposed": false, "mutable": false, "api": true, "doc": "The content being considered at a position." },
+        { "name": "slot", "type": "Ref<SpineSlot>", "exposed": false, "mutable": false, "api": true, "doc": "The spine slot in play, or null outside a spine. Read-only." },
+        { "name": "occupant", "type": "Occupant", "exposed": false, "mutable": false, "api": true, "doc": "Who is being reasoned about." },
+        { "name": "party", "type": "Array<Occupant>", "exposed": false, "mutable": false, "api": true, "doc": "Everyone travelling together." },
+        { "name": "held", "type": "Array<Unlock>", "exposed": false, "mutable": false, "api": true, "doc": "Unlocks held. ROWS — one currency with grants() and HoldsRule. Already expanded through supersedes, so membership is a plain set test." },
+        { "name": "sphere", "type": "int", "exposed": false, "mutable": false, "api": true, "doc": "The current accessibility sphere." },
+        { "name": "progression", "type": "float", "exposed": false, "mutable": false, "api": true, "doc": "Normalised progress through the world." },
+        { "name": "role", "type": "Role", "exposed": false, "mutable": false, "api": true, "doc": "The role assigned to the content under consideration." },
+        { "name": "layer", "type": "int", "exposed": false, "mutable": false, "api": true, "doc": "Which pipeline layer is asking." },
+        { "name": "fidelity", "type": "Fidelity", "exposed": false, "mutable": false, "api": true, "doc": "How real the geometry currently is." },
+        { "name": "tolerance", "type": "float", "exposed": false, "mutable": false, "api": true, "doc": "The bounded error of this fidelity rung. The ladder is monotone, so this only ever shrinks." },
+        { "name": "rng", "type": "Rng", "exposed": false, "mutable": false, "api": true, "doc": "The ONLY randomness source. Anything else is unreplayable." }
+      ],
+      "methods": [
+        { "name": "state_of", "hook": false, "api": true, "returns": "String", "doc": "Read a declared world-state variable." },
+        { "name": "pool", "hook": false, "api": true, "returns": "Pool", "doc": "Read a declared resource pool." },
+        { "name": "setting", "hook": false, "api": true, "returns": "MetaValue", "doc": "Read a project setting." },
+        { "name": "query", "hook": false, "api": true, "returns": "Query", "doc": "The three-axis query builder: what to trace, what to consider, what to report. Declarative filters, never closures — a predicate callback survives neither the binding contract nor the palette." },
+        { "name": "path_to", "hook": false, "api": true, "returns": "Ref<Path>", "doc": "Realise a path to a target." },
+        { "name": "accessible", "hook": false, "api": true, "returns": "Trivalent", "doc": "Can an occupant holding these unlocks get from here to there? Trivalent, not bool, because the API must not be able to lie." },
+        { "name": "within", "hook": false, "api": true, "returns": "Trivalent", "doc": "Trivalent for METRIC questions. Dual bounds answer set membership; this answers 'is this ledge within 30 m', which every Span and Budget comparison actually asks." },
+        { "name": "request", "hook": false, "api": true, "returns": "void", "doc": "Ask the solver for something, softly." },
+        { "name": "note", "hook": false, "api": true, "returns": "void", "doc": "Add a reason to the trace." },
+        { "name": "send_message", "hook": false, "api": true, "returns": "void", "doc": "One-way notification to the host. Observational only, never affecting generation; debug_only messages are stripped entirely from a cooked build." }
+      ]
+    },
+    {
+      "path": "/Core/ScopeHandle",
+      "name": "ScopeHandle",
+      "kind": "object",
+      "extends": "/Core/Object",
+      "ancestry": ["/Core/Object"],
+      "doc": "A handle on one scope.",
+      "fields": [
+        { "name": "bounds", "type": "Aabb", "exposed": false, "mutable": false, "api": true, "doc": "Extent." },
+        { "name": "siblings", "type": "Array<ScopeHandle>", "exposed": false, "mutable": false, "api": true, "doc": "Peers under the same parent." },
+        { "name": "floors", "type": "Array<ScopeHandle>", "exposed": false, "mutable": false, "api": true, "doc": "Floors inside this scope, if it is a Space." },
+        { "name": "instances", "type": "Array<Ref<Actor>>", "exposed": false, "mutable": false, "api": true, "doc": "Placed actors here." },
+        { "name": "granted_here", "type": "Array<Unlock>", "exposed": false, "mutable": false, "api": true, "doc": "Unlocks obtainable in this scope." }
+      ],
+      "methods": [
+        { "name": "contains", "hook": false, "api": true, "returns": "bool", "doc": "Is this actor inside?" },
+        { "name": "accessible_from", "hook": false, "api": true, "returns": "Trivalent", "doc": "Can an occupant holding these get here from there?" },
+        { "name": "instances_of", "hook": false, "api": true, "returns": "Array<Ref<Object>>", "doc": "Placed content of a kind. Space and up — there is deliberately no floor-scoped instance query, because it would stop at a boundary the geometry does not stop at." },
+        { "name": "dial", "hook": false, "api": true, "returns": "float", "doc": "Read a numeric dial by its qualified <ClassName>.<DialName> id -- a scope handle may be any scope, so the owner is never implied. This is the DYNAMIC read; the typed one is the per-dial get node, which is picked and carries the dial's real type. Inherits OUTWARD-IN and an inner scope wins, so 'set saturation once at World scope' works. The trace records which scope supplied the value." }
+      ]
+    },
+    {
+      "path": "/Core/Vec2",
+      "name": "Vec2",
+      "kind": "struct",
+      "ancestry": [],
+      "doc": "2D vector. components, length, normalized, dot, distance_to, arithmetic, and the ZERO/ONE constants.",
+      "fields": [
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/Vec3",
+      "name": "Vec3",
+      "kind": "struct",
+      "ancestry": [],
+      "doc": "3D vector. components, length, normalized, dot, cross, distance_to, arithmetic, and the ZERO/ONE/UP/DOWN/FORWARD/RIGHT constants.",
+      "fields": [
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/Quaternion",
+      "name": "Quaternion",
+      "kind": "struct",
+      "ancestry": [],
+      "doc": "Rotation. from_euler, to_euler, slerp, mul.",
+      "fields": [
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/Mat4",
+      "name": "Mat4",
+      "kind": "struct",
+      "ancestry": [],
+      "doc": "4x4 matrix. origin, basis, apply, inverse, mul.",
+      "fields": [
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/Transform",
+      "name": "Transform",
+      "kind": "struct",
+      "ancestry": [],
+      "doc": "Position, rotation and scale. origin, basis, apply, inverse, mul.",
+      "fields": [
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/Aabb",
+      "name": "Aabb",
+      "kind": "struct",
+      "ancestry": [],
+      "doc": "Axis-aligned box. min, max, center, size, contains, intersects, expand, merge.",
+      "fields": [
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/Ray",
+      "name": "Ray",
+      "kind": "struct",
+      "ancestry": [],
+      "doc": "Origin, direction, at(t).",
+      "fields": [
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/Plane",
+      "name": "Plane",
+      "kind": "struct",
+      "ancestry": [],
+      "doc": "Normal, d, distance_to(p).",
+      "fields": [
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/Span",
+      "name": "Span",
+      "kind": "struct",
+      "ancestry": [],
+      "doc": "An inclusive range. min, max, contains, clamp, length, overlaps, lerp, is_bounded, and UNBOUNDED. A Span DECLARES a range; a Route OBLIGES one.",
+      "fields": [
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/Unlock",
+      "name": "Unlock",
+      "kind": "struct",
+      "ancestry": [],
+      "doc": "ONE ROW of an UnlockTableResource -- one atom of the progression lattice, something an occupant holds or knows. id, name, doc, supersedes. NOT A CLASS AND NOT A FILE: it carries no behaviour whatever, because every mechanical consequence belongs to a Component where affords/supports/judge can act on it. An unlock is an identity, and identity is all it is.",
+      "fields": [
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/Curve",
+      "name": "Curve",
+      "kind": "struct",
+      "ancestry": [],
+      "doc": "2D point data and NOT a resource — one row of a CurveTableResource. points, interpolation, sample, constant, ramp, from_points.",
+      "fields": [
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/Dial",
+      "name": "Dial",
+      "kind": "struct",
+      "ancestry": [],
+      "doc": "A DEVELOPER-AUTHORED, named, tunable value owned by a Schematic or a Spine slot — how a host keeps fine-grained control over authored content at runtime. Identity is <ClassName>.<DialName>. Always exposed; always optional; the core ships none, and there is no such thing as a core dial. Holds a number, a hard range, a soft AdaptiveRange, an enum value, one curve, or a whole curve table whose named eval input it drives for every row. Resolves ONCE per generation pass, so it never changes underneath a decision mid-pass — which is why changing one is a different recipe and regenerates the world.",
+      "fields": [
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/AdaptiveRange",
+      "name": "AdaptiveRange",
+      "kind": "struct",
+      "ancestry": [],
+      "doc": "soft_min, hard_max, and target(available) computed from what is genuinely placeable. Falls below soft_min HONESTLY under content scarcity rather than padding with repeated filler or breaking outright.",
+      "fields": [
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/Quantity",
+      "name": "Quantity",
+      "kind": "struct",
+      "ancestry": [],
+      "doc": "initial, max, consumable.",
+      "fields": [
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/Pool",
+      "name": "Pool",
+      "kind": "struct",
+      "ancestry": [],
+      "doc": "A resource an occupant draws on. capacity, reserve, and available(ctx) — the last is what every soft gate compares against, because capacity alone cannot answer how much is held at a given sphere.",
+      "fields": [
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/Harm",
+      "name": "Harm",
+      "kind": "struct",
+      "ancestry": [],
+      "doc": "radius, severity 0..1, avoidable, continuous, mitigated_by, and NONE.",
+      "fields": [
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/Support",
+      "name": "Support",
+      "kind": "struct",
+      "ancestry": [],
+      "doc": "permitted (a Rule), max_slope, endurance (a Budget). Returned per occupant by Surface.supports.",
+      "fields": [
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/Approach",
+      "name": "Approach",
+      "kind": "struct",
+      "ancestry": [],
+      "doc": "distance (a Span), max_slope, surface. What an occupant needs at the near end of a traversal.",
+      "fields": [
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/Occupant",
+      "name": "Occupant",
+      "kind": "struct",
+      "ancestry": [],
+      "doc": "Who is standing, as a parameter. actor (null for the player), is_player, held, holds(kind), footprint.",
+      "fields": [
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/Hit",
+      "name": "Hit",
+      "kind": "struct",
+      "ancestry": [],
+      "doc": "A query result. valid, distance, point, normal, actor, component, island, polygon, triangle, surface, face, fidelity, and certainty. Fields below the achieved detail are ABSENT, which is checkable rather than sentinel-valued.",
+      "fields": [
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/DirectionCone",
+      "name": "DirectionCone",
+      "kind": "struct",
+      "ancestry": [],
+      "doc": "axis and angle. Replaces a three-value enum so that 'up, level or diagonally up, never down' is expressible.",
+      "fields": [
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/Kind",
+      "name": "Kind",
+      "kind": "struct",
+      "ancestry": [],
+      "doc": "A picked CLASS path. path, is_a, and defaults() — the core-owned class default, one per class, READ and never built by content. This is how a token's authored values are compared without instantiating anything.",
+      "fields": [
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/Ref",
+      "name": "Ref",
+      "kind": "struct",
+      "ancestry": [],
+      "doc": "A live INSTANCE reference. Never interchangeable with Kind: a class never appears in a value position and a path never in a type position.",
+      "fields": [
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/Tag",
+      "name": "Tag",
+      "kind": "struct",
+      "ancestry": [],
+      "doc": "A dotted hierarchical label, picked rather than typed.",
+      "fields": [
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/TagQuery",
+      "name": "TagQuery",
+      "kind": "struct",
+      "ancestry": [],
+      "doc": "A tag match with an exact/inherited toggle. Why an eligible-surface list survives every future surface being added.",
+      "fields": [
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/Cost",
+      "name": "Cost",
+      "kind": "variant",
+      "ancestry": [],
+      "doc": "A kind and a limit, with NO accounting — Distance(m), Time(s) or Pool(pool, rate). What a Budget is a named instance of, and what an interaction spends.",
+      "fields": [
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/CollisionData",
+      "name": "CollisionData",
+      "kind": "struct",
+      "ancestry": [],
+      "doc": "One collision island: a shape, placed, on a layer, meaning something. Collision is computed from the shape's PARAMETERS, never from tessellation — otherwise a visual LOD change silently alters generation.",
+      "fields": [
+        { "name": "shape", "type": "Shape", "exposed": true, "mutable": true, "api": true, "doc": "What it is, parametrically." },
+        { "name": "layer", "type": "CollisionLayer", "exposed": true, "mutable": true, "api": true, "doc": "Which broad phase it participates in. Hull is separate from Static so a conservative answer is never reported as a firm one." },
+        { "name": "surface", "type": "Kind<Surface>", "exposed": true, "mutable": true, "api": true, "doc": "What it MEANS to a mechanic — the resolved per-island answer queries hit." },
+        { "name": "transform", "type": "Transform", "exposed": true, "mutable": true, "api": true, "doc": "Where it sits." }
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/MetaValue",
+      "name": "MetaValue",
+      "kind": "variant",
+      "ancestry": [],
+      "doc": "What a metadata value may hold. A CLOSED set, deliberately: an open Any would let content stash a handle the fingerprint cannot see, and the first symptom would be a world that fails to reproduce with no visible cause.",
+      "fields": [
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/BoolMeta",
+      "name": "BoolMeta",
+      "kind": "variant",
+      "extends": "/Core/MetaValue",
+      "ancestry": ["/Core/MetaValue"],
+      "doc": "A yes or no.",
+      "fields": [
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/IntMeta",
+      "name": "IntMeta",
+      "kind": "variant",
+      "extends": "/Core/MetaValue",
+      "ancestry": ["/Core/MetaValue"],
+      "doc": "A whole number. i32, not i64: a JavaScript number is exact only below 2^53, and metadata crosses the binding seam constantly.",
+      "fields": [
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/FloatMeta",
+      "name": "FloatMeta",
+      "kind": "variant",
+      "extends": "/Core/MetaValue",
+      "ancestry": ["/Core/MetaValue"],
+      "doc": "A real number.",
+      "fields": [
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/StringMeta",
+      "name": "StringMeta",
+      "kind": "variant",
+      "extends": "/Core/MetaValue",
+      "ancestry": ["/Core/MetaValue"],
+      "doc": "Text.",
+      "fields": [
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/Vec3Meta",
+      "name": "Vec3Meta",
+      "kind": "variant",
+      "extends": "/Core/MetaValue",
+      "ancestry": ["/Core/MetaValue"],
+      "doc": "A position or direction.",
+      "fields": [
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/TransformMeta",
+      "name": "TransformMeta",
+      "kind": "variant",
+      "extends": "/Core/MetaValue",
+      "ancestry": ["/Core/MetaValue"],
+      "doc": "A placement.",
+      "fields": [
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/ArrayMeta",
+      "name": "ArrayMeta",
+      "kind": "variant",
+      "extends": "/Core/MetaValue",
+      "ancestry": ["/Core/MetaValue"],
+      "doc": "An ordered list of metadata values.",
+      "fields": [
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/MapMeta",
+      "name": "MapMeta",
+      "kind": "variant",
+      "extends": "/Core/MetaValue",
+      "ancestry": ["/Core/MetaValue"],
+      "doc": "A named map of metadata values.",
+      "fields": [
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/RefMeta",
+      "name": "RefMeta",
+      "kind": "variant",
+      "extends": "/Core/MetaValue",
+      "ancestry": ["/Core/MetaValue"],
+      "doc": "A reference to something with identity.",
+      "fields": [
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/BudgetRef",
+      "name": "BudgetRef",
+      "kind": "variant",
+      "ancestry": [],
+      "doc": "'This budget' — Named(Ref<Budget>) into the project's book, or Inline(Cost) authored at the site. BOTH forms stay and stay DISTINGUISHABLE: forcing a one-off through the book is ceremony for a number used once, and because the two are told apart a tool can notice the same inline number in twelve places and offer to extract it.",
+      "fields": [
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/Quota",
+      "name": "Quota",
+      "kind": "struct",
+      "ancestry": [],
+      "doc": "How many of something may exist, per scope.",
+      "fields": [
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/Diagnostic",
+      "name": "Diagnostic",
+      "kind": "struct",
+      "ancestry": [],
+      "doc": "An editor-time finding. Never blocks generation.",
+      "fields": [
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/Rng",
+      "name": "Rng",
+      "kind": "struct",
+      "ancestry": [],
+      "doc": "The owned, forkable PRNG. Reached only through ctx.rng.",
+      "fields": [
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/Face",
+      "name": "Face",
+      "kind": "enum",
+      "ancestry": [],
+      "doc": "Which face of a bounding box something presents or mounts against.",
+      "fields": [
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/Role",
+      "name": "Role",
+      "kind": "enum",
+      "ancestry": [],
+      "doc": "What a placement turned out to be. An OUTPUT, assigned after the search from what it ran into — never declared.",
+      "fields": [
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/ItemClass",
+      "name": "ItemClass",
+      "kind": "enum",
+      "ancestry": [],
+      "doc": "What kind of reward something is. An INPUT the developer declares.",
+      "fields": [
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/CollisionLayer",
+      "name": "CollisionLayer",
+      "kind": "enum",
+      "ancestry": [],
+      "doc": "Which collision layer a body belongs to.",
+      "fields": [
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/QueryFilter",
+      "name": "QueryFilter",
+      "kind": "enum",
+      "ancestry": [],
+      "doc": "Coarse query scoping.",
+      "fields": [
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/Replenish",
+      "name": "Replenish",
+      "kind": "enum",
+      "ancestry": [],
+      "doc": "Whether and how a supply comes back.",
+      "fields": [
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/InstanceScope",
+      "name": "InstanceScope",
+      "kind": "enum",
+      "ancestry": [],
+      "doc": "How wide an instance query or effect reaches. There is deliberately NO FLOOR member: a floor-scoped instance query would stop at a boundary the geometry does not stop at.",
+      "fields": [
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/BooleanOp",
+      "name": "BooleanOp",
+      "kind": "enum",
+      "ancestry": [],
+      "doc": "Constructive solid geometry operations.",
+      "fields": [
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/ResolveState",
+      "name": "ResolveState",
+      "kind": "enum",
+      "ancestry": [],
+      "doc": "How committed a node is. A subtree may lag but never lead.",
+      "fields": [
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/Detail",
+      "name": "Detail",
+      "kind": "enum",
+      "ancestry": [],
+      "doc": "How much a query wants back. Detail is what you ASK for; fidelity is what EXISTS.",
+      "fields": [
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/Fidelity",
+      "name": "Fidelity",
+      "kind": "enum",
+      "ancestry": [],
+      "doc": "How real the geometry is. The ladder is monotone — each rung only tightens, so tolerance only shrinks.",
+      "fields": [
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/Strictness",
+      "name": "Strictness",
+      "kind": "enum",
+      "ancestry": [],
+      "doc": "How hard a spine slot or preference must hold. Every relaxation is declared; nothing is loose by accident.",
+      "fields": [
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/SkipPolicy",
+      "name": "SkipPolicy",
+      "kind": "enum",
+      "ancestry": [],
+      "doc": "Per-lock sequence-break policy. A designer marks two or three gates, not two hundred.",
+      "fields": [
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/Interpolation",
+      "name": "Interpolation",
+      "kind": "enum",
+      "ancestry": [],
+      "doc": "How a curve row interpolates between keys. Declared PER ROW — UE fixes it per table only because a CSV has one header row, which JSON does not.",
+      "fields": [
+      ],
+      "methods": [
+      ]
+    },
+    {
+      "path": "/Core/Trivalent",
+      "name": "Trivalent",
+      "kind": "enum",
+      "ancestry": [],
+      "doc": "Three-valued truth. A confident wrong answer is worse than an admitted unknown, so the API returns this rather than a bool wherever geometry is still approximate.",
+      "fields": [
+      ],
+      "methods": [
+      ]
+    }
+  ]
+}

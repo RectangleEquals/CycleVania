@@ -133,14 +133,14 @@ checksum = "914a755b7c2d4af2bdcff7ce1739e2db9a1b81a9b07123d8015786ae03c0980d"
 
 [[package]]
 name = "cv-api"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "cv-manifest",
 ]
 
 [[package]]
 name = "cv-assets"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "cv-core",
  "cv-determinism",
@@ -148,9 +148,10 @@ dependencies = [
 
 [[package]]
 name = "cv-bindings"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "cv-assets",
+ "cv-compile",
  "cv-core",
  "cv-cvb",
  "cv-determinism",
@@ -163,7 +164,7 @@ dependencies = [
 
 [[package]]
 name = "cv-cli"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "clap",
  "cv-assets",
@@ -175,7 +176,7 @@ dependencies = [
 
 [[package]]
 name = "cv-compile"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "cv-api",
  "cv-cvb",
@@ -184,7 +185,7 @@ dependencies = [
 
 [[package]]
 name = "cv-core"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "cv-determinism",
  "cv-vm",
@@ -192,19 +193,19 @@ dependencies = [
 
 [[package]]
 name = "cv-cvb"
-version = "0.1.0"
+version = "0.2.1"
 
 [[package]]
 name = "cv-determinism"
-version = "0.1.0"
+version = "0.2.1"
 
 [[package]]
 name = "cv-manifest"
-version = "0.1.0"
+version = "0.2.1"
 
 [[package]]
 name = "cv-vm"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "cv-determinism",
 ]
@@ -563,7 +564,7 @@ dependencies = [
 
 [[package]]
 name = "xtask"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "cv-manifest",
 ]

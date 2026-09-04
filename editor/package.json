@@ -1,7 +1,7 @@
 {
   "name": "@cyclevania/editor",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.1",
   "type": "module",
   "description": "The CycleVania editor — a self-contained TypeScript project over the bindings. Not part of the Rust workspace, and never shipped inside a host project.",
   "scripts": {

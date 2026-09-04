@@ -18,6 +18,7 @@
 //! `check` is what CI runs. It is the mechanism that makes "edit the manifest, never the output" a
 //! rule the build enforces rather than a convention people remember.
 
+mod emit_classes;
 mod emit_docs;
 mod emit_palette;
 mod emit_rust;
@@ -136,6 +137,10 @@ fn build(m: &Manifest) -> Vec<Artifact> {
         Artifact {
             path: "editor/palette.json",
             body: emit_palette::emit(m),
+        },
+        Artifact {
+            path: "editor/classes.json",
+            body: emit_classes::emit(m),
         },
         Artifact {
             path: "docs/authoring/api-reference.md",

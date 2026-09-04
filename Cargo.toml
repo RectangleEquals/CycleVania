@@ -15,7 +15,15 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.0"
+# ⚠ **Tracks the design line, and the patch is which revision of it.** The design ladder is
+# `pre-v0.1 -> v0.1 -> v0.2 -> v0.2b`; there is no v0.2a, so **v0.2 is `0.2.0` and v0.2b is `0.2.1`**.
+# ▶ Written out because it is the kind of mapping everyone re-derives differently: `0.2.0` would
+# claim to be v0.2, which is the design this one supersedes.
+#
+# ⚠ It sat at `0.1.0` for seventeen milestones because nothing ever had a reason to touch it — and
+# **the version is an input to the fingerprint**, so a wrong one is not cosmetic: it claims a recipe
+# identity the build does not have.
+version = "0.2.1"
 edition = "2021"
 rust-version = "1.89"
 
@@ -27,6 +35,7 @@ cv-api = { path = "crates/cv-api" }
 cv-core = { path = "crates/cv-core" }
 cv-vm = { path = "crates/cv-vm" }
 cv-cvb = { path = "crates/cv-cvb" }
+cv-compile = { path = "crates/cv-compile" }
 cv-assets = { path = "crates/cv-assets" }
 # Host-facing / tooling deps.
 napi = { version = "3" }

@@ -283,12 +283,45 @@ impl Project {
         self.validated = false;
     }
 
-    /// Check the project.
+    /// **Check the project — by compiling it.**
+    ///
+    /// ⚠ **This was a stub for four milestones, and nothing said so.** It checked a findings list
+    /// that only [`Project::note`] could fill, so a project full of broken schematics validated
+    /// cleanly and `generate` went ahead. ▶ **A check that cannot fail is worse than no check**: it
+    /// answers the question everyone stops asking.
+    ///
+    /// ⚠ **Errors stop it; warnings and lints do not.** A lint that blocked would make consistency
+    /// a gate rather than a nudge, and the design is explicit that naming lints are dismissible.
+    /// Warnings are worth surfacing and are not worth refusing a build over.
+    ///
+    /// ▶ **Only schematics compile.** Curves, unlock tables, tags and state graphs are data the
+    /// loader validates in its own way; handing them to a graph compiler would report *"not a
+    /// schematic"* against every one of them, which is noise standing where a real finding should be.
     pub fn validate(&mut self) -> Result<(), ProjectError> {
-        if !self.findings.is_empty() {
-            return Err(ProjectError::Invalid {
-                findings: self.findings.clone(),
-            });
+        let mut findings = self.findings.clone();
+
+        if let Some(descriptor) = &self.descriptor {
+            for rel in content::list(descriptor) {
+                if !rel.ends_with(".cvs") {
+                    continue;
+                }
+                let src = content::read(descriptor, &rel)?;
+                let block = match cv_cvb::parse(&src) {
+                    Ok(b) => b,
+                    Err(e) => {
+                        findings.push(format!("{rel}: {e}"));
+                        continue;
+                    }
+                };
+                let compiled = cv_compile::compile(&block);
+                for finding in compiled.findings().of(cv_compile::Severity::Error) {
+                    findings.push(format!("{rel}: {finding}"));
+                }
+            }
+        }
+
+        if !findings.is_empty() {
+            return Err(ProjectError::Invalid { findings });
         }
         self.validated = true;
         Ok(())
@@ -299,20 +332,67 @@ impl Project {
         self.validated
     }
 
-    /// **The recipe.**
+    /// **The recipe** — `H(core version, content digests, config)`.
     ///
-    /// ⚠ **Dials are part of it and the seed is not.** A changed dial is a different recipe; a changed
-    /// seed is the same recipe rolled again. That asymmetry is the whole reason both exist.
+    /// ⚠ **Dials are part of it and the seed is not.** A changed dial is a different recipe; a
+    /// changed seed is the same recipe rolled again. That asymmetry is the whole reason both exist.
+    ///
+    /// ⚠ **This hashed the project's *file path* and its dials, and nothing else.** Editing a
+    /// schematic left it unchanged — so *"same fingerprint + same seed ⇒ same world"* was false, and
+    /// two projects with entirely different content reported as the same world. Moving a project
+    /// changed it, which [`phase-3`] forbids outright: **a move is not a content change**, and a
+    /// fingerprint that disagreed would stop every reproduction bundle reproducing.
+    ///
+    /// ▶ **`cv-core` had the correct implementation the whole time.** `FingerprintBuilder` folds in
+    /// the core version, every registered content digest and the config; the binding rolled its own
+    /// two-line hash beside it. Now it does not.
     pub fn fingerprint(&self) -> u64 {
-        let mut acc = cv_determinism::hash::fnv1a_str(&self.path);
+        let mut builder = cv_core::fingerprint::FingerprintBuilder::for_this_build();
+
+        if let Some(descriptor) = &self.descriptor {
+            builder = builder.config_f64("world_scale", descriptor.world_scale);
+            builder = self.fold_content(builder);
+        }
+
+        // ⚠ **The binding's dials, not `cv-core`'s `DialBook`.** They are the same concept either
+        // side of the seam, and folding the host-facing values in is what makes *"a changed dial is a
+        // different recipe"* true for a host that never touches a book.
         for dial in self.dials.list() {
-            acc = cv_determinism::hash::combine(acc, cv_determinism::hash::fnv1a_str(&dial.id));
-            acc = cv_determinism::hash::combine(
-                acc,
-                cv_determinism::hash::fnv1a_str(&format!("{:?}", dial.effective)),
+            builder =
+                builder.config_str(format!("dial:{}", dial.id), format!("{:?}", dial.effective));
+        }
+        builder.finish().to_raw()
+    }
+
+    /// Every content file's digest, folded in as config.
+    ///
+    /// ⚠ **Digests, not a `ContentRegistry`, and the difference is honesty.** A registry entry
+    /// carries a `ContentKind`, and **kind decides schedulability** — but nothing here has parsed a
+    /// schematic yet, so the binding does not know whether a `.cvs` is an Actor, an Item or a Puzzle.
+    /// Guessing would put a fabricated kind into a structure other code is entitled to trust.
+    ///
+    /// ▶ **`config_str` says exactly what is known**: this path, these bytes. The design asks the
+    /// fingerprint to fold in *"all compiled content hashes"*, and that is what this is.
+    ///
+    /// ⚠ **The digest is of the file, not of its path.** A renamed file is the same content, an
+    /// edited one is not — and the old fingerprint had that precisely backwards.
+    fn fold_content(
+        &self,
+        mut builder: cv_core::fingerprint::FingerprintBuilder,
+    ) -> cv_core::fingerprint::FingerprintBuilder {
+        let Some(descriptor) = &self.descriptor else {
+            return builder;
+        };
+        for rel in content::list(descriptor) {
+            let Ok(text) = content::read(descriptor, &rel) else {
+                continue;
+            };
+            builder = builder.config_u64(
+                format!("content:{rel}"),
+                cv_determinism::hash::fnv1a_str(&text),
             );
         }
-        acc
+        builder
     }
 
     /// Generate a world.

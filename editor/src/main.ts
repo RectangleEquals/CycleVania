@@ -16,7 +16,10 @@ async function main(): Promise<void> {
   try {
     const res = await fetch("/api/version");
     const { version } = (await res.json()) as VersionReply;
-    app.textContent = `CycleVania ${version} — editor service reachable.`;
+    // ⚠ The core already names itself — `cyclevania 0.2.1 (core …, determinism …)` — so a
+    // prefix here rendered "CycleVania cyclevania 0.2.1". Only a screenshot showed it; every
+    // assertion was about the version *number*, and the number was right.
+    app.textContent = `${version} — editor service reachable.`;
   } catch {
     app.textContent = "the editor service is not running — `npm run serve`";
   }

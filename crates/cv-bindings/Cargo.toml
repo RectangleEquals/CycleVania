@@ -21,6 +21,7 @@ wasm = ["dep:wasm-bindgen"]
 [dependencies]
 cv-core = { workspace = true }
 cv-cvb = { workspace = true }
+cv-compile = { workspace = true }
 cv-assets = { workspace = true }
 cv-vm = { workspace = true }
 cv-determinism = { workspace = true }
