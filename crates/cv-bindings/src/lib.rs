@@ -13,6 +13,7 @@
 //!   game both drive. ⚠ **The editor gets no private channel.**
 //! * [`project`] — load, validate, seed, generate.
 
+pub mod content;
 pub mod dials;
 pub mod project;
 
@@ -99,9 +100,115 @@ pub fn describe_dial(path: String, cooked: bool, id: String) -> String {
     dial_line(&open(path, cooked), &id)
 }
 
+/// **The project handle.**
+///
+/// ⚠ **The ownership disagreement is the whole reason this took a milestone.** napi wants a class it
+/// owns and hands back by reference; `wasm_bindgen` wants a value it can move through a `JsValue`. The
+/// resolution is that **neither owns the surface** — [`project::Project`] is plain Rust, and each target
+/// gets a thin wrapper of its own. A surface written directly against one of them would be a surface
+/// only one target has.
+#[cfg(all(feature = "napi-addon", not(target_arch = "wasm32")))]
+#[napi(js_name = "Project")]
+pub struct JsProject {
+    inner: project::Project,
+}
+
+#[cfg(all(feature = "napi-addon", not(target_arch = "wasm32")))]
+#[napi]
+impl JsProject {
+    /// Open a project from its `.cvproj`.
+    #[napi(factory)]
+    pub fn open(path: String) -> napi::Result<Self> {
+        project::Project::open(&path)
+            .map(|inner| JsProject { inner })
+            .map_err(to_napi)
+    }
+
+    /// Open a cooked package. ⚠ **One file, and the whole surface a shipped game needs.**
+    #[napi(factory)]
+    pub fn load_from_file(path: String) -> Self {
+        JsProject {
+            inner: project::Project::load_from_file(path),
+        }
+    }
+
+    /// Create a new project, optionally copying an existing one's content.
+    #[napi(factory)]
+    pub fn create(at: String, from: Option<String>) -> napi::Result<Self> {
+        let source = match from {
+            Some(path) => Some(project::Project::open(&path).map_err(to_napi)?),
+            None => None,
+        };
+        project::Project::create(&at, source.as_ref().and_then(project::Project::descriptor))
+            .map(|inner| JsProject { inner })
+            .map_err(to_napi)
+    }
+
+    /// Every content file, relative to the content root, sorted.
+    #[napi]
+    pub fn content(&self) -> Vec<String> {
+        self.inner.content()
+    }
+
+    /// Read one content file.
+    #[napi]
+    pub fn read(&self, rel: String) -> napi::Result<String> {
+        self.inner.read(&rel).map_err(to_napi)
+    }
+
+    /// Write one content file **canonically**, returning what was written.
+    #[napi]
+    pub fn write(&mut self, rel: String, src: String) -> napi::Result<String> {
+        self.inner.write(&rel, &src).map_err(to_napi)
+    }
+
+    /// Check the project.
+    #[napi]
+    pub fn validate(&mut self) -> napi::Result<()> {
+        self.inner.validate().map_err(to_napi)
+    }
+
+    /// Every dial id it declares, sorted.
+    #[napi]
+    pub fn dials(&self) -> Vec<String> {
+        dial_ids(&self.inner)
+    }
+
+    /// One dial, as a tab-separated line.
+    #[napi]
+    pub fn dial(&self, id: String) -> String {
+        dial_line(&self.inner, &id)
+    }
+
+    /// The recipe. ⚠ **Dials are part of it and the seed is not.**
+    #[napi]
+    pub fn fingerprint(&self) -> String {
+        format!("{:016x}", self.inner.fingerprint())
+    }
+
+    /// Generate, returning the world's fingerprint and seed.
+    ///
+    /// ▶ **The descriptor itself does not cross here.** Reading structure out of a world is M21's
+    /// shape and arrives with it; this milestone is *"the editor can work"*, not the whole host API.
+    #[napi]
+    pub fn generate(&self, seed: String) -> napi::Result<String> {
+        self.inner
+            .generate(project::GenerateOptions::seeded(seed))
+            .map(|w| format!("{:016x}\t{}\t{}", w.fingerprint, w.seed, w.scopes))
+            .map_err(to_napi)
+    }
+}
+
+#[cfg(all(feature = "napi-addon", not(target_arch = "wasm32")))]
+fn to_napi(e: project::ProjectError) -> napi::Error {
+    napi::Error::from_reason(e.to_string())
+}
+
 // --- WASM module (wasm-bindgen) ---
 #[cfg(all(feature = "wasm", target_arch = "wasm32"))]
 use wasm_bindgen::prelude::wasm_bindgen;
+#[cfg(all(feature = "wasm", target_arch = "wasm32"))]
+use wasm_bindgen::JsValue;
 
 #[cfg(all(feature = "wasm", target_arch = "wasm32"))]
 #[wasm_bindgen]
@@ -121,6 +228,94 @@ pub fn list_dials(path: String, cooked: bool) -> Vec<String> {
 #[wasm_bindgen]
 pub fn describe_dial(path: String, cooked: bool, id: String) -> String {
     dial_line(&open(path, cooked), &id)
+}
+
+/// **The project handle**, the WASM half.
+///
+/// ⚠ **The same plain-Rust surface, a different wrapper.** Errors cross as `JsValue` strings because
+/// `wasm_bindgen` has no error type of its own to map onto — which is precisely the disagreement with
+/// napi that kept a handle from crossing at all until this milestone.
+#[cfg(all(feature = "wasm", target_arch = "wasm32"))]
+#[wasm_bindgen(js_name = "Project")]
+pub struct JsProject {
+    inner: project::Project,
+}
+
+#[cfg(all(feature = "wasm", target_arch = "wasm32"))]
+#[wasm_bindgen(js_class = "Project")]
+impl JsProject {
+    /// Open a project from its `.cvproj`.
+    pub fn open(path: String) -> Result<JsProject, JsValue> {
+        project::Project::open(&path)
+            .map(|inner| JsProject { inner })
+            .map_err(to_js)
+    }
+
+    /// Open a cooked package.
+    pub fn load_from_file(path: String) -> JsProject {
+        JsProject {
+            inner: project::Project::load_from_file(path),
+        }
+    }
+
+    /// Create a new project, optionally copying an existing one's content.
+    pub fn create(at: String, from: Option<String>) -> Result<JsProject, JsValue> {
+        let source = match from {
+            Some(path) => Some(project::Project::open(&path).map_err(to_js)?),
+            None => None,
+        };
+        project::Project::create(&at, source.as_ref().and_then(project::Project::descriptor))
+            .map(|inner| JsProject { inner })
+            .map_err(to_js)
+    }
+
+    /// Every content file, relative to the content root, sorted.
+    pub fn content(&self) -> Vec<String> {
+        self.inner.content()
+    }
+
+    /// Read one content file.
+    pub fn read(&self, rel: String) -> Result<String, JsValue> {
+        self.inner.read(&rel).map_err(to_js)
+    }
+
+    /// Write one content file canonically, returning what was written.
+    pub fn write(&mut self, rel: String, src: String) -> Result<String, JsValue> {
+        self.inner.write(&rel, &src).map_err(to_js)
+    }
+
+    /// Check the project.
+    pub fn validate(&mut self) -> Result<(), JsValue> {
+        self.inner.validate().map_err(to_js)
+    }
+
+    /// Every dial id it declares, sorted.
+    pub fn dials(&self) -> Vec<String> {
+        dial_ids(&self.inner)
+    }
+
+    /// One dial, as a tab-separated line.
+    pub fn dial(&self, id: String) -> String {
+        dial_line(&self.inner, &id)
+    }
+
+    /// The recipe.
+    pub fn fingerprint(&self) -> String {
+        format!("{:016x}", self.inner.fingerprint())
+    }
+
+    /// Generate, returning the world's fingerprint and seed.
+    pub fn generate(&self, seed: String) -> Result<String, JsValue> {
+        self.inner
+            .generate(project::GenerateOptions::seeded(seed))
+            .map(|w| format!("{:016x}\t{}\t{}", w.fingerprint, w.seed, w.scopes))
+            .map_err(to_js)
+    }
+}
+
+#[cfg(all(feature = "wasm", target_arch = "wasm32"))]
+fn to_js(e: project::ProjectError) -> JsValue {
+    JsValue::from_str(&e.to_string())
 }
 
 #[cfg(test)]

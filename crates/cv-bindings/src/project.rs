@@ -16,8 +16,11 @@
 //! with different fingerprints are not comparable at all, however alike they look. A host that conflated
 //! them would report *"same world"* for a run that shares only its dice.
 
+use crate::content::{self, ContentError};
 use crate::dials::{DialError, Dials};
+use cv_assets::project::Descriptor;
 use std::fmt;
+use std::path::Path;
 
 /// What a `generate` call is told.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -40,6 +43,20 @@ impl GenerateOptions {
 /// Why a project call did not work.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ProjectError {
+    /// The descriptor could not be read.
+    NotOpened {
+        /// The path as asked for.
+        path: String,
+        /// What went wrong.
+        detail: String,
+    },
+    /// A content operation on a project that has no content root.
+    ///
+    /// ⚠ **A cooked build, asked something only a content tree can answer.** Distinct from *"no
+    /// files"*, which is a legitimate answer for an empty project.
+    NoContentRoot,
+    /// A content operation failed.
+    Content(ContentError),
     /// The descriptor did not read.
     NotAProject { detail: String },
     /// Content did not validate.
@@ -59,6 +76,14 @@ impl fmt::Display for ProjectError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ProjectError::NotAProject { detail } => write!(f, "not a project: {detail}"),
+            ProjectError::NotOpened { path, detail } => {
+                write!(f, "could not open `{path}`: {detail}")
+            }
+            ProjectError::NoContentRoot => write!(
+                f,
+                "this project has no content root — a cooked build carries its content inside the                  package, so there are no files to list, read or write"
+            ),
+            ProjectError::Content(e) => write!(f, "{e}"),
             ProjectError::Invalid { findings } => {
                 write!(f, "{} problem(s): {}", findings.len(), findings.join("; "))
             }
@@ -69,6 +94,12 @@ impl fmt::Display for ProjectError {
                  the content's faults and the generator's blame"
             ),
         }
+    }
+}
+
+impl From<ContentError> for ProjectError {
+    fn from(e: ContentError) -> Self {
+        ProjectError::Content(e)
     }
 }
 
@@ -105,6 +136,12 @@ pub struct Project {
     dials: Dials,
     validated: bool,
     findings: Vec<String>,
+    /// The descriptor, when this is a content tree rather than a cooked package.
+    ///
+    /// ⚠ **Absent for a cooked build, and that is not a missing feature.** A shipped game opens one
+    /// file and has no content root to list; asking it for content is a category error, and an `Option`
+    /// says so at the type level rather than by returning an empty list that reads like *"no files"*.
+    descriptor: Option<Descriptor>,
 }
 
 impl Project {
@@ -123,6 +160,111 @@ impl Project {
             cooked: true,
             ..Project::default()
         }
+    }
+
+    /// **Open a project from its descriptor.**
+    ///
+    /// ⚠ **This is what [`Project::new`] only pretended to do.** `new` records a path; this reads
+    /// the `.cvproj`, which is the file that says where the content root is — so until it has run,
+    /// *"list the content"* has no answer, only a guess.
+    pub fn open(path: impl AsRef<Path>) -> Result<Self, ProjectError> {
+        let path = path.as_ref();
+        let descriptor = cv_assets::project::load(path).map_err(|e| ProjectError::NotOpened {
+            path: path.display().to_string(),
+            detail: e.to_string(),
+        })?;
+        Ok(Project {
+            path: path.display().to_string(),
+            descriptor: Some(descriptor),
+            ..Project::default()
+        })
+    }
+
+    /// **Create a new project**, from nothing or by copying an existing one.
+    ///
+    /// ⚠ **The editor is the only thing that asks for this, and it is still not the editor's.** It
+    /// writes the format, and the format is the core's — a creation path in TypeScript would be a
+    /// second writer, which is the one thing [`crate::content`] exists to prevent.
+    ///
+    /// ▶ **A copy, never a link.** `from` names a project to start from — a preset, or any project on
+    /// disk — and its content is copied. A new project sharing files with the preset it came from breaks
+    /// when that preset changes, and presets change: they are also the acceptance tests.
+    pub fn create(at: impl AsRef<Path>, from: Option<&Descriptor>) -> Result<Self, ProjectError> {
+        let at = at.as_ref();
+        let dir = at.parent().unwrap_or(Path::new("."));
+        let content_root = from.map_or("content", |d| d.content_root.as_str());
+        std::fs::create_dir_all(dir.join(content_root)).map_err(|e| ProjectError::NotOpened {
+            path: at.display().to_string(),
+            detail: e.to_string(),
+        })?;
+
+        let scale = from.map_or(1.0, |d| d.world_scale);
+        let descriptor = format!(
+            "{{\n  \"cyclevania\": \"{}\",\n  \"world_scale\": {scale},\n  \"content_root\": \"{content_root}\"\n}}\n",
+            crate::core_version()
+        );
+        std::fs::write(at, descriptor).map_err(|e| ProjectError::NotOpened {
+            path: at.display().to_string(),
+            detail: e.to_string(),
+        })?;
+
+        let mut made = Project::open(at)?;
+        if let Some(source) = from {
+            let target = made.descriptor().expect("just opened").content_dir();
+            for rel in content::list(source) {
+                let text = content::read(source, &rel)?;
+                let into = target.join(&rel);
+                if let Some(parent) = into.parent() {
+                    let _ = std::fs::create_dir_all(parent);
+                }
+                std::fs::write(&into, text).map_err(|e| ProjectError::NotOpened {
+                    path: rel.clone(),
+                    detail: e.to_string(),
+                })?;
+            }
+            made = Project::open(at)?;
+        }
+        Ok(made)
+    }
+
+    /// The descriptor, when there is one.
+    pub fn descriptor(&self) -> Option<&Descriptor> {
+        self.descriptor.as_ref()
+    }
+
+    /// Every content file, relative to the content root.
+    ///
+    /// ⚠ **Empty for a cooked build**, which has no content root to walk — its content is inside the
+    /// package.
+    pub fn content(&self) -> Vec<String> {
+        self.descriptor
+            .as_ref()
+            .map(content::list)
+            .unwrap_or_default()
+    }
+
+    /// Read one content file.
+    pub fn read(&self, rel: &str) -> Result<String, ProjectError> {
+        let d = self
+            .descriptor
+            .as_ref()
+            .ok_or(ProjectError::NoContentRoot)?;
+        Ok(content::read(d, rel)?)
+    }
+
+    /// Write one content file, canonically, and return what was written.
+    ///
+    /// ⚠ **Any write invalidates the project.** The content changed, so the last `validate` describes
+    /// a tree that no longer exists — and `generate` refuses until it has run again. ▶ **That is the
+    /// whole reason `validated` is a flag rather than a call somebody remembers to make.**
+    pub fn write(&mut self, rel: &str, src: &str) -> Result<String, ProjectError> {
+        let d = self
+            .descriptor
+            .as_ref()
+            .ok_or(ProjectError::NoContentRoot)?;
+        let written = content::write(d, rel, src)?;
+        self.validated = false;
+        Ok(written)
     }
 
     /// The dial interface.

@@ -26,6 +26,8 @@ cv-manifest = { path = "crates/cv-manifest" }
 cv-api = { path = "crates/cv-api" }
 cv-core = { path = "crates/cv-core" }
 cv-vm = { path = "crates/cv-vm" }
+cv-cvb = { path = "crates/cv-cvb" }
+cv-assets = { path = "crates/cv-assets" }
 # Host-facing / tooling deps.
 napi = { version = "3" }
 napi-derive = { version = "3" }

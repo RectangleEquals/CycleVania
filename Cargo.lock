@@ -150,7 +150,9 @@ dependencies = [
 name = "cv-bindings"
 version = "0.1.0"
 dependencies = [
+ "cv-assets",
  "cv-core",
+ "cv-cvb",
  "cv-determinism",
  "cv-vm",
  "napi",
