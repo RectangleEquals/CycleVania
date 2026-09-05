@@ -246,3 +246,46 @@ describe("the panel keeps the theme's promise", () => {
     expect(bare).not.toMatch(/#[0-9a-fA-F]{3,6}/);
   });
 });
+
+describe("an asset's own properties", () => {
+  it("gets a band of its own, above the class bands", () => {
+    // ⚠ **A `.cvcurve` carries `domain` and `y_label`, and the editor had nowhere to put them.**
+    // ▶ They are asset properties, and they belong in the same panel everything else uses.
+    const asset: Subject = {
+      label: "progression.cvcurve",
+      icon: "curve",
+      classPath: "Curve table asset",
+      values: { domain: "depth" },
+      assetBand: {
+        name: "Curve table",
+        fields: [
+          { name: "domain", type: "String", exposed: true, mutable: true, api: true, doc: "" },
+        ],
+      },
+    };
+    const html = drawDetails(CLASSES, asset, state());
+    expect(html).toContain("Curve table");
+    expect(html).toContain("depth");
+  });
+});
+
+describe("empty is not the same as no-match", () => {
+  it("blames the search only when there was a search", () => {
+    // ⚠ **A panel that says "nothing matched" when nothing exists blames the developer for its own
+    // emptiness.**
+    const bare: Subject = { label: "x", icon: "tags", classPath: "/Core/Object", values: {} };
+    expect(drawDetails(CLASSES, bare, state())).toContain("no editable properties");
+    expect(drawDetails(CLASSES, subject, state({ search: "zzz" }))).toContain("No property matches");
+  });
+});
+
+describe("a field with no default", () => {
+  it("offers no revert arrow, because there is nothing to revert to", () => {
+    // ⚠ **Found by looking.** Every asset property showed an arrow: the check compared against `""`
+    // when no default was declared. ▶ **An arrow that cannot restore anything lies about what it does.**
+    const noDefault: FieldDef = {
+      name: "domain", type: "String", exposed: true, mutable: true, api: true, doc: "",
+    };
+    expect(isOverridden(noDefault, { domain: "depth" })).toBe(false);
+  });
+});

@@ -58,6 +58,12 @@ export interface Subject {
   values: Record<string, string>;
   /** ▶ **Provenance is a link** — which asset put this here. */
   from?: { label: string; path: string };
+  /**
+   * ⚠ **The asset's own properties**, for a subject that is a file rather than an instance of a
+   * class. ▶ A `.cvcurve` carries `domain` and `y_label`, and Unreal's curve editors put exactly
+   * this in a Details panel — **the editor had nowhere to put them**, so they were dropped.
+   */
+  assetBand?: { name: string; fields: FieldDef[] };
 }
 
 const esc = (s: string) =>
@@ -118,9 +124,13 @@ export function filterBands(bs: Band[], q: string): Band[] {
 
 /** Whether a value differs from the declared default. ⚠ This is what the revert arrow keys on. */
 export function isOverridden(f: FieldDef, values: Record<string, string>): boolean {
+  // ⚠ **A field with no declared default has nothing to revert *to*.** A first pass compared
+  // against `""` and so put an arrow on every asset property that had a value at all — ▶ **an
+  // arrow that cannot restore anything is a control that lies about what it will do.**
+  if (f.default === undefined) return false;
   const v = values[f.name];
   if (v === undefined) return false;
-  return v !== (f.default ?? "");
+  return v !== f.default;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -229,7 +239,10 @@ export function drawDetails(
   const byPath = new Map(classes.map((c) => [c.path, c]));
   const variantsOf = (type: string) => byPath.get(`/Core/${type}`)?.values ?? [];
 
-  const all = bands(classes, subject.classPath);
+  const own = subject.assetBand
+    ? [{ path: subject.assetBand.name, name: subject.assetBand.name, fields: subject.assetBand.fields }]
+    : [];
+  const all = [...own, ...bands(classes, subject.classPath)];
   const shown = filterBands(all, state.search);
   const expanding = state.search.trim().length > 0;
 
@@ -273,7 +286,7 @@ export function drawDetails(
   return (
     // ⚠ **A panel that does not say what it describes cannot be trusted.**
     `<div class="cv-subject">${icon(subject.icon, 14)}<span>${esc(subject.label)}</span></div>` +
-    `<div class="cv-dclass">${esc(subject.classPath)}` +
+    `<div class="cv-dclass">${esc(subject.assetBand ? subject.classPath : subject.classPath)}` +
     // ▶ *"Which schematic put this here"* is the first question anybody asks of a generated level.
     (subject.from
       ? `<button class="cv-prov" data-open="${esc(subject.from.path)}">${esc(subject.from.label)}</button>`
@@ -282,7 +295,11 @@ export function drawDetails(
     `<input class="cv-search cv-dsearch" placeholder="Filter properties" value="${esc(state.search)}"/>` +
     (shown.length
       ? shown.map(band).join("")
-      : `<div class="cv-empty">No property matches “${esc(state.search)}”.</div>`)
+      : // ⚠ **"Nothing matched your search" and "there is nothing here" are different answers**, and a
+        // panel that gives the first when the second is true blames the developer for its own emptiness.
+        state.search.trim()
+        ? `<div class="cv-empty">No property matches “${esc(state.search)}”.</div>`
+        : `<div class="cv-empty">This has no editable properties.</div>`)
   );
 }
 

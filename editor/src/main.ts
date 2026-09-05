@@ -27,7 +27,17 @@ import { assetSurface, resultSurface, type Surface } from "./surfaces.ts";
 import { shellStyles } from "./shell.ts";
 import { browserStyles, createMenu, drawBrowser, type BrowserState } from "./browser.ts";
 import { iconForPath } from "./icons.ts";
+import { drawTags, tagStyles, type TagDef } from "./tag-editor.ts";
 import { drawGraph, drawOutline, graphCrumbs, graphStyles, type GraphView } from "./graph.ts";
+import {
+  curveStyles,
+  drawCanvas,
+  drawChannels,
+  drawCurveToolbar,
+  drawGrid,
+  type CurveAsset,
+  type CurveState,
+} from "./curve-editor.ts";
 import {
   detailsStyles,
   drawDetails,
@@ -182,6 +192,15 @@ const COMPONENTS = [
 ];
 
 /** Stand-in content, until a project is open./** Stand-in content, until a project is open. ⚠ Shaped like a real content root, not invented. */
+/** ⚠ A tag set makes a `Tag` field a picker; without one it degrades to free text. */
+const SAMPLE_TAGS: TagDef[] = [
+  { name: "surface.stone", doc: "bare stone", uses: 6 },
+  { name: "surface.stone.wet", doc: "slippery underfoot", uses: 0 },
+  { name: "surface.metal.grate", doc: "see-through floor", uses: 2 },
+  { name: "hazard.fire", doc: "burns on contact", uses: 3 },
+  { name: "hazard.fall", uses: 1 },
+];
+
 const SAMPLE_CONTENT = [
   "schematics/Hookshot.cvs",
   "schematics/Plaque.cvs",
@@ -218,6 +237,10 @@ interface Ui {
    * right for at most one of them and floats over the stage for the other. */
   menuAt: [number, number];
   details: DetailsState;
+  curve: CurveState;
+  /** ⚠ Hidden channels, by name. Visibility is what makes a shared scale honest. */
+  hidden: Record<string, boolean>;
+  tag?: string;
   /** ⚠ What the Details panel is describing. Null is a real state, and it says so. */
   subject: Subject | null;
   /** Which of the asset's own documents is open. */
@@ -256,6 +279,40 @@ const ICON_OF: Record<string, string> = {
 const iconOf = (path: string) => ICON_OF[path.slice(path.lastIndexOf(".") + 1)] ?? "tags";
 
 /**
+ * The curve editor.
+ *
+ * ⚠ **M20a drew every row onto one small canvas with a legend** — ▶ **which is a thumbnail**, and
+ * a thumbnail belongs wherever a curve is *referenced*. `table-views.ts` keeps that drawing; this is the
+ * editor: a channel list, one canvas, and a grid for typing exact numbers.
+ */
+function curveAsset(): CurveAsset {
+  return {
+    path: views.curves.path,
+    domain: views.curves.domain,
+    yLabel: views.curves.yLabel,
+    channels: views.curves.rows.map((r) => ({
+      name: r.name,
+      interpolation: r.interpolation,
+      keys: r.keys,
+      points: r.points,
+      visible: ui.hidden[r.name] !== true,
+    })),
+  };
+}
+
+function curveDocument(): string {
+  const a = curveAsset();
+  return (
+    `<div class="cv-curvewrap">${drawCurveToolbar(a, ui.curve)}` +
+    `<div class="cv-curvebody">${drawChannels(a, ui.curve)}` +
+    (ui.curve.view === "grid"
+      ? drawGrid(a, ui.curve)
+      : `<div class="cv-canvas">${drawCanvas(a, ui.curve)}</div>`) +
+    `</div></div>`
+  );
+}
+
+/**
  * What the stage draws for the active tab.
  *
  * ⚠ **The M19 views are documents, not destinations**, and this is where that becomes true: they are
@@ -280,22 +337,10 @@ function stageBody(): string {
       `style="white-space:pre-wrap;margin:10px 0 0">${checkLine(views.state)}</pre>`
     );
   }
-  if (path.endsWith(".cvcurve")) {
-    return (
-      drawCurveTable(views.curves, 560, 230, { row: "complexity", key: 1 }) +
-      `<div style="display:flex;gap:14px;align-items:center;margin-top:10px">` +
-      views.curves.rows
-        .map(
-          (r) =>
-            `<span style="display:flex;align-items:center;gap:6px;font-size:11px" class="cv-dim">` +
-            `${curveThumbnail(r)}${r.name}</span>`,
-        )
-        .join("") +
-      `</div>`
-    );
-  }
+  if (path.endsWith(".cvcurve")) return curveDocument();
   if (path.endsWith(".cvunlock")) return drawUnlockTable(views.unlocks);
   if (path.endsWith(".cvs")) return schematicDocument();
+  if (path.endsWith(".cvtags")) return drawTags(SAMPLE_TAGS, ui.tag);
   // ⚠ **Says which milestone owes it**, rather than pretending the surface is broken.
   return (
     `<div class="cv-stage-empty"><div class="cv-stage-title">${kindOf(path)} editor</div>` +
@@ -378,12 +423,14 @@ function docks(): Dock[] {
       label: "Outline",
       side: "left",
       // ⚠ Nothing generated and no asset open means nothing to outline.
-      present: ui.asset !== "result" && !ui.docks.outlineClosed,
+      // ⚠ **§9d, and it generalises.** An Outline is only a *second* place to see structure. A
+      // schematic needs one because its graphs, hooks and dials are not on the canvas; a curve's
+      // channels and a tag set's tree already are. ▶ **A second copy under a different name is the
+      // confusion M20c removed elsewhere**, so the dock is present only where it adds something.
+      present: ui.asset.endsWith(".cvs") && !ui.docks.outlineClosed,
       collapsed: ui.collapsed.outline,
       // ⚠ **Scoped to the active document tab** — a hook's locals belong to that hook.
-      body: ui.asset.endsWith(".cvs")
-        ? drawOutline(HOOK_GRAPH)
-        : `<div class="cv-empty">${kindOf(ui.asset)} — its outline arrives with its editor.</div>`,
+      body: drawOutline(HOOK_GRAPH),
     },
     {
       id: "details",
@@ -498,6 +545,44 @@ function wire(app: HTMLElement): void {
       values: {},
       from: { label: ui.asset.split("/").pop()!, path: ui.asset },
     };
+    redraw();
+  });
+  // ⚠ **A key is a thing a developer selects and moves** — a polyline is only a preview.
+  on(".cv-key", "click", (k) => {
+    ui.curve = { ...ui.curve, selected: { channel: k.dataset.ch!, key: Number(k.dataset.key) } };
+    redraw();
+  });
+  on("[data-channel]", "click", (r) => {
+    ui.curve = { ...ui.curve, selected: { channel: r.dataset.channel!, key: 0 } };
+    redraw();
+  });
+  on("[data-vis]", "click", (b, e) => {
+    e.stopPropagation();
+    const n = b.dataset.vis!;
+    ui.hidden = { ...ui.hidden, [n]: !ui.hidden[n] };
+    redraw();
+  });
+  on("[data-view]", "click", (b) => {
+    ui.curve = { ...ui.curve, view: b.dataset.view as "curve" | "grid" };
+    redraw();
+  });
+  on("[data-mode]", "click", (b) => {
+    // ⚠ **The authored spelling is the one that crosses** — the file's word, never the core's enum.
+    const m = b.dataset.mode!;
+    const sel = ui.curve.selected;
+    if (sel) {
+      const row = views.curves.rows.find((r) => r.name === sel.channel);
+      if (row) row.interpolation = m;
+    }
+    redraw();
+  });
+  on(".cv-chfilter", "input", (el) => {
+    ui.curve = { ...ui.curve, filter: (el as HTMLInputElement).value };
+    redrawKeepingFocus(app, ".cv-chfilter")();
+  });
+
+  on("[data-tag]", "click", (r) => {
+    ui.tag = r.dataset.tag!;
     redraw();
   });
   on("[data-band]", "click", (b) => {
@@ -616,12 +701,36 @@ function wire(app: HTMLElement): void {
 
 /** ⚠ A schematic describes an `Item`; the panel bands its ancestry from the manifest artifact. */
 function subjectForAsset(path: string): Subject {
-  return {
+  const base: Subject = {
     label: path.split("/").pop()!,
     icon: iconOf(path),
-    classPath: path.endsWith(".cvs") ? "/Core/Item" : "/Core/Object",
+    classPath: path.endsWith(".cvs") ? "/Core/Item" : `${kindOf(path)} asset`,
     values: {},
   };
+  // ⚠ **A `.cvcurve` carries `domain` and `y_label`, and the editor had nowhere to put them.**
+  // ▶ They are asset properties, and they belong in the same panel everything else uses.
+  if (path.endsWith(".cvcurve")) {
+    return {
+      ...base,
+      assetBand: {
+        name: "Curve table",
+        fields: [
+          { name: "domain", type: "String", exposed: true, mutable: true, api: true,
+            doc: "What the x axis measures." },
+          { name: "y_label", type: "String", exposed: true, mutable: true, api: true,
+            doc: "What the y axis measures." },
+          { name: "curves", type: "int", exposed: true, mutable: false, api: true,
+            doc: "How many curves this table holds." },
+        ],
+      },
+      values: {
+        domain: views.curves.domain,
+        y_label: views.curves.yLabel,
+        curves: String(views.curves.rows.length),
+      },
+    };
+  }
+  return base;
 }
 
 /** Where a popup opened from `el` should sit. ⚠ Kept on screen — a menu off the right edge is lost. */
@@ -650,7 +759,7 @@ async function main(): Promise<void> {
   install();
 
   const style = document.createElement("style");
-  style.textContent = shellStyles() + frameStyles() + browserStyles() + graphStyles() + detailsStyles() + extraStyles();
+  style.textContent = shellStyles() + frameStyles() + browserStyles() + graphStyles() + detailsStyles() + curveStyles() + tagStyles() + extraStyles();
   document.head.appendChild(style);
 
   let version = "";
@@ -695,6 +804,8 @@ async function main(): Promise<void> {
     menuOpen: false,
     menuAt: [8, 108],
     details: { search: "", folded: {}, advancedOpen: {} },
+    curve: { filter: "", selected: null, view: "curve" },
+    hidden: {},
     subject: null,
     doc: "grants",
   };
