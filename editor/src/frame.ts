@@ -23,6 +23,8 @@
 /** Where a dock sits. A dock never floats — `10-editor.md` §9b keeps floating for asset editors. */
 export type DockSide = "left" | "right" | "bottom";
 
+import { icon, LAYER_ICON } from "./icons.ts";
+
 /**
  * A toolbar group.
  *
@@ -51,6 +53,8 @@ export interface ToolItem {
   /** ⚠ **Disabled, not hidden**, and the tooltip says what it needs. */
   enabled?: boolean;
   hint?: string;
+  /** ⚠ **An icon never travels alone** — §9e. It makes the label findable, never replaces it. */
+  icon?: string;
 }
 
 /** One asset open in the window's tab strip. */
@@ -134,11 +138,11 @@ export function fitToolbar(groups: ToolGroup[], available: number): {
 
 /** The pipeline's five layers, as the stage sees them. ⚠ Six layers L0-L5; L0 is content, not a view. */
 export const LAYERS = [
-  { id: "L1", label: "Mission" },
-  { id: "L2", label: "Skeleton" },
-  { id: "L3", label: "Volume" },
-  { id: "L4", label: "Geometry" },
-  { id: "L5", label: "Final" },
+  { id: "L1", label: "Mission", doc: "is this solvable? what gates what?" },
+  { id: "L2", label: "Skeleton", doc: "what does it look like, and how do you move through it?" },
+  { id: "L3", label: "Volume", doc: "what space actually got carved" },
+  { id: "L4", label: "Geometry", doc: "what got built" },
+  { id: "L5", label: "Final", doc: "what a player would see" },
 ] as const;
 
 /**
@@ -154,13 +158,16 @@ export function layerGroup(reached: number, active: string): ToolGroup {
     keep: 90,
     items: LAYERS.map((l, i) => ({
       id: l.id,
-      label: l.id,
+      // ⚠ **Named, never numbered.** `L3` means nothing to anyone who has not read the pipeline;
+      // ▶ Godot's workspace switcher reads `2D 3D Script`, not `W1 W2 W3`, and needs no explaining.
+      label: l.label,
+      icon: LAYER_ICON[l.id],
       toggle: true,
       // ⚠ **A layer nobody has generated cannot be the live one.** Marking L1 active while it is
       // also disabled says two contradictory things at once, and a developer believes the highlight.
       on: l.id === active && i < reached,
       enabled: i < reached,
-      hint: i < reached ? `${l.label}` : `${l.label} — not generated yet`,
+      hint: i < reached ? `${l.id} ${l.label} — ${l.doc}` : `${l.id} ${l.label} — not generated yet`,
     })),
   };
 }
@@ -205,7 +212,8 @@ function toolItem(i: ToolItem): string {
     `<button class="${cls}" data-tool="${esc(i.id)}"` +
     (i.enabled === false ? " disabled" : "") +
     (i.hint ? ` title="${esc(i.hint)}"` : "") +
-    `>${esc(i.label)}${i.menu ? `<span class="cv-caret">▾</span>` : ""}</button>`
+    `>${i.icon ? icon(i.icon, 13) : ""}${esc(i.label)}` +
+    `${i.menu ? `<span class="cv-caret">▾</span>` : ""}</button>`
   );
 }
 
@@ -259,7 +267,7 @@ export function dock(d: Dock): string {
       <button class="cv-dstrip" data-expand="${esc(d.id)}">${esc(d.label)}</button></div>`;
   }
   return `<div class="cv-dock cv-${d.side}" data-dock="${esc(d.id)}">
-    <div class="cv-dhead"><span>${esc(d.label)}</span>
+    <div class="cv-dhead"><span class="cv-dtitle">${icon(d.id, 12)}${esc(d.label)}</span>
       <button class="cv-dfold" data-collapse="${esc(d.id)}" title="Collapse">–</button></div>
     <div class="cv-dbody">${d.body ?? ""}</div></div>`;
 }
@@ -275,7 +283,7 @@ export function statusBar(f: StatusFacts): string {
   const seed = f.seed === null ? "—" : String(f.seed);
   return (
     `<div class="cv-status">` +
-    `<button class="cv-sbtn" data-drawer="content">Content Drawer</button>` +
+    `<button class="cv-sbtn" data-drawer="content">${icon("content", 13)}Content Drawer</button>` +
     `<button class="cv-sbtn" data-drawer="output">Output Log</button>` +
     `<div class="cv-tspacer"></div>` +
     `<span class="cv-sfact" title="Core version, content digests and config — the build's identity">` +
@@ -322,7 +330,8 @@ export function frameStyles(): string {
 .cv-tgroup { display: flex; gap: 2px; padding: 2px; border: 1px solid ${V("line")};
   border-radius: ${V("radius")}; background: ${V("raised")}; }
 .cv-titem { background: transparent; border: 0; color: ${V("text")}; font: inherit; cursor: pointer;
-  padding: 3px 9px; border-radius: ${V("radius")}; display: inline-flex; align-items: center; gap: 3px; }
+  padding: 3px 9px; border-radius: ${V("radius")}; display: inline-flex; align-items: center; gap: 5px; }
+.cv-icon { flex: 0 0 auto; }
 .cv-titem:hover:not(:disabled) { background: ${V("panel")}; }
 .cv-titem:focus-visible { outline: 2px solid ${V("accent")}; outline-offset: -2px; }
 /* ⚠ A toggle you cannot read the state of is a button that lies. */
@@ -341,7 +350,11 @@ export function frameStyles(): string {
    layout may not depend on how many there are. */
 .cv-frame { display: flex; align-items: stretch; min-height: 0; }
 .cv-centre { display: flex; flex-direction: column; flex: 1 1 auto; min-width: 0; min-height: 0; }
-.cv-centre > .cv-stage { flex: 1 1 auto; min-height: 0; }
+/* ⚠ **Not a child selector.** This was a direct-child rule and stopped matching the moment
+   the stage gained a wrapper for the drawer, so the stage sized to its own text and left dead space
+   under it. ▶ **The same defect as the grid tracks**: a rule that encodes a DOM shape breaks when
+   the shape moves, and neither the type checker nor a unit test can see it. */
+.cv-centre .cv-stage { flex: 1 1 auto; min-height: 0; }
 .cv-dock.cv-left, .cv-dock.cv-right { flex: 0 0 auto; }
 .cv-dock.cv-bottom { flex: 0 0 auto; }
 
@@ -358,6 +371,7 @@ export function frameStyles(): string {
 .cv-dock.cv-right { border-left: 1px solid ${V("line")}; width: 300px; }
 .cv-dock.cv-bottom { border-top: 1px solid ${V("line")}; height: 216px; }
 .cv-dock.is-collapsed { width: auto; height: auto; }
+.cv-dtitle { display: inline-flex; align-items: center; gap: 6px; }
 .cv-dhead { display: flex; align-items: center; justify-content: space-between; padding: 5px 8px;
   border-bottom: 1px solid ${V("line")}; color: ${V("muted")}; font-size: 10px;
   text-transform: uppercase; letter-spacing: .09em; }
@@ -376,7 +390,8 @@ export function frameStyles(): string {
 .cv-status { display: flex; align-items: center; gap: 6px; padding: 4px 8px;
   background: ${V("panel")}; border-top: 1px solid ${V("line")}; font-size: 11px;
   color: ${V("muted")}; }
-.cv-sbtn { background: transparent; border: 1px solid transparent; color: ${V("text")};
+.cv-sbtn { display: inline-flex; align-items: center; gap: 5px; background: transparent;
+  border: 1px solid transparent; color: ${V("text")};
   font: inherit; cursor: pointer; padding: 2px 8px; border-radius: ${V("radius")}; }
 .cv-sbtn:hover { border-color: ${V("line")}; background: ${V("raised")}; }
 .cv-sbtn:focus-visible { outline: 2px solid ${V("accent")}; outline-offset: -1px; }

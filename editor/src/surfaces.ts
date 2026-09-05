@@ -25,8 +25,8 @@ const PROJECT: ToolGroup = {
   intent: 1,
   keep: 30,
   items: [
-    { id: "save", label: "Save", hint: "Save the active asset" },
-    { id: "saveall", label: "Save All" },
+    { id: "save", label: "Save", icon: "save", hint: "Save the active asset" },
+    { id: "saveall", label: "Save All", icon: "saveall", hint: "Save every unsaved asset" },
   ],
 };
 
@@ -35,26 +35,28 @@ const CREATE: ToolGroup = {
   id: "create",
   intent: 3,
   keep: 20,
-  items: [{ id: "add", label: "Add", menu: true, hint: "Create content" }],
+  items: [
+    {
+      id: "add",
+      label: "Add",
+      icon: "add",
+      menu: true,
+      // ⚠ **Not a parallel route.** It opens the same create menu the browser's right-click opens,
+      // for when the drawer is closed — a convenience, and nothing the browser cannot also do.
+      hint: "Create content — the same menu the Content Drawer opens",
+    },
+  ],
 };
 
-/**
- * The docks group.
+/*
+ * ⚠ **The docks group was removed, and its absence is the point.**
  *
- * ⚠ **These are toggles, not navigations.** §9d keeps them off at depth 0 — a developer who has not
- * asked for the trace has not met the concept, and a dark button they cannot explain is worse than
- * no button.
+ * A first build put `Outline` / `Details` / `Content` toggles here. ▶ **A dock already carries its
+ * own collapse, and `Window` restores a closed one** — so this was a second control for one state, and
+ * the two drifted the first time anybody used either: collapsing Details left its toolbar toggle lit.
+ * ⚠ **Two controls for one thing will disagree**, and the one further from the thing is the one that
+ * lies. `10-editor.md` §9b.
  */
-const docksGroup = (shown: Record<string, boolean>): ToolGroup => ({
-  id: "docks",
-  intent: 4,
-  keep: 10,
-  items: [
-    { id: "dock:outline", label: "Outline", toggle: true, on: !!shown.outline },
-    { id: "dock:details", label: "Details", toggle: true, on: !!shown.details },
-    { id: "dock:content", label: "Content", toggle: true, on: !!shown.content },
-  ],
-});
 
 /**
  * ▶ **`Generate` is CycleVania's Play button**, and it gets Play's position and weight: far right,
@@ -64,7 +66,14 @@ const RUN: ToolGroup = {
   id: "run",
   intent: 5,
   keep: 100,
-  items: [{ id: "generate", label: "Generate", hint: "Build a level from this project's content" }],
+  items: [
+    {
+      id: "generate",
+      label: "Generate",
+      icon: "generate",
+      hint: "Build a level from this project's content",
+    },
+  ],
 };
 
 /**
@@ -73,10 +82,10 @@ const RUN: ToolGroup = {
  * ⚠ **Its verb is the layer switcher**, because looking at this project's output at five depths is what
  * this surface is *for*.
  */
-export function resultSurface(reached: number, layer: string, docks: Record<string, boolean>): Surface {
+export function resultSurface(reached: number, layer: string): Surface {
   return {
     menus: ["File", "Edit", "Window", "Tools", "Help"],
-    groups: [PROJECT, layerGroup(reached, layer), CREATE, docksGroup(docks), RUN],
+    groups: [PROJECT, layerGroup(reached, layer), CREATE, RUN],
   };
 }
 
@@ -87,15 +96,36 @@ export function resultSurface(reached: number, layer: string, docks: Record<stri
  * `Compile` on a schematic, the tangent modes on a curve — and inventing those here would be guessing
  * at work three milestones own. ▶ What M20b settles is that **the chrome swaps at all**.
  */
-export function assetSurface(kind: string, docks: Record<string, boolean>): Surface {
+export function assetSurface(kind: string, kindIcon: string, schematic = false): Surface {
+  // ⚠ **A schematic's verb is `Compile`** — Unreal's Blueprint toolbar leads with it, and it is the
+  // thing this surface exists to do. ▶ Everything else is still the shared chrome.
+  const verb: ToolGroup = schematic
+    ? {
+        id: "verb",
+        intent: 2,
+        keep: 90,
+        items: [
+          { id: "compile", label: "Compile", icon: "compile", hint: "Compile this schematic" },
+          { id: "findrefs", label: "Find", icon: "outline", hint: "Find references" },
+        ],
+      }
+    : {
+        id: "verb",
+        intent: 2,
+        keep: 90,
+        items: [
+          { id: "kind", label: kind, icon: kindIcon, enabled: false, hint: `${kind} editor — M20f-M20g` },
+        ],
+      };
   return {
-    menus: ["File", "Edit", "Asset", "View", "Window", "Help"],
-    groups: [
-      PROJECT,
-      { id: "verb", intent: 2, keep: 90, items: [{ id: "kind", label: kind, enabled: false, hint: `${kind} editor — M20e-M20g` }] },
-      CREATE,
-      docksGroup(docks),
-      RUN,
-    ],
+    menus: ["File", "Edit", "Asset", "View", "Debug", "Window", "Help"],
+    groups: [PROJECT, verb, CREATE, RUN],
+    // ⚠ **One tab per opened hook or graph** — a developer working two hooks has two tabs.
+    documents: schematic
+      ? [
+          { id: "objects", label: "Objects" },
+          { id: "onpickup", label: "OnPickup" },
+        ]
+      : undefined,
   };
 }

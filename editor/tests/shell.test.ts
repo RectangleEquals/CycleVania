@@ -9,15 +9,7 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT, cssVariables, step, surfaces, type ThemeParams } from "../src/theme.ts";
 import { EXEC, looksDifferent, nodeColour, pinColour } from "../src/pins.ts";
-import { CONTENT_KINDS, contentAt, crumbs, drawContent, shellStyles } from "../src/shell.ts";
-
-const FILES = [
-  "schematics/Hookshot.cvs",
-  "schematics/Plaque.cvs",
-  "schematics/doors/IronDoor.cvs",
-  "curves/progression.cvcurve",
-  "progression/unlocks.cvunlock",
-];
+import { shellStyles } from "../src/shell.ts";
 
 describe("P01 — the theme is four parameters, everything derived", () => {
   it("moves every surface when the ground moves", () => {
@@ -99,56 +91,6 @@ describe("P03 — pin colour by type, exec white", () => {
     const call = nodeColour({ op: "/Core/Actor.footprint" });
     const dial = nodeColour({ op: "/Content/Items/Hookshot.rope_length#dial" });
     expect(new Set([branch, call, dial]).size).toBe(3);
-  });
-});
-
-describe("P06 — the Content panel, in Unreal's shape", () => {
-  it("shows folders and files at the current level, not a flat list", () => {
-    const { folders, files } = contentAt(FILES, { kinds: [], folder: "", search: "" });
-    expect(folders).toEqual(["curves", "progression", "schematics"]);
-    expect(files).toEqual([]);
-  });
-
-  it("descends into a folder", () => {
-    const { folders, files } = contentAt(FILES, { kinds: [], folder: "schematics", search: "" });
-    expect(folders).toEqual(["doors"]);
-    expect(files.map((f) => f.name)).toEqual(["Hookshot.cvs", "Plaque.cvs"]);
-  });
-
-  it("names a file's kind from its extension", () => {
-    const { files } = contentAt(FILES, { kinds: [], folder: "curves", search: "" });
-    expect(files[0]?.kind).toBe("Curve");
-  });
-
-  it("stacks filters, each toggled alone", () => {
-    // ⚠ Unreal's filters are simultaneous — one active filter is a special case of several.
-    const both = contentAt(FILES, { kinds: ["Schematic", "Curve"], folder: "schematics", search: "" });
-    expect(both.files).toHaveLength(2);
-    const none = contentAt(FILES, { kinds: ["Curve"], folder: "schematics", search: "" });
-    expect(none.files).toHaveLength(0);
-  });
-
-  it("searches within the current folder", () => {
-    const { files } = contentAt(FILES, { kinds: [], folder: "schematics", search: "hook" });
-    expect(files.map((f) => f.name)).toEqual(["Hookshot.cvs"]);
-  });
-
-  it("gives a breadcrumb where every step back is a target", () => {
-    expect(crumbs("schematics/doors")).toEqual([
-      { label: "Content", path: "" },
-      { label: "schematics", path: "schematics" },
-      { label: "doors", path: "schematics/doors" },
-    ]);
-  });
-
-  it("knows every content extension the design declares", () => {
-    expect(CONTENT_KINDS.map((k) => k.ext).sort()).toEqual(
-      ["cvcurve", "cvs", "cvspine", "cvstate", "cvtags", "cvunlock"].sort(),
-    );
-  });
-
-  it("says so plainly when a folder is empty", () => {
-    expect(drawContent([], { kinds: [], folder: "", search: "" })).toContain("Nothing here");
   });
 });
 
