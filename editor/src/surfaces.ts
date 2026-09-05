@@ -121,10 +121,14 @@ export function assetSurface(kind: string, kindIcon: string, schematic = false):
     menus: ["File", "Edit", "Asset", "View", "Debug", "Window", "Help"],
     groups: [PROJECT, verb, CREATE, RUN],
     // ⚠ **One tab per opened hook or graph** — a developer working two hooks has two tabs.
+    // ⚠ **`Viewport` and `Setup Graph` were missing, and `Objects` should never have been a tab** —
+    // the object tree is a *dock*, which is where Unreal puts `Components`. ▶ Unreal's strip reads
+    // `Viewport | Construction Script | Event Graph`, and this is the same three.
     documents: schematic
       ? [
-          { id: "objects", label: "Objects" },
-          { id: "onpickup", label: "OnPickup" },
+          { id: "viewport", label: "Viewport" },
+          { id: "setup", label: "Setup Graph" },
+          { id: "grants", label: "grants" },
         ]
       : undefined,
   };

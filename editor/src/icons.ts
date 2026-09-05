@@ -62,13 +62,20 @@ const PATHS: Record<string, string> = {
   skeleton:
     `<path d="M2.4 11.2V5.6l5.6-3 5.6 3v5.6l-5.6 3z" fill="none" stroke="currentColor" ` +
     `stroke-width="1.2" stroke-dasharray="2.4 1.6"/>`,
+  // ⚠ **Volume and Geometry read alike at a glance and had to be pulled apart.** ▶ Volume is
+  // *space that got carved* — a solid with an opening cut through it. Geometry is *what got built* —
+  // the same solid, panelled. **The family still reads as one; the members no longer trade places.**
   volume:
+    `<path d="M2.4 11.2V5.6l5.6-3 5.6 3v5.6l-5.6 3z" fill="currentColor" opacity=".18"/>` +
     `<path d="M2.4 11.2V5.6l5.6-3 5.6 3v5.6l-5.6 3z" fill="none" stroke="currentColor" stroke-width="1.2"/>` +
-    `<path d="M2.4 5.6 8 8.6l5.6-3M8 8.6v5.9" stroke="currentColor" stroke-width="1.1"/>`,
+    `<path d="M6 14.2V9.4a2 2 0 0 1 4 0v4.8" fill="none" stroke="currentColor" stroke-width="1.3"/>`,
+  // ⚠ A hex fallback here failed the `currentColor` test on its first run — ▶ **which is
+  // exactly what that assertion is for**: an icon carrying its own colour is a second palette.
   geometry:
-    `<path d="M2.4 11.2V5.6l5.6-3 5.6 3v5.6l-5.6 3z" fill="currentColor" opacity=".28"/>` +
     `<path d="M2.4 11.2V5.6l5.6-3 5.6 3v5.6l-5.6 3z" fill="none" stroke="currentColor" stroke-width="1.2"/>` +
-    `<path d="M2.4 5.6 8 8.6l5.6-3M8 8.6v5.9" stroke="currentColor" stroke-width="1.1"/>`,
+    `<path d="M2.4 5.6 8 8.6l5.6-3M8 8.6v5.9" stroke="currentColor" stroke-width="1.1"/>` +
+    `<path d="M2.4 5.6 8 14.5 13.6 5.6M2.4 11.2 8 8.6l5.6 2.6" fill="none" stroke="currentColor" ` +
+    `stroke-width=".9" opacity=".75"/>`,
   final:
     `<path d="M2.4 11.2V5.6l5.6-3 5.6 3v5.6l-5.6 3z" fill="currentColor" opacity=".55"/>` +
     `<path d="M2.4 11.2V5.6l5.6-3 5.6 3v5.6l-5.6 3z" fill="none" stroke="currentColor" stroke-width="1.2"/>`,
@@ -88,6 +95,18 @@ const PATHS: Record<string, string> = {
     `<path d="M5.2 8.2 7.3 10.4 11 5.8" fill="none" stroke="currentColor" stroke-width="1.4"/>`,
 
   // ── docks ───────────────────────────────────────────────────────────────────────────────
+  components:
+    `<rect x="6" y="1.8" width="4" height="4" rx=".8" fill="none" stroke="currentColor" stroke-width="1.2"/>` +
+    `<rect x="1.8" y="10.2" width="4" height="4" rx=".8" fill="none" stroke="currentColor" stroke-width="1.2"/>` +
+    `<rect x="10.2" y="10.2" width="4" height="4" rx=".8" fill="none" stroke="currentColor" stroke-width="1.2"/>` +
+    `<path d="M8 5.8v2.4M8 8.2H3.8v2M8 8.2h4.2v2" fill="none" stroke="currentColor" stroke-width="1.1"/>`,
+  viewport:
+    `<rect x="1.8" y="3" width="12.4" height="10" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.2"/>` +
+    `<path d="M5 10.6 7.4 7.4l1.8 2.2 1.4-1.6 2 2.6z" fill="currentColor" opacity=".55"/>` +
+    `<circle cx="5.2" cy="5.8" r="1" fill="currentColor"/>`,
+  setup:
+    `<path d="M8 2.4v2.2M8 11.4v2.2M2.4 8h2.2M11.4 8h2.2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>` +
+    `<circle cx="8" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.2"/>`,
   outline:
     `<path d="M2.6 4h2.2M2.6 8h2.2M2.6 12h2.2" stroke="currentColor" stroke-width="1.3"/>` +
     `<path d="M7 4h6.4M7 8h6.4M7 12h6.4" stroke="currentColor" stroke-width="1.3"/>`,

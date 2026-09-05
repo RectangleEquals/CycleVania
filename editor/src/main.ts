@@ -83,69 +83,98 @@ const UNLOCKS = `{
 }`;
 
 /**
- * A schematic's `OnPickup` hook, drawn.
+ * A schematic's `grants` hook, drawn.
  *
- * ⚠ **Shaped by M18's rules, not invented.** The dial get-node is pure and carries the dial's real
- * type; `Kind<T>` shows a picker inline; the hook node is an event with an exec out and no return.
- * ▶ **`Event Tick` is pre-placed and disabled** — M17 P04's `OVERRIDES` rule drawn: every hook in
- * the ancestry, each saying what happens if you leave it alone.
+ * ⚠ **A first build put `Event Tick` and `Event BeginPlay` on this canvas, and neither exists.**
+ * They were copied from Unreal's screenshots without checking the manifest. ▶ **CycleVania has no
+ * runtime and therefore no tick**: every hook is a question asked *during generation*, and the manifest
+ * declares 59 of them — `pivot`, `footprint`, `grants`, `judge`, `on_placed`, `on_finalized` and the
+ * rest. **The reference supplies the shape of a node, never the name of one.**
+ *
+ * ▶ `_configure` on `/Core/Object` is the construction script's equivalent, and it is the **Setup
+ * Graph** rather than a hook you wire in the logic graph.
  */
 const HOOK_GRAPH: GraphView = {
-  path: ["Hookshot", "OnPickup"],
+  path: ["Hookshot", "grants"],
   nodes: [
     {
-      id: "ev", title: "On Pickup", context: "Hook", kind: "event", x: 40, y: 120,
+      id: "ev", title: "grants", context: "Hook on Actor", kind: "event", x: 40, y: 130,
       inputs: [],
       outputs: [
         { id: "exec", label: "", type: "exec", connected: true },
-        { id: "actor", label: "Actor", type: "Ref<Actor>", connected: true },
+        { id: "ctx", label: "ctx", type: "Ref<Context>", connected: true },
       ],
     },
     {
-      id: "dial", title: "rope_length", context: "Dial on Hookshot", kind: "pure", x: 40, y: 250,
+      id: "dial", title: "rope_length", context: "Dial on Hookshot", kind: "pure", x: 40, y: 262,
       inputs: [],
       outputs: [{ id: "v", label: "Value", type: "float", connected: true }],
     },
     {
-      id: "grant", title: "Grant", context: "Target is Actor", kind: "call", x: 300, y: 116,
+      id: "held", title: "Holds", context: "Target is Context", kind: "pure", x: 300, y: 128,
       inputs: [
-        { id: "exec", label: "", type: "exec", connected: true },
-        { id: "target", label: "Target", type: "Ref<Actor>", connected: true },
+        { id: "ctx", label: "ctx", type: "Ref<Context>", connected: true },
         { id: "unlock", label: "Unlock", type: "Unlock", inline: "Grapple" },
       ],
-      outputs: [{ id: "exec", label: "", type: "exec", connected: true }],
+      outputs: [{ id: "out", label: "", type: "bool", connected: true }],
+    },
+    {
+      id: "branch", title: "Branch", kind: "flow", x: 300, y: 236,
+      inputs: [
+        { id: "exec", label: "", type: "exec", connected: true },
+        { id: "cond", label: "Condition", type: "bool", connected: true },
+      ],
+      outputs: [
+        { id: "true", label: "True", type: "exec", connected: true },
+        { id: "false", label: "False", type: "exec" },
+      ],
+    },
+    {
+      id: "ret", title: "Return", context: "Array<Unlock>", kind: "call", x: 570, y: 232,
+      inputs: [
+        { id: "exec", label: "", type: "exec", connected: true },
+        { id: "value", label: "Unlocks", type: "Unlock", list: true, inline: "1 row" },
+      ],
+      outputs: [],
       selected: true,
     },
     {
-      id: "reach", title: "Set Reach", context: "Target is Hookshot", kind: "call", x: 560, y: 116,
-      inputs: [
-        { id: "exec", label: "", type: "exec", connected: true },
-        { id: "len", label: "Length", type: "float", connected: true },
-        { id: "tags", label: "Tags", type: "String", list: true },
-      ],
-      outputs: [{ id: "exec", label: "", type: "exec" }],
-      latent: true,
-      advanced: 2,
-    },
-    {
-      id: "tick", title: "Event Tick", context: "Hook", kind: "event", x: 300, y: 330,
+      // ▶ **Pre-placed, disabled, and explaining itself** — M17 P04's `OVERRIDES` rule drawn.
+      // ⚠ A *real* hook this time: `on_placed` is on `/Core/Actor`.
+      id: "placed", title: "on_placed", context: "Hook on Actor", kind: "event", x: 570, y: 380,
       inputs: [],
       outputs: [
         { id: "exec", label: "", type: "exec" },
-        { id: "dt", label: "Delta Seconds", type: "float" },
+        { id: "ctx", label: "ctx", type: "Ref<Context>" },
       ],
       disabled: true,
     },
   ],
   wires: [
-    { from: { node: "ev", pin: "exec" }, to: { node: "grant", pin: "exec" } },
-    { from: { node: "ev", pin: "actor" }, to: { node: "grant", pin: "target" } },
-    { from: { node: "grant", pin: "exec" }, to: { node: "reach", pin: "exec" } },
-    { from: { node: "dial", pin: "v" }, to: { node: "reach", pin: "len" } },
+    { from: { node: "ev", pin: "exec" }, to: { node: "branch", pin: "exec" } },
+    { from: { node: "ev", pin: "ctx" }, to: { node: "held", pin: "ctx" } },
+    { from: { node: "held", pin: "out" }, to: { node: "branch", pin: "cond" } },
+    { from: { node: "branch", pin: "true" }, to: { node: "ret", pin: "exec" } },
+    { from: { node: "dial", pin: "v" }, to: { node: "ret", pin: "value" } },
   ],
 };
 
-/** Stand-in content, until a project is open. ⚠ Shaped like a real content root, not invented. */
+/**
+ * The schematic's components.
+ *
+ * ⚠ **This was missing entirely, and it is how an `Item` owns behaviour** — [`05-object-model.md`]
+ * P11 makes the Actor the sole point of contact and the *component* the mechanic's identity, so a
+ * schematic with no way to add one cannot express a mechanic. ▶ **Unreal stacks `Components` above
+ * `My Blueprint` in the left dock**, and the same split applies: *what this object is made of*, then
+ * *what it can be asked*.
+ */
+const COMPONENTS = [
+  { name: "Hookshot", kind: "Item", root: true, collision: false },
+  { name: "Reach", kind: "TraversalComponent", collision: false },
+  { name: "Hull", kind: "MountComponent", collision: true },
+];
+
+/** Stand-in content, until a project is open./** Stand-in content, until a project is open. ⚠ Shaped like a real content root, not invented. */
 const SAMPLE_CONTENT = [
   "schematics/Hookshot.cvs",
   "schematics/Plaque.cvs",
@@ -254,11 +283,7 @@ function stageBody(): string {
     );
   }
   if (path.endsWith(".cvunlock")) return drawUnlockTable(views.unlocks);
-  if (path.endsWith(".cvs")) {
-    return (
-      `<div class="cv-graphwrap">${graphCrumbs(HOOK_GRAPH)}${drawGraph(HOOK_GRAPH)}</div>`
-    );
-  }
+  if (path.endsWith(".cvs")) return schematicDocument();
   // ⚠ **Says which milestone owes it**, rather than pretending the surface is broken.
   return (
     `<div class="cv-stage-empty"><div class="cv-stage-title">${kindOf(path)} editor</div>` +
@@ -268,6 +293,49 @@ function stageBody(): string {
 }
 
 /**
+ * What the schematic editor's active document tab shows.
+ *
+ * ⚠ **`Viewport` and `Setup Graph` were both missing**, and `Objects` was a tab that should never
+ * have existed — the schematic's object tree is a **dock**, which is where Unreal puts `Components`.
+ */
+function schematicDocument(): string {
+  if (ui.doc === "viewport") {
+    // ⚠ **Honest about what exists.** M17 P03 computed *which components contribute collision*;
+    // hulls and a real 3D preview arrive at M26/M27. ▶ The answer we have beats a fake camera.
+    return (
+      `<div class="cv-viewport"><div class="cv-vpstage">` +
+      COMPONENTS.map(
+        (c) =>
+          `<div class="cv-vpbox${c.collision ? " has-collision" : ""}">${esc(c.name)}` +
+          `<span class="cv-vptag">${c.collision ? "collision" : "no collision"}</span></div>`,
+      ).join("") +
+      `</div><p class="cv-empty">Components, and whether each contributes collision — answered from ` +
+      `the palette, never from a class name. <b>The rendered preview arrives with hulls at M26.</b></p></div>`
+    );
+  }
+  if (ui.doc === "setup") {
+    // ▶ `_configure` on /Core/Object — the construction script's equivalent, and the reason there
+    // is no `BeginPlay`: this runs before generation, not before play.
+    const setup: GraphView = {
+      path: ["Hookshot", "Setup Graph"],
+      nodes: [
+        {
+          id: "cfg", title: "_configure", context: "Setup - runs before generation", kind: "event",
+          x: 70, y: 160, inputs: [],
+          outputs: [{ id: "exec", label: "", type: "exec" }],
+        },
+      ],
+      wires: [],
+    };
+    return `<div class="cv-graphwrap">${graphCrumbs(setup)}<div class="cv-graphscroll">${drawGraph(setup)}</div></div>`;
+  }
+  return `<div class="cv-graphwrap">${graphCrumbs(HOOK_GRAPH)}<div class="cv-graphscroll">${drawGraph(HOOK_GRAPH)}</div></div>`;
+}
+
+const esc = (t: string) =>
+  t.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
+
+/**
  * Which docks have anything to say right now.
  *
  * ⚠ **§9d: one that does not is not drawn.** ▶ **And there is no Content dock** — the Content
@@ -275,6 +343,23 @@ function stageBody(): string {
  */
 function docks(): Dock[] {
   return [
+    {
+      // ⚠ **Unreal stacks `Components` above `My Blueprint`**, and the split is *what this object is
+      // made of* then *what it can be asked*. A schematic with no way to add a component cannot
+      // express a mechanic at all — P11 makes the component the mechanic's identity.
+      id: "components",
+      label: "Components",
+      side: "left",
+      present: ui.asset.endsWith(".cvs"),
+      collapsed: ui.collapsed.components,
+      body:
+        `<div class="cv-osec"><span>Add</span><button class="cv-oadd" title="Add component">+</button></div>` +
+        COMPONENTS.map(
+          (c) =>
+            `<div class="cv-orow${c.root ? " is-selected" : ""}" style="padding-left:${c.root ? 8 : 18}px">` +
+            `<span>${c.name}</span><span class="cv-otype">${c.kind}</span></div>`,
+        ).join(""),
+    },
     {
       id: "outline",
       label: "Outline",
@@ -329,7 +414,9 @@ function render(app: HTMLElement): void {
     assetTabs(ui.tabs, ui.asset) +
     toolbar(s.groups, width - 40) +
     `<div class="cv-frame">` +
-    left.map(dock).join("") +
+    // ⚠ **Left docks stack, they do not sit side by side.** Unreal puts `Components` above
+    // `My Blueprint` in one column; two 224px columns is 450px of chrome before the stage starts.
+    (left.length ? `<div class="cv-dockcol">${left.map(dock).join("")}</div>` : "") +
     `<div class="cv-centre">` +
     documentTabs(s.documents ?? [], ui.doc) +
     `<div class="cv-stagewrap"><div class="cv-stage">${stageBody()}</div>${browser}</div>` +
@@ -364,6 +451,10 @@ function wire(app: HTMLElement): void {
       el.addEventListener(ev, (e) => f(el, e)),
     );
 
+  on("[data-doc]", "click", (b) => {
+    ui.doc = b.dataset.doc!;
+    redraw();
+  });
   on("[data-asset]", "click", (b) => {
     ui.asset = b.dataset.asset!;
     redraw();
@@ -526,7 +617,7 @@ async function main(): Promise<void> {
     browser: { open: true, docked: true, kinds: [], folder: "", search: "" },
     menuOpen: false,
     menuAt: [8, 108],
-    doc: "onpickup",
+    doc: "grants",
   };
 
   render(app);
@@ -548,6 +639,17 @@ function extraStyles(): string {
 .cv-stage-empty { max-width: 52ch; margin: 8vh auto 0; text-align: center; color: var(--cv-muted); }
 .cv-stage-title { color: var(--cv-text); font-size: 15px; margin-bottom: 6px; }
 .cv-stage-empty b { color: var(--cv-text); }
+.cv-viewport { padding: 18px; }
+.cv-vpstage { display: flex; gap: 14px; align-items: flex-end; justify-content: center;
+  padding: 26px 18px; background: var(--cv-panel); border: 1px solid var(--cv-line);
+  border-radius: var(--cv-radius); margin-bottom: 12px; }
+.cv-vpbox { position: relative; min-width: 118px; padding: 26px 12px 10px; text-align: center;
+  font-size: 11.5px; color: var(--cv-text); background: var(--cv-raised);
+  border: 1px dashed var(--cv-line); border-radius: var(--cv-radius); }
+.cv-vpbox.has-collision { border-style: solid; border-color: var(--cv-accent); }
+.cv-vptag { display: block; margin-top: 5px; font-size: 9px; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--cv-muted); }
+.cv-vpbox.has-collision .cv-vptag { color: var(--cv-accent); }
 .cv-subject { display: flex; align-items: center; gap: 7px; color: var(--cv-text); font-size: 13px;
   padding: 4px 6px 8px; border-bottom: 1px solid var(--cv-line); margin-bottom: 6px; }
 `;

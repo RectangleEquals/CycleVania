@@ -205,7 +205,14 @@ export function drawNode(n: GNode): string {
  * Drag off pins to build functionality."* — ▶ **which is M17 P04's `OVERRIDES` rule drawn**: every hook
  * in the ancestry, pre-placed, each saying what happens if you leave it alone.
  */
-export function drawGraph(g: GraphView, w = 900, h = 520): string {
+export function drawGraph(g: GraphView, w = 0, h = 0): string {
+  // ⚠ **Sized to its content, anchored top-left.** A fixed viewBox stretched to the container's width
+  // scaled the whole graph down and floated it in the middle — ▶ **a canvas pans and scrolls; it does
+  // not rescale itself to fit a panel.**
+  const right = Math.max(...g.nodes.map((n) => n.x + NODE_W), 320) + 60;
+  const bottom = Math.max(...g.nodes.map((n) => n.y + nodeHeight(n)), 240) + 60;
+  w = w || right;
+  h = h || bottom;
   const node = (id: string) => g.nodes.find((n) => n.id === id);
   const wires = g.wires
     .map((wire) => {
@@ -238,7 +245,8 @@ export function drawGraph(g: GraphView, w = 900, h = 520): string {
     .join("");
 
   return (
-    `<svg class="cv-graph" width="100%" height="${h}" viewBox="0 0 ${w} ${h}" ` +
+    `<svg class="cv-graph" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" ` +
+    `preserveAspectRatio="xMinYMin meet" ` +
     `font-family="ui-sans-serif, system-ui, sans-serif">` +
     `<defs><pattern id="cvgrid" width="22" height="22" patternUnits="userSpaceOnUse">` +
     `<path d="M22 0H0V22" fill="none" stroke="var(--cv-line)" stroke-width=".6" opacity=".5"/>` +
@@ -274,7 +282,8 @@ export function graphStyles(): string {
   color: ${V("muted")}; border-bottom: 1px solid ${V("line")}; background: ${V("panel")}; }
 .cv-ro { color: ${V("warn")}; letter-spacing: .06em; }
 .cv-zoom { margin-left: auto; font-family: ui-monospace, monospace; }
-.cv-graph { display: block; flex: 1 1 auto; min-height: 0; }
+.cv-graphscroll { flex: 1 1 auto; min-height: 0; overflow: auto; background: ${V("bg")}; }
+.cv-graph { display: block; }
 .cv-node { cursor: pointer; }
 .cv-node:hover rect:first-of-type { stroke: ${V("accent")}; }
 /* WARN **A refusal is printed where the attempt happened** — SS9b. A rule enforced silently is

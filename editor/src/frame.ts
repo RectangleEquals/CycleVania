@@ -356,6 +356,12 @@ export function frameStyles(): string {
    the shape moves, and neither the type checker nor a unit test can see it. */
 .cv-centre .cv-stage { flex: 1 1 auto; min-height: 0; }
 .cv-dock.cv-left, .cv-dock.cv-right { flex: 0 0 auto; }
+/* ⚠ A column, so several left docks stack as Unreal stacks them. */
+.cv-dockcol { display: flex; flex-direction: column; flex: 0 0 auto; min-height: 0;
+  border-right: 1px solid var(--cv-line); }
+.cv-dockcol .cv-dock.cv-left { border-right: 0; border-bottom: 1px solid var(--cv-line);
+  flex: 1 1 0; min-height: 0; }
+.cv-dockcol .cv-dock.cv-left:last-child { border-bottom: 0; }
 .cv-dock.cv-bottom { flex: 0 0 auto; }
 
 .cv-doctabs { display: flex; gap: 1px; background: ${V("panel")};
