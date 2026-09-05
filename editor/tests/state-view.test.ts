@@ -12,7 +12,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { checkLine, drawStateGraph, type StateGraphView } from "../src/state-view.ts";
+import { checkLine, checkTone, drawStateGraph, type StateGraphView } from "../src/state-view.ts";
 
 const WATER: StateGraphView = {
   variable: "water_level",
@@ -152,5 +152,33 @@ describe("the check line is a sentence, not a count", () => {
 
   it("says so plainly when there is nothing to report", () => {
     expect(checkLine({ ...WATER, findings: [] })).toContain("P15 satisfied");
+  });
+});
+
+describe("the check line's colour follows the worst finding", () => {
+  it("is ok only when there is nothing to say", () => {
+    expect(checkTone({ ...WATER, satisfiesP15: true, findings: [] })).toBe("ok");
+  });
+
+  it("warns when a graph satisfies P15 but still carries a finding", () => {
+    // ⚠ **Found by looking.** The line was coloured by `satisfiesP15` alone, so "⚠ … potential
+    // softlock" printed green — and the colour is read before the words are.
+    expect(checkTone(WATER)).toBe("warn");
+    expect(WATER.satisfiesP15).toBe(true);
+    expect(WATER.findings.length).toBeGreaterThan(0);
+  });
+
+  it("errors on a blocking finding, whatever P15 says", () => {
+    const blocking = {
+      ...WATER,
+      satisfiesP15: true,
+      findings: [{ kind: "dead-end" as const, blocks: true, state: "high", message: "no way out" }],
+    };
+    expect(checkTone(blocking)).toBe("err");
+  });
+
+  it("errors when P15 fails with no finding to point at", () => {
+    // ⚠ A claim about the graph as a whole still has to be visible.
+    expect(checkTone({ ...WATER, satisfiesP15: false, findings: [] })).toBe("err");
   });
 });

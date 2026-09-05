@@ -1,9 +1,10 @@
 /**
- * **The editor shell** — topbar, navigator, stage, inspector.
+ * **Shared editor chrome** — the stylesheet, and the Content panel's shape.
  *
- * ⚠ **Not a docking system.** `10-editor.md` §10 still owes panel arrangement and how nine views share
- * one window; those want mockups. ▶ **A fixed arrangement that looks like an editor beats a white page
- * while mockups are pending**, and it commits to nothing a docking system would have to undo.
+ * ⚠ **The topbar and navigator that used to live here are gone.** They were M20a's arrangement, and
+ * `10-editor.md` §2 replaced the architecture behind it rather than the styling on top: a `Views`
+ * picker is not a placeholder for a dock layout, it is a different answer to *why a view is on screen*.
+ * ▶ The frame is `frame.ts`; what stays here is the shared stylesheet and the Content panel.
  *
  * # Every colour comes from the four parameters
  *
@@ -12,20 +13,6 @@
  */
 
 import { pinColour } from "./pins.ts";
-
-/** One entry in the navigator. */
-export interface NavItem {
-  id: string;
-  label: string;
-  /** A dim suffix — a count, a kind, a path fragment. */
-  hint?: string;
-}
-
-/** A section of the navigator. */
-export interface NavGroup {
-  title: string;
-  items: NavItem[];
-}
 
 const V = (name: string) => `var(--cv-${name})`;
 
@@ -112,40 +99,6 @@ table.cv tr:hover td { background: ${V("raised")}; }
 .cv-search:focus { outline: none; border-color: ${V("accent")}; }
 .cv-empty { color: ${V("muted")}; font-size: 12px; padding: 6px; }
 `;
-}
-
-/** The topbar. */
-export function topbar(version: string, tabs: string[], active: string): string {
-  const buttons = tabs
-    .map(
-      (t) =>
-        `<button class="cv-tab${t === active ? " is-active" : ""}" data-tab="${t}">${t}</button>`,
-    )
-    .join("");
-  return (
-    `<div class="cv-topbar"><span class="cv-brand">CycleVania</span>` +
-    `<span class="cv-version">${version}</span>` +
-    `<div class="cv-tabs">${buttons}</div></div>`
-  );
-}
-
-/** The navigator's groups. */
-export function navigator(groups: NavGroup[], selected?: string): string {
-  return groups
-    .map(
-      (g) =>
-        `<div class="cv-h">${g.title}</div>` +
-        g.items
-          .map(
-            (i) =>
-              `<div class="cv-row${i.id === selected ? " is-selected" : ""}" data-id="${i.id}">` +
-              `<span>${i.label}</span>` +
-              (i.hint ? `<span class="cv-hint">${i.hint}</span>` : "") +
-              `</div>`,
-          )
-          .join(""),
-    )
-    .join("");
 }
 
 // ---------------------------------------------------------------------------------------------

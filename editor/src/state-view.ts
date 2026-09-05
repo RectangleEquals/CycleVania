@@ -200,6 +200,21 @@ export function drawStateGraph(view: StateGraphView): string {
  * ⚠ **A sentence, not a count.** *"3 findings"* tells a developer to go looking; the sentence is the
  * thing they act on.
  */
+/**
+ * What colour the check line takes.
+ *
+ * ⚠ **Found by looking, not by a test.** The line was coloured by `satisfiesP15` alone, so a graph
+ * that satisfies P15 *and carries a warning* printed "⚠ ... potential softlock" in the **ok** colour.
+ * ▶ **The tone must follow the worst finding present**, because the colour is read before the words
+ * are — and a warning painted green is a warning nobody reads.
+ */
+export function checkTone(view: StateGraphView): "ok" | "warn" | "err" {
+  if (view.findings.some((f) => f.blocks)) return "err";
+  if (view.findings.length > 0) return "warn";
+  // ⚠ P15 can still fail with no finding to point at — that is a claim about the graph as a whole.
+  return view.satisfiesP15 ? "ok" : "err";
+}
+
 export function checkLine(view: StateGraphView): string {
   if (view.findings.length === 0) {
     return "✓ every state re-enterable. No dead state. P15 satisfied on this graph.";
