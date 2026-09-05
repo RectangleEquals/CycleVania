@@ -1943,6 +1943,14 @@
       "fields": [
       ],
       "methods": [
+      ],
+      "values": [
+        { "name": "POS_X", "doc": "" },
+        { "name": "NEG_X", "doc": "" },
+        { "name": "POS_Y", "doc": "Up. The default mount face — a floor-standing thing." },
+        { "name": "NEG_Y", "doc": "Down. A ceiling mount." },
+        { "name": "POS_Z", "doc": "" },
+        { "name": "NEG_Z", "doc": "" }
       ]
     },
     {
@@ -1954,6 +1962,13 @@
       "fields": [
       ],
       "methods": [
+      ],
+      "values": [
+        { "name": "DECORATION", "doc": "No mechanical consequence." },
+        { "name": "OBSTACLE", "doc": "" },
+        { "name": "TRAVERSAL", "doc": "" },
+        { "name": "GATE", "doc": "" },
+        { "name": "LANDMARK", "doc": "" }
       ]
     },
     {
@@ -1965,6 +1980,12 @@
       "fields": [
       ],
       "methods": [
+      ],
+      "values": [
+        { "name": "PROGRESSION", "doc": "May appear in logic. The conservative default." },
+        { "name": "USEFUL", "doc": "Tunes route difficulty, spends slack, never gates." },
+        { "name": "BONUS", "doc": "Rewards optional exploration. Auto-assigned to anything accessible solely through a relaxation." },
+        { "name": "FILLER", "doc": "Satisfies density. Currency, ammo, consumables." }
       ]
     },
     {
@@ -1976,6 +1997,11 @@
       "fields": [
       ],
       "methods": [
+      ],
+      "values": [
+        { "name": "HULL", "doc": "" },
+        { "name": "STATIC", "doc": "" },
+        { "name": "DYNAMIC", "doc": "" }
       ]
     },
     {
@@ -1987,6 +2013,12 @@
       "fields": [
       ],
       "methods": [
+      ],
+      "values": [
+        { "name": "ALL", "doc": "" },
+        { "name": "NONE", "doc": "" },
+        { "name": "WORLD", "doc": "" },
+        { "name": "PLACED", "doc": "" }
       ]
     },
     {
@@ -1998,6 +2030,12 @@
       "fields": [
       ],
       "methods": [
+      ],
+      "values": [
+        { "name": "NEVER", "doc": "" },
+        { "name": "ON_REENTER", "doc": "" },
+        { "name": "FROM_SOURCE", "doc": "" },
+        { "name": "ON_TIMER", "doc": "" }
       ]
     },
     {
@@ -2009,6 +2047,13 @@
       "fields": [
       ],
       "methods": [
+      ],
+      "values": [
+        { "name": "SPATIAL", "doc": "" },
+        { "name": "SPACE", "doc": "" },
+        { "name": "AREA", "doc": "" },
+        { "name": "REACH", "doc": "" },
+        { "name": "WORLD", "doc": "" }
       ]
     },
     {
@@ -2020,6 +2065,11 @@
       "fields": [
       ],
       "methods": [
+      ],
+      "values": [
+        { "name": "UNION", "doc": "" },
+        { "name": "SUBTRACT", "doc": "" },
+        { "name": "INTERSECT", "doc": "" }
       ]
     },
     {
@@ -2031,6 +2081,11 @@
       "fields": [
       ],
       "methods": [
+      ],
+      "values": [
+        { "name": "PROJECTED", "doc": "A revisable forecast. The only state from which a node may be removed." },
+        { "name": "RESERVED", "doc": "Committed to exist, with an envelope claimed. Removable only by recorded backtracking." },
+        { "name": "REALIZED", "doc": "Built and frozen." }
       ]
     },
     {
@@ -2042,6 +2097,14 @@
       "fields": [
       ],
       "methods": [
+      ],
+      "values": [
+        { "name": "SCOPE", "doc": "Which room. Available from L1." },
+        { "name": "COLLIDER", "doc": "Which box, which face. From L2." },
+        { "name": "INSTANCE", "doc": "Which placed actor, with its content path and metadata. From L2." },
+        { "name": "ISLAND", "doc": "Which mesh island. From L3." },
+        { "name": "POLYGON", "doc": "Which hull polygon or occupancy cell. From L3." },
+        { "name": "TRIANGLE", "doc": "Which triangle, with an interpolated normal. From L4." }
       ]
     },
     {
@@ -2053,6 +2116,11 @@
       "fields": [
       ],
       "methods": [
+      ],
+      "values": [
+        { "name": "ENVELOPE", "doc": "Tolerance is the envelope's own slack." },
+        { "name": "HULL", "doc": "Tolerance is the contouring tolerance." },
+        { "name": "GEOMETRY", "doc": "Tolerance is zero." }
       ]
     },
     {
@@ -2064,6 +2132,11 @@
       "fields": [
       ],
       "methods": [
+      ],
+      "values": [
+        { "name": "REQUIRED", "doc": "Must hold; if it cannot, generation fails with a diagnostic." },
+        { "name": "PREFERRED", "doc": "Strongly biased; may be relaxed when infeasible, and is REPORTED when it is." },
+        { "name": "OPTIONAL", "doc": "The generator decides freely; absence is expected." }
       ]
     },
     {
@@ -2075,6 +2148,11 @@
       "fields": [
       ],
       "methods": [
+      ],
+      "values": [
+        { "name": "TOLERATED", "doc": "A path exists; other emergent paths are fine. The default, because real games ship tolerated skips deliberately." },
+        { "name": "EXACT", "doc": "Report every alternative route found." },
+        { "name": "GUARDED", "doc": "Actively verify no alternative exists at that sphere, and fail loudly if one does. Also what decides whether a discovered shortcut may be adopted." }
       ]
     },
     {
@@ -2086,6 +2164,11 @@
       "fields": [
       ],
       "methods": [
+      ],
+      "values": [
+        { "name": "CONSTANT", "doc": "" },
+        { "name": "LINEAR", "doc": "" },
+        { "name": "CUBIC", "doc": "" }
       ]
     },
     {
@@ -2097,6 +2180,11 @@
       "fields": [
       ],
       "methods": [
+      ],
+      "values": [
+        { "name": "YES", "doc": "" },
+        { "name": "NO", "doc": "" },
+        { "name": "AMBIGUOUS", "doc": "Inside the ambiguous band. Resolve, never guess — and a decision that returns this re-asks at the next fidelity rung by construction." }
       ]
     }
   ]

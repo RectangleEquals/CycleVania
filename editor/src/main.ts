@@ -28,6 +28,13 @@ import { shellStyles } from "./shell.ts";
 import { browserStyles, createMenu, drawBrowser, type BrowserState } from "./browser.ts";
 import { iconForPath } from "./icons.ts";
 import { drawGraph, drawOutline, graphCrumbs, graphStyles, type GraphView } from "./graph.ts";
+import {
+  detailsStyles,
+  drawDetails,
+  type ClassDef,
+  type DetailsState,
+  type Subject,
+} from "./details.ts";
 import { checkLine, checkTone, drawStateGraph, type StateGraphView } from "./state-view.ts";
 import {
   curveThumbnail,
@@ -169,9 +176,9 @@ const HOOK_GRAPH: GraphView = {
  * *what it can be asked*.
  */
 const COMPONENTS = [
-  { name: "Hookshot", kind: "Item", root: true, collision: false },
-  { name: "Reach", kind: "TraversalComponent", collision: false },
-  { name: "Hull", kind: "MountComponent", collision: true },
+  { name: "Hookshot", kind: "Item", path: "/Core/Item", root: true, collision: false },
+  { name: "Reach", kind: "TraversalComponent", path: "/Core/TraversalComponent", collision: false },
+  { name: "Hull", kind: "MountComponent", path: "/Core/MountComponent", collision: true },
 ];
 
 /** Stand-in content, until a project is open./** Stand-in content, until a project is open. ⚠ Shaped like a real content root, not invented. */
@@ -210,6 +217,9 @@ interface Ui {
   /** ⚠ **Anchored to the button that opened it.** Two buttons open this menu; a fixed offset is
    * right for at most one of them and floats over the stage for the other. */
   menuAt: [number, number];
+  details: DetailsState;
+  /** ⚠ What the Details panel is describing. Null is a real state, and it says so. */
+  subject: Subject | null;
   /** Which of the asset's own documents is open. */
   doc: string;
 }
@@ -223,6 +233,8 @@ let views: {
   noProject: boolean;
   version: string;
   fingerprint: string;
+  /** ▶ M17's generated artifact — 150 classes, and now the enum variants a dropdown needs. */
+  classes: ClassDef[];
 };
 
 /** ⚠ The extension decides which editor opens — `10-editor.md` §2. There is no other model. */
@@ -356,7 +368,8 @@ function docks(): Dock[] {
         `<div class="cv-osec"><span>Add</span><button class="cv-oadd" title="Add component">+</button></div>` +
         COMPONENTS.map(
           (c) =>
-            `<div class="cv-orow${c.root ? " is-selected" : ""}" style="padding-left:${c.root ? 8 : 18}px">` +
+            `<div class="cv-orow${ui.subject?.classPath === c.path ? " is-selected" : ""}" ` +
+            `data-comp="${c.path}" style="padding-left:${c.root ? 8 : 18}px">` +
             `<span>${c.name}</span><span class="cv-otype">${c.kind}</span></div>`,
         ).join(""),
     },
@@ -378,13 +391,9 @@ function docks(): Dock[] {
       side: "right",
       present: !ui.docks.detailsClosed,
       collapsed: ui.collapsed.details,
-      // ⚠ **A panel that does not say what it describes cannot be trusted** — §9c.
-      body:
-        ui.asset === "result"
-          ? `<div class="cv-empty">Select something to see its details.</div>`
-          : `<div class="cv-subject">${iconForPath(ui.asset, 14)}` +
-            `<span>${ui.asset.split("/").pop()}</span></div>` +
-            `<div class="cv-empty">Typed rows arrive at M20d.</div>`,
+      // ⚠ **Godot's shape, Unreal's grouping** — §9c. The same panel for every surface: it is given a
+      // subject, and the subject's class bands and typed rows do the rest.
+      body: drawDetails(views.classes, ui.subject, ui.details),
     },
   ];
 }
@@ -457,7 +466,57 @@ function wire(app: HTMLElement): void {
   });
   on("[data-asset]", "click", (b) => {
     ui.asset = b.dataset.asset!;
+    ui.subject = ui.asset === "result" ? null : subjectForAsset(ui.asset);
     redraw();
+  });
+
+  // ⚠ **The panel does not know which surface it is in** — it is given a subject, and the class bands
+  // do the rest. A node and a component both resolve to one.
+  on("[data-node]", "click", (n) => {
+    const id = n.dataset.node!;
+    const node = HOOK_GRAPH.nodes.find((x) => x.id === id);
+    if (node) {
+      ui.subject = {
+        label: node.title,
+        icon: "schematic",
+        classPath: "/Core/Actor",
+        values: {},
+        from: { label: "Hookshot.cvs", path: ui.asset },
+      };
+    }
+    redraw();
+  });
+  // ⚠ **The panel does not know which surface it is in.** A component row and a graph node both
+  // resolve to a subject, and the class bands do the rest.
+  on("[data-comp]", "click", (r) => {
+    const path = r.dataset.comp!;
+    const c = COMPONENTS.find((x) => x.path === path)!;
+    ui.subject = {
+      label: c.name,
+      icon: c.root ? "schematic" : "components",
+      classPath: path,
+      values: {},
+      from: { label: ui.asset.split("/").pop()!, path: ui.asset },
+    };
+    redraw();
+  });
+  on("[data-band]", "click", (b) => {
+    const k = b.dataset.band!;
+    ui.details = { ...ui.details, folded: { ...ui.details.folded, [k]: !ui.details.folded[k] } };
+    redraw();
+  });
+  on("[data-adv]", "click", (b) => {
+    const k = b.dataset.adv!;
+    ui.details = {
+      ...ui.details,
+      advancedOpen: { ...ui.details.advancedOpen, [k]: !ui.details.advancedOpen[k] },
+    };
+    redraw();
+  });
+  on(".cv-dsearch", "input", (el) => {
+    ui.details = { ...ui.details, search: (el as HTMLInputElement).value };
+    const focus = redrawKeepingFocus(app, ".cv-dsearch");
+    focus();
   });
   on("[data-close]", "click", (b, e) => {
     e.stopPropagation();
@@ -510,6 +569,7 @@ function wire(app: HTMLElement): void {
       ui.tabs.push({ id: path, label: path.split("/").pop()!, fact: kindOf(path) });
     }
     ui.asset = path;
+    ui.subject = subjectForAsset(path);
     // ▶ A drawer auto-minimises when it loses focus — Unreal's, and the reason it costs nothing.
     if (!ui.browser.docked) ui.browser.open = false;
     redraw();
@@ -554,6 +614,16 @@ function wire(app: HTMLElement): void {
   });
 }
 
+/** ⚠ A schematic describes an `Item`; the panel bands its ancestry from the manifest artifact. */
+function subjectForAsset(path: string): Subject {
+  return {
+    label: path.split("/").pop()!,
+    icon: iconOf(path),
+    classPath: path.endsWith(".cvs") ? "/Core/Item" : "/Core/Object",
+    values: {},
+  };
+}
+
 /** Where a popup opened from `el` should sit. ⚠ Kept on screen — a menu off the right edge is lost. */
 function anchorUnder(el: HTMLElement): [number, number] {
   const r = el.getBoundingClientRect();
@@ -561,12 +631,12 @@ function anchorUnder(el: HTMLElement): [number, number] {
 }
 
 /** Re-render without losing the caret in the search box. ⚠ A field that blurs on every keystroke is unusable. */
-function redrawKeepingFocus(app: HTMLElement): () => void {
-  const box = app.querySelector<HTMLInputElement>(".cv-search");
+function redrawKeepingFocus(app: HTMLElement, sel = ".cv-search"): () => void {
+  const box = app.querySelector<HTMLInputElement>(sel);
   const at = box?.selectionStart ?? null;
   render(app);
   return () => {
-    const next = app.querySelector<HTMLInputElement>(".cv-search");
+    const next = app.querySelector<HTMLInputElement>(sel);
     if (next) {
       next.focus();
       if (at !== null) next.setSelectionRange(at, at);
@@ -580,7 +650,7 @@ async function main(): Promise<void> {
   install();
 
   const style = document.createElement("style");
-  style.textContent = shellStyles() + frameStyles() + browserStyles() + graphStyles() + extraStyles();
+  style.textContent = shellStyles() + frameStyles() + browserStyles() + graphStyles() + detailsStyles() + extraStyles();
   document.head.appendChild(style);
 
   let version = "";
@@ -604,7 +674,14 @@ async function main(): Promise<void> {
   const noProject = dialsRes.status === 409;
   const dials: DialRowView[] = noProject ? [] : ((await dialsRes.json()).dials ?? []);
 
-  views = { state, curves, unlocks, dials, noProject, version, fingerprint: "—" };
+  // ⚠ **The panel is driven by the manifest artifact, not by a hand-written schema** — M17 P02.
+  let classes: ClassDef[] = [];
+  try {
+    classes = (await (await fetch("/classes.json")).json()).classes ?? [];
+  } catch {
+    classes = [];
+  }
+  views = { state, curves, unlocks, dials, noProject, version, fingerprint: "—", classes };
 
   ui = {
     asset: "result",
@@ -617,6 +694,8 @@ async function main(): Promise<void> {
     browser: { open: true, docked: true, kinds: [], folder: "", search: "" },
     menuOpen: false,
     menuAt: [8, 108],
+    details: { search: "", folded: {}, advancedOpen: {} },
+    subject: null,
     doc: "grants",
   };
 

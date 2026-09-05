@@ -136,7 +136,29 @@ pub fn emit(m: &Manifest) -> String {
             }
             let _ = writeln!(s, " }}{mc}");
         }
-        let _ = writeln!(s, "      ]");
+        // --- enum variants ------------------------------------------------------------------
+        // ⚠ **A hole the Details panel found the way M17 found three others: by needing the data.**
+        // Fifteen enum classes reached the artifact with empty `fields` and nothing else, while the
+        // manifest declares six variants for `/Core/Face` alone. ▶ **A dropdown cannot be drawn
+        // from a type name**, so the panel would have had to guess or degrade to a text box.
+        if !c.values.is_empty() {
+            // ⚠ An `EnumValue` carries no status of its own — the class's status covers it.
+            let vals: Vec<&_> = c.values.iter().collect();
+            let _ = writeln!(s, "      ],");
+            let _ = writeln!(s, "      \"values\": [");
+            for (j, v) in vals.iter().enumerate() {
+                let vc = if j + 1 == vals.len() { "" } else { "," };
+                let _ = writeln!(
+                    s,
+                    "        {{ \"name\": {}, \"doc\": {} }}{vc}",
+                    q(&v.name),
+                    q(&v.doc)
+                );
+            }
+            let _ = writeln!(s, "      ]");
+        } else {
+            let _ = writeln!(s, "      ]");
+        }
         let _ = writeln!(s, "    }}{comma}");
     }
 
